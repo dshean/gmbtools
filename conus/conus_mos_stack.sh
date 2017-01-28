@@ -1,71 +1,121 @@
 #! /bin/bash
 
-#Post-process CONUS glacier DEMs
+#Post-process hma glacier DEMs
+#topdir=/nobackupp8/deshean/hma/hma1_2016dec22/stereo
+#mos_prefix=hma1_stereo_trans
+#topdir=/nobackupp8/deshean/hma/hma1_2016dec22/validpairs
+topdir=/nobackupp8/deshean/hma/hma1_2016dec22
+mos_prefix=hma1_all
+lowres_dem=/nobackup/deshean/rpcdem/hma/srtm1/hma_srtm_gl1.vrt
+epsg=32644
 
-topdir=/nobackup/deshean/conus
+#CONUS
+topdir=/nobackupp8/deshean/conus/dem2
+mos_prefix=conus
+lowres_dem=/nobackup/deshean/rpcdem/ned13/ned13_tiles_glac24k_115kmbuff.vrt
+epsg=32611
+
 cd $topdir
 
 threads=32
-ext=DEM_32m
+
+#Define extension type
 #ext=DEM_32m
-list=$(ls ../conus[0-9]/{WV,GE}*/*/*${ext}.tif)
-#list=$(ls ../conus[0-9]/{WV,GE}*/*/*${ext}.tif | grep 201[0-9][01][7890])
+#ext=DEM_32m_trans
+ext=DEM_8m_trans
 
+#Need this for hma stereo and validpairs subdir
+#list=$(ls */{QB,IK,WV,GE}*/*/*${ext}.tif)
+list=$(ls {QB,IK,WV,GE}*/*/*${ext}.tif)
+#Summer
+#list=$(ls {QB,IK,WV,GE}*/*/*${ext}.tif | grep 201[0-9][01][7890])
+
+outres=8
 #outres=100
-outres=100
+make_lowres=false
 lowres=1000
-epsg=32611
-
-neddir=/nobackup/deshean/rpcdem/ned1
-ned=$neddir/ned1_tiles_glac24k_115kmbuff.vrt
-nedres=30
 
 if true ; then
     #Post-processing individual DEMs with original UTM proj
-    parallel "gdalwarp -overwrite -r cubic -t_srs EPSG:$epsg -tr $outres $outres -dstnodata -9999 {} {.}_${epsg}_${outres}m.tif" ::: $list
+    parallel -j $threads "if [ ! -e {.}_${epsg}_${outres}m.tif ] ; then gdalwarp -overwrite -r cubic -t_srs EPSG:$epsg -tr $outres $outres -dstnodata -9999 {} {.}_${epsg}_${outres}m.tif; fi" ::: $list
     list_proj=$(echo $list | sed "s/$ext.tif/${ext}_${epsg}_${outres}m.tif/g")
 fi
 
-if true ; then 
-    gdalbuildvrt -vrtnodata -9999 conus_${epsg}_${outres}m.vrt $list_proj
-    if [ ! -e conus_${epsg}_${outres}m-tile-0-count.tif ] ; then 
-        dem_mosaic --threads $threads --count $list_proj -o conus_${epsg}_${outres}m
-    fi
-    if [ ! -e conus_${epsg}_${lowres}m-tile-0-count.tif ] ; then 
-        #dem_mosaic --threads $threads --tr $lowres --count $list_proj -o conus_${epsg}_${lowres}m
-        gdalwarp -r cubic -overwrite -dstnodata 0 -ot UInt16 -tr $lowres $lowres conus_${epsg}_${outres}m-tile-0-count.tif conus_${epsg}_${outres}m-tile-0-count_1km.tif
-    fi
-    if [ ! -e conus_${epsg}_${outres}m-tile-0-stddev.tif ] ; then 
-        dem_mosaic --threads $threads --stddev $list_proj -o conus_${epsg}_${outres}m
-    fi
-    if [ ! -e conus_${epsg}_${lowres}m-tile-0-stddev.tif ] ; then 
-        #dem_mosaic --threads $threads --tr $lowres --stddev $list_proj -o conus_${epsg}_${lowres}m
-        gdalwarp -r cubic -overwrite -dstnodata 0 -tr $lowres $lowres conus_${epsg}_${outres}m-tile-0-stddev.tif conus_${epsg}_${outres}m-tile-0-stddev_1km.tif
-    fi
-    if [ ! -e conus_${epsg}_${outres}m-tile-0.tif ] ; then 
-        dem_mosaic --threads $threads $list_proj -o conus_${epsg}_${outres}m
-    fi
-    if [ ! -e conus_${epsg}_${lowres}m-tile-0.tif ] ; then 
-        #dem_mosaic --threads $threads --tr $lowres $list_proj -o conus_${epsg}_${lowres}m
-        gdalwarp -r cubic -overwrite -dstnodata -9999 -tr $lowres $lowres conus_${epsg}_${outres}m-tile-0.tif conus_${epsg}_${outres}m-tile-0_1km.tif
-    fi
-    hs.sh conus_${epsg}_${outres}m-tile-0.tif
-    hs.sh conus_${epsg}_${lowres}m-tile-0.tif
+#This creates 8-m mosaic
+if [ "$outres" -eq "8" ] ; then 
+    mkdir ${mos_prefix}_${epsg}_${outres}m
+    dem_mosaic --threads $threads $list_proj -o ${mos_prefix}_${epsg}_${outres}m/${mos_prefix}_${epsg}_${outres}m --georef-tile-size 100000
+    cd ${mos_prefix}_${epsg}_${outres}m
+    gdalbuildvrt ${mos_prefix}_${epsg}_${outres}m_mos.vrt ${mos_prefix}_${epsg}_${outres}m-tile-*.tif
+    exit
+fi
 
-    if false ; then 
-        compute_dh.py $ned conus_${epsg}_${outres}m-tile-0.tif
-        mv ${ned%.*}_conus_${epsg}_${outres}m-tile-0_dz_eul.tif .
+if true ; then 
+    if [ ! -e ${mos_prefix}_${epsg}_${outres}m-tile-0.tif ] ; then 
+        echo "dem_mosaic"
+        dem_mosaic --threads $threads $list_proj -o ${mos_prefix}_${epsg}_${outres}m
+        echo "building overviews"
+        gdaladdo_ro.sh ${mos_prefix}_${epsg}_${outres}m-tile-0.tif
+        echo "shaded relief"
+        hs.sh ${mos_prefix}_${epsg}_${outres}m-tile-0.tif
+        echo "shaded relief overviews"
+        gdaladdo_ro.sh ${mos_prefix}_${epsg}_${outres}m-tile-0_hs_az315.tif
+    fi
+    if $make_lowres ; then 
+        if [ ! -e ${mos_prefix}_${epsg}_${outres}m-tile-0_${lowres}m.tif ] ; then 
+            #dem_mosaic --threads $threads --tr $lowres $list_proj -o ${mos_prefix}_${epsg}_${lowres}m
+            gdalwarp -r cubic -overwrite -dstnodata -9999 -tr $lowres $lowres ${mos_prefix}_${epsg}_${outres}m-tile-0.tif ${mos_prefix}_${epsg}_${outres}m-tile-0_${lowres}m.tif
+            hs.sh ${mos_prefix}_${epsg}_${outres}m-tile-0_${lowres}m.tif 
+        fi
     fi
 fi
 
-ts=$(date +%Y%m%d_%H%M)
-n=$(echo $list | wc -w)
-outshp=shp/conus_${epsg}_${outres}m_n${n}_${ts}.shp
-#This creates issues b/c individual DEMs span multiple UTM zones
-#raster2shp.py $list
-#Reproject to same srs
-raster2shp.py $list_proj
-shp_rename.sh merge.shp $outshp 
+if false ; then 
+    if [ ! -d shp ] ; then
+        mkdir shp
+    fi
+    ts=$(date +%Y%m%d_%H%M)
+    n=$(echo $list | wc -w)
+    outshp=shp/${mos_prefix}_${epsg}_${outres}m_n${n}_${ts}.shp
+    #This creates issues b/c individual DEMs span multiple UTM zones
+    #raster2shp.py $list
+    #Reproject to same srs
+    raster2shp.py $list_proj
+    shp_rename.sh merge.shp $outshp 
+fi
+
+if true ; then 
+    #gdalbuildvrt -vrtnodata -9999 ${mos_prefix}_${epsg}_${outres}m.vrt $list_proj
+    if [ ! -e ${mos_prefix}_${epsg}_${outres}m-tile-0-count.tif ] ; then 
+        dem_mosaic --threads $threads --count $list_proj -o ${mos_prefix}_${epsg}_${outres}m
+        gdaladdo_ro.sh ${mos_prefix}_${epsg}_${outres}m-tile-0-count.tif
+    fi
+    if $make_lowres ; then 
+        if [ ! -e ${mos_prefix}_${epsg}_${outres}m-tile-0-count_${lowres}m.tif ] ; then 
+            #dem_mosaic --threads $threads --tr $lowres --count $list_proj -o ${mos_prefix}_${epsg}_${lowres}m
+            gdalwarp -r cubic -overwrite -dstnodata 0 -ot UInt16 -tr $lowres $lowres ${mos_prefix}_${epsg}_${outres}m-tile-0-count.tif ${mos_prefix}_${epsg}_${outres}m-tile-0-count_${lowres}m.tif
+        fi
+    fi
+fi
+
+if true ; then 
+    if [ ! -e ${mos_prefix}_${epsg}_${outres}m-tile-0-stddev.tif ] ; then 
+        dem_mosaic --threads $threads --stddev $list_proj -o ${mos_prefix}_${epsg}_${outres}m
+        gdaladdo_ro.sh ${mos_prefix}_${epsg}_${outres}m-tile-0-stddev.tif
+    fi
+    if $make_lowres ; then 
+        if [ ! -e ${mos_prefix}_${epsg}_${outres}m-tile-0-stddev_${lowres}m.tif ] ; then 
+            #dem_mosaic --threads $threads --tr $lowres --stddev $list_proj -o ${mos_prefix}_${epsg}_${lowres}m
+            gdalwarp -r cubic -overwrite -dstnodata 0 -tr $lowres $lowres ${mos_prefix}_${epsg}_${outres}m-tile-0-stddev.tif ${mos_prefix}_${epsg}_${outres}m-tile-0-stddev_${lowres}m.tif
+        fi
+    fi
+fi 
+
+if true ; then 
+    compute_dh.py $lowres_dem ${mos_prefix}_${epsg}_${outres}m-tile-0.tif
+    mv ${lowres_dem%.*}_${mos_prefix}_${epsg}_${outres}m-tile-0_dz_eul.tif .
+    gdaladdo_ro.sh $(basename ${lowres_dem%.*}_${mos_prefix}_${epsg}_${outres}m-tile-0_dz_eul.tif)
+fi
 
 exit
 
@@ -78,7 +128,7 @@ exit
 #res=8
 res=32
 ext=DEM_${res}m
-list=$(ls ../conus[0-9]/{WV,GE}*/*/*${ext}.tif)
+list=$(ls ../hma[0-9]/{QB,IK,WV,GE}*/*/*${ext}.tif)
 dem_mosaic --threads $threads --tile-size 10000 --t_srs EPSG:32611 --tr $res -o mos_${res}m/mos_${res}m_all/mos_${res}m_all $list
 gdalbuildvrt -vrtnodata -9999 -r cubic mos_${res}m/mos_${res}m_all/mos_${res}m_all.vrt mos_${res}m/mos_${res}m_all/mos_${res}m_all-tile-0.tif 
 extent=$(get_extent mos_${res}m/mos_${res}m_all/mos_${res}m_all.vrt) 
@@ -86,8 +136,8 @@ extent=$(get_extent mos_${res}m/mos_${res}m_all/mos_${res}m_all.vrt)
 #gdalbuildvrt -vrtnodata 0 -r cubic all_${res}m.vrt $list
 #extent=$(get_extent.py all_${res}m.vrt)
 
-list_summer=$(ls ../conus[0-9]/{WV,GE}*/*/*${ext}.tif | grep 201[0-9][01][67890])
-list_winter=$(ls ../conus[0-9]/{WV,GE}*/*/*${ext}.tif | grep -v 201[0-9][01][67890])
+list_summer=$(ls ../hma[0-9]/{QB,IK,WV,GE}*/*/*${ext}.tif | grep 201[0-9][01][67890])
+list_winter=$(ls ../hma[0-9]/{QB,IK,WV,GE}*/*/*${ext}.tif | grep -v 201[0-9][01][67890])
 
 #These should all use the same extent, identical tiles
 dem_mosaic --threads $threads --tile-size 10000 --t_projwin $extent --t_srs EPSG:32611 --tr 8 -o mos_${res}m/mos_${res}m_summer/mos_${res}m_summer $list_summer
