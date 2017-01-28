@@ -42,10 +42,10 @@ aea_srs = geolib.conus_aea_srs
 #Filter glacier poly - let's stick with big glaciers for now
 min_glac_area = 0.1 #km^2
 
-f, ax = plt.subplots(figsize=(10,10),dpi=300)
+#List to hold output
 out = []
 
-glac_shp_ds = ogr.Open(glac_shp_fn, 1)
+glac_shp_ds = ogr.Open(glac_shp_fn, 0)
 glac_shp_lyr = glac_shp_ds.GetLayer()
 feat_count = glac_shp_lyr.GetFeatureCount()
 glac_shp_srs = glac_shp_lyr.GetSpatialRef()
@@ -148,10 +148,13 @@ for feat in glac_shp_lyr:
     print('%0.2f mwe/yr\n' % mb_mean)
     print('-------------------------------')
     
-    out.append([cx, cy, mb_mean, (glac_area/1E6)])
-    glac_shp_lyr.SetFeature(feat)
-    feat.SetField("mb_mwe", '%0.2f' % mb_mean)
-    glac_shp_lyr.SetFeature(feat)
+    out.append([cx, cy, mb_mean, (glac_area/1E6), t1.mean(), dt.mean()])
+
+    add_fields = False
+    if add_fields:
+        glac_shp_lyr.SetFeature(feat)
+        feat.SetField("mb_mwe", '%0.2f' % mb_mean)
+        glac_shp_lyr.SetFeature(feat)
 
     #Do AED for all
     #Compute mb using scaled AED vs. polygon
@@ -163,16 +166,38 @@ for feat in glac_shp_lyr:
 glac_shp_ds = None
 
 out = np.array(out)
-out_stats = malib.print_stats(out[:,2])
-if out_stats[5] < 0:
-    vmin = out_stats[5]-out_stats[6]*2
-    vmax = -vmin 
-else:
-    vmax = out_stats[5]-out_stats[6]*2
-    vmin = -vmax
+#Sort with largest area on bottom
+out = out[out[:,3].argsort()[::-1]]
+out_fn = 'conus_mb.csv'
+out_header = 'x,y,mb_mwea,area_km2,t1,dt'
+np.savetxt(out_fn, out, fmt='%0.2f', delimiter=',', header=out_header)
 
-ax.scatter(out[:,0], out[:,1], c=out[:,2], cmap='RdYlBu', s=out[:,3], vmin=vmin, vmax=vmax)
-plt.savefig('test.png')
+def makeplots(out):
+    out_mb = out[:,2]
+    out_stats = malib.print_stats(out_mb)
+    if out_stats[5] < 0:
+        vmin = out_stats[5]-out_stats[6]*2
+        vmax = -vmin 
+    else:
+        vmax = out_stats[5]-out_stats[6]*2
+        vmin = -vmax
+    f, ax = plt.subplots(figsize=(10,10),dpi=300)
+    sc = ax.scatter(out[:,0], out[:,1], c=out_mb, cmap='RdBu', s=out[:,3]*16, edgecolor='k', lw='0.2', vmin=vmin, vmax=vmax)
+    ax.set(adjustable='box-forced', aspect='equal')
+    ax.set_facecolor('0.5')
+    cbar = pltlib.add_cbar(ax, sc, label='Long-term mass balance (mwe/yr)')
+    plt.savefig('conus_mb.png')
+
+    out_dt = out[:,4]
+    vmin = out_dt.min()
+    vmax = out_dt.max()
+    f, ax = plt.subplots(figsize=(10,10),dpi=300)
+    sc = ax.scatter(out[:,0], out[:,1], c=out_dt, cmap='inferno', s=out[:,3]*16, vmin=vmin, vmax=vmax)
+    ax.set(adjustable='box-forced', aspect='equal')
+    ax.set_facecolor('0.5')
+    #cbar = pltlib.add_cbar(ax, sc, label='Time interval (yr)')
+    cbar = pltlib.add_cbar(ax, sc, label='NED Source Date (yr)')
+    plt.savefig('conus_dt.png')
 
 #Write out new shp with features containing stats
 #One shp preserves input features, regardless of source date
