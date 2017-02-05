@@ -25,8 +25,9 @@ glac_shp_fn = '/nobackupp8/deshean/conus/shp/24k_selection_aea_min0.1km2.shp'
 
 #Raster difference map between NED and WV mosaic
 z1_fn = '/nobackupp8/deshean/rpcdem/ned1_2003/ned1_2003_adj.vrt'
-z2_fn = '/nobackupp8/deshean/conus/dem2/conus_32611_8m/conus_32611_8m_mos.vrt'
-dz_fn = '/nobackup/deshean/conus/dem2/conus_32611_8m/ned1_2003_adj_conus_32611_8m_mos_dz_eul_aea.tif'
+#z2_fn = '/nobackupp8/deshean/conus/dem2/conus_32611_8m/conus_32611_8m_mos.vrt'
+z2_fn = '/nobackupp8/deshean/conus/dem2/conus_8m_tile_coreg_round3/conus_8m_tile_coreg_round3.vrt'
+#dz_fn = '/nobackup/deshean/conus/dem2/conus_32611_8m/ned1_2003_adj_conus_32611_8m_mos_dz_eul_aea.tif'
 #gdalwarp -co TILED=YES -co COMPRESS=LZW -co BIGTIFF=YES -r cubic -t_srs '+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs ' ned1_2003_adj_conus_32611_8m_mos_dz_eul.tif ned1_2003_adj_conus_32611_8m_mos_dz_eul_aea.tif
 
 #NED 2003 dates
@@ -168,36 +169,9 @@ glac_shp_ds = None
 out = np.array(out)
 #Sort with largest area on bottom
 out = out[out[:,3].argsort()[::-1]]
-out_fn = 'conus_mb.csv'
+out_fn = 'conus_mb_20170204.csv'
 out_header = 'x,y,mb_mwea,area_km2,t1,dt'
 np.savetxt(out_fn, out, fmt='%0.2f', delimiter=',', header=out_header)
-
-def makeplots(out):
-    out_mb = out[:,2]
-    out_stats = malib.print_stats(out_mb)
-    if out_stats[5] < 0:
-        vmin = out_stats[5]-out_stats[6]*2
-        vmax = -vmin 
-    else:
-        vmax = out_stats[5]-out_stats[6]*2
-        vmin = -vmax
-    f, ax = plt.subplots(figsize=(10,10),dpi=300)
-    sc = ax.scatter(out[:,0], out[:,1], c=out_mb, cmap='RdBu', s=out[:,3]*16, edgecolor='k', lw='0.2', vmin=vmin, vmax=vmax)
-    ax.set(adjustable='box-forced', aspect='equal')
-    ax.set_facecolor('0.5')
-    cbar = pltlib.add_cbar(ax, sc, label='Long-term mass balance (mwe/yr)')
-    plt.savefig('conus_mb.png')
-
-    out_dt = out[:,4]
-    vmin = out_dt.min()
-    vmax = out_dt.max()
-    f, ax = plt.subplots(figsize=(10,10),dpi=300)
-    sc = ax.scatter(out[:,0], out[:,1], c=out_dt, cmap='inferno', s=out[:,3]*16, vmin=vmin, vmax=vmax)
-    ax.set(adjustable='box-forced', aspect='equal')
-    ax.set_facecolor('0.5')
-    #cbar = pltlib.add_cbar(ax, sc, label='Time interval (yr)')
-    cbar = pltlib.add_cbar(ax, sc, label='NED Source Date (yr)')
-    plt.savefig('conus_dt.png')
 
 #Write out new shp with features containing stats
 #One shp preserves input features, regardless of source date
