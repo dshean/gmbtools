@@ -3,6 +3,10 @@
 Identify CONUS sites, isolate DEMs, and make stack for each site
 """
 
+#mkdir site_poly_highcount_rect3
+#lfs setstripe !$ --count 32
+#~/src/conus/conus/conus_site_poly.py ../shp/conus_site_poly_highcount_rect_32611.shp  shp/conus_32m_trans_20170204.shp
+
 #Requires predefined polygons for sites with name field
 #Requires shp of DEM footprints from raster2shp.py
 #cd /nobackup/deshean/conus/dem2
@@ -47,7 +51,7 @@ dem_shp_srs = dem_shp_lyr.GetSpatialRef()
 
 #outdir = os.path.splitext(shp_fn)[0]+'_stack'
 #outdir = 'range_poly'
-outdir = 'site_poly_highcount_rect2'
+outdir = 'site_poly_highcount_rect3'
 if not os.path.exists(outdir):
     os.makedirs(outdir)
 
@@ -67,6 +71,7 @@ site_name_field = 1
 dem_name_field = 0 
 
 mos_cmd_list = []
+std_cmd_list = []
 dz_cmd_list = []
 for n,site_feat in enumerate(site_shp_lyr):
     site_name = site_feat.GetFieldAsString(site_name_field) 
@@ -159,8 +164,9 @@ for n,site_feat in enumerate(site_shp_lyr):
                 if not os.path.exists(mos_out_fn+'-tile-0.tif'):
                     mos_cmd_list.append(cmd)
                 if len(mos_fn_list) > 1 and not os.path.exists(mos_out_fn+'-tile-0-stddev.tif'):
-                    cmd.append('--stddev')
-                    mos_cmd_list.append(cmd)
+                    cmd2 = list(cmd)
+                    cmd2.append('--stddev')
+                    std_cmd_list.append(cmd2)
 
         #Generate difference map commands
         if len(mos_fn_dict) > 1:
@@ -215,29 +221,36 @@ for n,site_feat in enumerate(site_shp_lyr):
 
     #site_feat.Destroy()
 
+from concurrent.futures import ThreadPoolExecutor
+threads = 8 
+delay = 3.0
+outf = open(os.devnull, 'w')
+
 if mos_cmd_list:
-    processes = []
-    outf = open(os.devnull, 'w')
-    print("Running %i dem_mosaic commands" % len(mos_cmd_list))
-    for cmd in mos_cmd_list:
-        print(cmd)
-        processes.append(subprocess.Popen(cmd, stdout=outf, stderr=subprocess.STDOUT))
-        print
-        time.sleep(0.5)
-    for p in processes: p.wait()
-    outf = None
+    with ThreadPoolExecutor(max_workers=threads) as executor:
+        for cmd in mos_cmd_list:
+            #print(cmd)
+            #executor.submit(subprocess.call, cmd, stdout=outf, stderr=subprocess.STDOUT)
+            executor.submit(subprocess.call, cmd)
+            time.sleep(delay)
+
+if std_cmd_list:
+    with ThreadPoolExecutor(max_workers=threads) as executor:
+        for cmd in std_cmd_list:
+            #print(cmd)
+            #executor.submit(subprocess.call, cmd, stdout=outf, stderr=subprocess.STDOUT)
+            executor.submit(subprocess.call, cmd)
+            time.sleep(delay)
 
 if dz_cmd_list:
-    processes = []
-    outf = open(os.devnull, 'w')
-    print("Running %i compute_dz and make_stack commands" % len(dz_cmd_list))
-    for cmd in dz_cmd_list:
-        print(cmd)
-        processes.append(subprocess.Popen(cmd, stdout=outf, stderr=subprocess.STDOUT))
-        print
-        time.sleep(0.5)
-    for p in processes: p.wait()
-    outf = None
+    with ThreadPoolExecutor(max_workers=threads) as executor:
+        for cmd in dz_cmd_list:
+            #print(cmd)
+            #executor.submit(subprocess.call, cmd, stdout=outf, stderr=subprocess.STDOUT)
+            executor.submit(subprocess.call, cmd)
+            time.sleep(delay)
+
+outf = None
 
 #cd site_poly_highcount_rect/
 #parallel 'compute_dh.py {}/{}_ned13_warp.tif {}/{}_summer-tile-0.tif' ::: *
