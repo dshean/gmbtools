@@ -26,7 +26,8 @@ glac_shp_fn = '/nobackupp8/deshean/conus/shp/24k_selection_aea_min0.1km2.shp'
 #Raster difference map between NED and WV mosaic
 z1_fn = '/nobackupp8/deshean/rpcdem/ned1_2003/ned1_2003_adj.vrt'
 #z2_fn = '/nobackupp8/deshean/conus/dem2/conus_32611_8m/conus_32611_8m_mos.vrt'
-z2_fn = '/nobackupp8/deshean/conus/dem2/conus_8m_tile_coreg_round3/conus_8m_tile_coreg_round3.vrt'
+#z2_fn = '/nobackupp8/deshean/conus/dem2/conus_8m_tile_coreg_round3/conus_8m_tile_coreg_round3.vrt'
+z2_fn = '/nobackupp8/deshean/conus/dem2/conus_8m_tile_coreg_round3_summer2014-2016/conus_8m_tile_coreg_round3_summer2014-2016.vrt'
 #dz_fn = '/nobackup/deshean/conus/dem2/conus_32611_8m/ned1_2003_adj_conus_32611_8m_mos_dz_eul_aea.tif'
 #gdalwarp -co TILED=YES -co COMPRESS=LZW -co BIGTIFF=YES -r cubic -t_srs '+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs ' ned1_2003_adj_conus_32611_8m_mos_dz_eul.tif ned1_2003_adj_conus_32611_8m_mos_dz_eul_aea.tif
 
@@ -120,7 +121,10 @@ for feat in glac_shp_lyr:
     #Compute dz, volume change, mass balance and stats
     #dz_stats = malib.print_stats(dz)
     #z1_stats = malib.print_stats(z1)
-    #z2_stats = malib.print_stats(z2)
+    z2_stats = malib.print_stats(z2)
+    z2_elev_med = z2_stats[5]
+    z2_elev_p16 = z2_stats[11]
+    z2_elev_p84 = z2_stats[12]
 
     #These can be timestamp arrays or datetime objects
     t2 = 2015.0
@@ -149,7 +153,8 @@ for feat in glac_shp_lyr:
     print('%0.2f mwe/yr\n' % mb_mean)
     print('-------------------------------')
     
-    out.append([cx, cy, mb_mean, (glac_area/1E6), t1.mean(), dt.mean()])
+    #out.append([cx, cy, mb_mean, (glac_area/1E6), t1.mean(), dt.mean()])
+    out.append([glacnum, cx, cy, z2_elev_med, z2_elev_p16, z2_elev_p84, mb_mean, (glac_area/1E6), t1.mean(), dt.mean()])
 
     add_fields = False
     if add_fields:
@@ -167,10 +172,11 @@ for feat in glac_shp_lyr:
 glac_shp_ds = None
 
 out = np.array(out)
-#Sort with largest area on bottom
+#Sort by area
 out = out[out[:,3].argsort()[::-1]]
-out_fn = 'conus_mb_20170204.csv'
-out_header = 'x,y,mb_mwea,area_km2,t1,dt'
+out_fn = 'conus_mb_summer2014-2016_20170205.csv'
+#out_header = 'x,y,mb_mwea,area_km2,t1,dt'
+out_header = 'glacnum,x,y,z_med,z_p16,z_p84,mb_mwea,area_km2,t1,dt'
 np.savetxt(out_fn, out, fmt='%0.2f', delimiter=',', header=out_header)
 
 #Write out new shp with features containing stats
