@@ -251,7 +251,7 @@ if dz_cmd_list:
             time.sleep(delay)
 
 #Want to mask output to rock+ice
-parallel -j 32 'dem_mask.py {}' ::: */*tile-0-stddev.tif */*eul.tif */stack*/*trend.tif */stack*/*std.tif
+parallel -j 32 'dem_mask.py --no_icemask {}' ::: */*tile-0-stddev.tif */*eul.tif */stack*/*trend.tif */stack*/*std.tif
 
 outf = None
 
