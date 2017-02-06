@@ -250,6 +250,9 @@ if dz_cmd_list:
             executor.submit(subprocess.call, cmd)
             time.sleep(delay)
 
+#Want to mask output to rock+ice
+parallel -j 32 'dem_mask.py {}' ::: */*tile-0-stddev.tif */*eul.tif */stack*/*trend.tif */stack*/*std.tif
+
 outf = None
 
 #cd site_poly_highcount_rect/
