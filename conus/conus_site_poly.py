@@ -4,14 +4,13 @@ Identify CONUS sites, isolate DEMs, and make stack for each site
 """
 
 #mkdir site_poly_highcount_rect3
-#lfs setstripe !$ --count 32
-#~/src/conus/conus/conus_site_poly.py ../shp/conus_site_poly_highcount_rect_32611.shp  shp/conus_32m_trans_20170204.shp
+#lfs setstripe --count 32 site_poly_highcount_rect3
 
 #Requires predefined polygons for sites with name field
 #Requires shp of DEM footprints from raster2shp.py
 #cd /nobackup/deshean/conus/dem2
 #raster2shp.py -merge_fn shp/conus_32m_trans_n284_20170202.shp */*/*32m_trans.tif
-#conus_site_poly.py ../shp/conus_site_poly_highcount_rect_32611.shp  shp/conus_32m_n366_20160928_1436.shp
+#~/src/conus/conus/conus_site_poly.py ../shp/conus_site_poly_highcount_rect_32611.shp  shp/conus_32m_n366_20160928_1436.shp
 
 import sys
 import os
@@ -51,7 +50,7 @@ dem_shp_srs = dem_shp_lyr.GetSpatialRef()
 
 #outdir = os.path.splitext(shp_fn)[0]+'_stack'
 #outdir = 'range_poly'
-outdir = 'site_poly_highcount_rect3'
+outdir = 'site_poly_highcount_rect3_rerun'
 if not os.path.exists(outdir):
     os.makedirs(outdir)
 
@@ -187,13 +186,18 @@ for n,site_feat in enumerate(site_shp_lyr):
 
             #Make stack of all year/season products 
             stack_cmd = ['make_stack.py', '--trend', '-outdir', os.path.join(stackdir, 'stack_all')]
+            stack_cmd.extend(dem_fn_list)
+            dz_cmd_list.append(stack_cmd)
+
+            #Make stack of all year/season products 
+            stack_cmd = ['make_stack.py', '--trend', '-outdir', os.path.join(stackdir, 'stack_seasonal_all')]
             stack_fn_list = mos_fn_dict.values()
             stack_fn_list.sort()
             stack_cmd.extend(stack_fn_list)
             dz_cmd_list.append(stack_cmd)
 
             #Make stack of all year/summer products
-            stack_cmd = ['make_stack.py', '--trend', '-outdir', os.path.join(stackdir, 'stack_summer')]
+            stack_cmd = ['make_stack.py', '--trend', '-outdir', os.path.join(stackdir, 'stack_seasonal_summer')]
             stack_fn_list = [mos_fn_dict[k] for k in mos_fn_dict.keys() if 'summer' in k]
             if stack_fn_list:
                 stack_fn_list.sort()
@@ -250,10 +254,10 @@ if dz_cmd_list:
             executor.submit(subprocess.call, cmd)
             time.sleep(delay)
 
-#Want to mask output to rock+ice
-parallel -j 32 'dem_mask.py --no_icemask {}' ::: */*tile-0-stddev.tif */*eul.tif */stack*/*trend.tif */stack*/*std.tif
-
 outf = None
+
+#Want to mask output to rock+ice
+#parallel -j 32 'dem_mask.py --no_icemask {}' ::: */*tile-0-stddev.tif */*eul.tif */stack*/*trend.tif */stack*/*std.tif
 
 #cd site_poly_highcount_rect/
 #parallel 'compute_dh.py {}/{}_ned13_warp.tif {}/{}_summer-tile-0.tif' ::: *
