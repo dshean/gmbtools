@@ -35,6 +35,10 @@ z2_fn = '/nobackupp8/deshean/conus/dem2/conus_8m_tile_coreg_round3_summer2014-20
 z1_date_shp_fn = '/nobackupp8/deshean/rpcdem/ned1_2003/meta0306_PAL_24k_10kmbuffer_clean_dissolve_aea.shp'
 #ogr2ogr -t_srs '+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs ' meta0306_PAL_24k_10kmbuffer_clean_dissolve_aea.shp meta0306_PAL_24k_10kmbuffer_clean_dissolve_32611.shp
 
+#PRISM climate data, 800-m 
+prism_ppt_fn = '/nobackupp8/deshean/conus/prism/PRISM_ppt_30yr_normal_800mM2_annual_bil.bil'
+prism_tmean_fn = '/nobackupp8/deshean/conus/prism/PRISM_tmean_30yr_normal_800mM2_annual_bil.bil'
+
 #Field name with scrubbed dates: S_DATE_CLN
 z2_date_shp_fn = ''
 
@@ -84,7 +88,8 @@ for feat in glac_shp_lyr:
     cx, cy = glac_geom.Centroid().GetPoint_2D()
 
     #ds_list = warplib.memwarp_multi_fn([dz_fn,], res='source', extent=glac_geom_extent, t_srs=aea_srs)
-    ds_list = warplib.memwarp_multi_fn([z1_fn, z2_fn], res='min', extent=glac_geom_extent, t_srs=aea_srs, verbose=False)
+    #ds_list = warplib.memwarp_multi_fn([z1_fn, z2_fn], res='min', extent=glac_geom_extent, t_srs=aea_srs, verbose=False)
+    ds_list = warplib.memwarp_multi_fn([z1_fn, z2_fn, prism_ppt_fn, prism_tmean_fn], res='min', extent=glac_geom_extent, t_srs=aea_srs, verbose=False)
 
     glac_geom_mask = geolib.geom2mask(glac_geom, ds_list[0])
     z1 = np.ma.array(iolib.ds_getma(ds_list[0]), mask=glac_geom_mask)
@@ -105,16 +110,7 @@ for feat in glac_shp_lyr:
     #Rasterize NED source dates
     z1_date_r_ds = iolib.mem_drv.CreateCopy('', ds_list[0])
     gdal.RasterizeLayer(z1_date_r_ds, [1], z1_date_shp_lyr, options=["ATTRIBUTE=S_DATE_CLN"])
-    z1_date = iolib.ds_getma(z1_date_r_ds)
-
-    writeout=False
-    if writeout:
-        dz_r_fn = os.path.join(outdir, feat_fn+'_dz.tif')
-        dz_r_ds = iolib.gtif_drv.CreateCopy(dz_r_fn, ds_list[0], options=iolib.gdal_opt)
-        iolib.writeGTiff(dz, dz_r_fn, ds_list[0])
-
-        z1_date_r_fn = os.path.join(outdir, feat_fn+'_ned_date.tif')
-        iolib.writeGTiff(z1_date, z1_date_r_fn, z1_date_r_ds)
+    z1_date = np.ma.array(iolib.ds_getma(z1_date_r_ds), mask=glac_geom_mask)
 
     #Filter dz - throw out abs differences >150 m
 
@@ -150,11 +146,41 @@ for feat in glac_shp_lyr:
     mb_mean = mb_stats[3]
     dmbdt_total_myr = mb_mean*glac_area
 
+    prism_ppt = np.ma.array(iolib.ds_getma(ds_list[2]), mask=glac_geom_mask)/1000.
+    prism_ppt_stats = malib.print_stats(prism_ppt)
+    prism_ppt_mean = prism_ppt_stats[3]
+    prism_tmean = np.ma.array(iolib.ds_getma(ds_list[3]), mask=glac_geom_mask)
+    prism_tmean_stats = malib.print_stats(prism_tmean)
+    prism_tmean_mean = prism_tmean_stats[3]
+
     print('%0.2f mwe/yr\n' % mb_mean)
     print('-------------------------------')
     
     #out.append([cx, cy, mb_mean, (glac_area/1E6), t1.mean(), dt.mean()])
-    out.append([glacnum, cx, cy, z2_elev_med, z2_elev_p16, z2_elev_p84, mb_mean, (glac_area/1E6), t1.mean(), dt.mean()])
+    #out.append([glacnum, cx, cy, z2_elev_med, z2_elev_p16, z2_elev_p84, mb_mean, (glac_area/1E6), t1.mean(), dt.mean()])
+    out.append([glacnum, cx, cy, z2_elev_med, z2_elev_p16, z2_elev_p84, mb_mean, (glac_area/1E6), t1.mean(), dt.mean(), \
+            prism_ppt_mean, prism_tmean_mean])
+
+    writeout=True
+    if writeout:
+        out_dz_fn = os.path.join(outdir, feat_fn+'_dz.tif')
+        #dz_ds = iolib.gtif_drv.CreateCopy(dz_fn, ds_list[0], options=iolib.gdal_opt)
+        iolib.writeGTiff(dz, out_dz_fn, ds_list[0])
+
+        out_z1_fn = os.path.join(outdir, feat_fn+'_z1.tif')
+        iolib.writeGTiff(z1, out_z1_fn, ds_list[0])
+
+        out_z2_fn = os.path.join(outdir, feat_fn+'_z2.tif')
+        iolib.writeGTiff(z2, out_z2_fn, ds_list[0])
+
+        out_z1_date_fn = os.path.join(outdir, feat_fn+'_ned_date.tif')
+        iolib.writeGTiff(z1_date, out_z1_date_fn, ds_list[0])
+
+        out_prism_ppt_fn = os.path.join(outdir, feat_fn+'_precip.tif')
+        iolib.writeGTiff(prism_ppt, out_prism_ppt_fn, ds_list[0])
+
+        out_prism_tmean_fn = os.path.join(outdir, feat_fn+'_tmean.tif')
+        iolib.writeGTiff(prism_tmean, out_prism_tmean_fn, ds_list[0])
 
     add_fields = False
     if add_fields:
@@ -174,15 +200,13 @@ glac_shp_ds = None
 out = np.array(out)
 #Sort by area
 out = out[out[:,3].argsort()[::-1]]
-out_fn = 'conus_mb_summer2014-2016_20170205.csv'
+#out_fn = 'conus_mb_summer2014-2016_20170205.csv'
+out_fn = 'conus_mb_summer2014-2016_20170215.csv'
 #out_header = 'x,y,mb_mwea,area_km2,t1,dt'
-out_header = 'glacnum,x,y,z_med,z_p16,z_p84,mb_mwea,area_km2,t1,dt'
+#out_header = 'glacnum,x,y,z_med,z_p16,z_p84,mb_mwea,area_km2,t1,dt'
+out_header = 'glacnum,x,y,z_med,z_p16,z_p84,mb_mwea,area_km2,t1,dt,precip_mwe,temp'
 np.savetxt(out_fn, out, fmt='%0.2f', delimiter=',', header=out_header)
 
 #Write out new shp with features containing stats
 #One shp preserves input features, regardless of source date
 #Another shp splits glacier poly based on NED source date
-
-#Plots 
-#Scaled circles based on size
-#Time periods
