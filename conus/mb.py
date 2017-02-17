@@ -36,8 +36,8 @@ z1_date_shp_fn = '/nobackupp8/deshean/rpcdem/ned1_2003/meta0306_PAL_24k_10kmbuff
 #ogr2ogr -t_srs '+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs ' meta0306_PAL_24k_10kmbuffer_clean_dissolve_aea.shp meta0306_PAL_24k_10kmbuffer_clean_dissolve_32611.shp
 
 #PRISM climate data, 800-m 
-prism_ppt_fn = '/nobackupp8/deshean/conus/prism/PRISM_ppt_30yr_normal_800mM2_annual_bil.bil'
-prism_tmean_fn = '/nobackupp8/deshean/conus/prism/PRISM_tmean_30yr_normal_800mM2_annual_bil.bil'
+prism_ppt_fn = '/nobackupp8/deshean/conus/prism/normals/annual/ppt/PRISM_ppt_30yr_normal_800mM2_annual_bil.bil'
+prism_tmean_fn = '/nobackupp8/deshean/conus/prism/normals/annual/tmean/PRISM_tmean_30yr_normal_800mM2_annual_bil.bil'
 
 #Field name with scrubbed dates: S_DATE_CLN
 z2_date_shp_fn = ''
@@ -102,9 +102,10 @@ for feat in glac_shp_lyr:
 
     ds_res = geolib.get_res(ds_list[0])
     valid_area = dz.count()*ds_res[0]*ds_res[1]
+    valid_area_perc = valid_area/glac_area
     min_valid_area_perc = 0.80
-    if valid_area/glac_area < min_valid_area_perc:
-        print("Not enough valid pixels. %0.1f%% percent of glacier polygon area")
+    if valid_area_perc < min_valid_area_perc:
+        print("Not enough valid pixels. %0.1f%% percent of glacier polygon area" % valid_area_perc)
         continue
 
     #Rasterize NED source dates
@@ -116,7 +117,7 @@ for feat in glac_shp_lyr:
 
     #Compute dz, volume change, mass balance and stats
     #dz_stats = malib.print_stats(dz)
-    #z1_stats = malib.print_stats(z1)
+    z1_stats = malib.print_stats(z1)
     z2_stats = malib.print_stats(z2)
     z2_elev_med = z2_stats[5]
     z2_elev_p16 = z2_stats[11]
@@ -134,17 +135,38 @@ for feat in glac_shp_lyr:
 
     rho_i = 0.91
     rho_s = 0.50
+    rho_f = 0.60
     rho_is = 0.85
     #Can estimate ELA values computed from hypsometry and typical AAR
-    ela = None
-    if ela is None:
+    #For now, assume ELA is mean
+    z1_ela = None
+    z1_ela = z1_stats[3]
+    z2_ela = z2_stats[3]
+    #Note: in theory, the ELA should get higher with mass loss
+    #In practice, using mean and same polygon, ELA gets lower as glacier surface thins
+    print("ELA(t1): %0.1f" % z1_ela)
+    print("ELA(t2): %0.1f" % z2_ela)
+    if z1_ela is None:
         mb = dhdt * rho_is
     else:
-        mb = np.where(dhdt < ela, dhdt*rho_i, dhdt*rho_s)
+        #Initiate with average density
+        mb = dhdt*(rho_is + rho_f)/2.
+        #Everything that is above ELA at t2 is elevation change over firn, use firn density
+        accum_mask = (z2 > z2_ela).filled(0).astype(bool)
+        mb[accum_mask] = (dhdt*rho_f)[accum_mask]
+        #Everything that is below ELA at t1 is elevation change over ice, use ice density
+        abl_mask = (z1 <= z1_ela).filled(0).astype(bool)
+        mb[abl_mask] = (dhdt*rho_is)[abl_mask]
+        #Everything in between, use average of ice and firn density
+        #mb[(z1 > z1_ela) || (z2 <= z2_ela)] = dhdt*(rhois + rho_f)/2.
+        #Linear ramp
+        #rho_f + z2*((rho_is - rho_f)/(z2_ela - z1_ela))
+        #mb = np.where(dhdt < ela, dhdt*rho_i, dhdt*rho_s)
 
     mb_stats = malib.print_stats(mb)
     mb_mean = mb_stats[3]
     dmbdt_total_myr = mb_mean*glac_area
+    mb_sum = np.sum(mb)*ds_res[0]*ds_res[1]
 
     prism_ppt = np.ma.array(iolib.ds_getma(ds_list[2]), mask=glac_geom_mask)/1000.
     prism_ppt_stats = malib.print_stats(prism_ppt)
@@ -153,7 +175,10 @@ for feat in glac_shp_lyr:
     prism_tmean_stats = malib.print_stats(prism_tmean)
     prism_tmean_mean = prism_tmean_stats[3]
 
-    print('%0.2f mwe/yr\n' % mb_mean)
+    print('Mean mb: %0.2f mwe/yr' % mb_mean)
+    print('Sum/Area mb: %0.2f mwe/yr' % (mb_sum/glac_area))
+    print('Mean mb * Area: %0.2f mwe/yr' % dmbdt_total_myr)
+    print('Sum mb: %0.2f mwe/yr' % mb_sum)
     print('-------------------------------')
     
     #out.append([cx, cy, mb_mean, (glac_area/1E6), t1.mean(), dt.mean()])
@@ -161,7 +186,7 @@ for feat in glac_shp_lyr:
     out.append([glacnum, cx, cy, z2_elev_med, z2_elev_p16, z2_elev_p84, mb_mean, (glac_area/1E6), t1.mean(), dt.mean(), \
             prism_ppt_mean, prism_tmean_mean])
 
-    writeout=True
+    writeout=False
     if writeout:
         out_dz_fn = os.path.join(outdir, feat_fn+'_dz.tif')
         #dz_ds = iolib.gtif_drv.CreateCopy(dz_fn, ds_list[0], options=iolib.gdal_opt)
@@ -201,7 +226,8 @@ out = np.array(out)
 #Sort by area
 out = out[out[:,3].argsort()[::-1]]
 #out_fn = 'conus_mb_summer2014-2016_20170205.csv'
-out_fn = 'conus_mb_summer2014-2016_20170215.csv'
+#out_fn = 'conus_mb_summer2014-2016_20170215.csv'
+out_fn = 'conus_mb_summer2014-2016_ela_20170216.csv'
 #out_header = 'x,y,mb_mwea,area_km2,t1,dt'
 #out_header = 'glacnum,x,y,z_med,z_p16,z_p84,mb_mwea,area_km2,t1,dt'
 out_header = 'glacnum,x,y,z_med,z_p16,z_p84,mb_mwea,area_km2,t1,dt,precip_mwe,temp'
