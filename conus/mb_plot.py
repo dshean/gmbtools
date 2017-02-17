@@ -85,7 +85,8 @@ def mapplot(out, field):
     return f
 
 #out_fn = 'conus_mb_20170204.csv'
-out_fn = 'conus_mb_summer2014-2016_20170205.csv'
+#out_fn = 'conus_mb_summer2014-2016_20170205.csv'
+out_fn = 'conus_mb_summer2014-2016_20170215.csv'
 #Load into structured array
 out = np.genfromtxt(out_fn, delimiter=',', dtype=None, names=True)
 #Sort by area
@@ -102,12 +103,12 @@ vmin, vmax = get_equal_vmin_vmax(out['mb_mwea'])
 f = mapplot(out, field='mb_mwea')
 fig_fn = 'conus_mb_map.png'
 plt.title("Long-term (~30-60 year) Geodetic Mass Balance")
-plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
+#plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
 
 f = mapplot(out, field='t1')
 fig_fn = 'conus_nedyear_map.png'
 plt.title("NED Source Date")
-plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
+#plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
 
 f, ax = plt.subplots()
 ax.set_facecolor('0.8')
@@ -120,6 +121,22 @@ ax.minorticks_on()
 #ax.tick_params(left=True, right=True, bottom=True, top=True)
 cbar = pltlib.add_cbar(ax, sc, label='Mass balance (mwe/yr)')
 fig_fn = 'conus_mb_elev_lat.png'
+plt.title("Long-term (~30-60 year) Geodetic Mass Balance")
+plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
+
+f, ax = plt.subplots()
+ax.set_facecolor('0.8')
+ax.axhline(0, ls=':', color='k', lw=0.5)
+sc = ax.scatter(out['precip_mwe'], out['temp'], c=out['mb_mwea'], s=out['area_km2']*16, \
+        edgecolor='k', lw='0.2', cmap='RdBu', vmin=vmin, vmax=vmax)
+leg = add_legend(ax, loc='lower right')
+ax.set_xlabel('Mean Annual Precip (mwe)')
+ax.set_ylabel('Mean Annual Temp (C)')
+ax.set_ylim(-6,6)
+ax.minorticks_on()
+#ax.tick_params(left=True, right=True, bottom=True, top=True)
+cbar = pltlib.add_cbar(ax, sc, label='Mass balance (mwe/yr)')
+fig_fn = 'conus_mb_precip_temp.png'
 plt.title("Long-term (~30-60 year) Geodetic Mass Balance")
 plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
 
