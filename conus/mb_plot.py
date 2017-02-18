@@ -86,7 +86,8 @@ def mapplot(out, field):
 
 #out_fn = 'conus_mb_20170204.csv'
 #out_fn = 'conus_mb_summer2014-2016_20170205.csv'
-out_fn = 'conus_mb_summer2014-2016_20170215.csv'
+#out_fn = 'conus_mb_summer2014-2016_20170215.csv'
+out_fn = 'conus_mb_summer2014-2016_ela_20170216.csv'
 #Load into structured array
 out = np.genfromtxt(out_fn, delimiter=',', dtype=None, names=True)
 #Sort by area
