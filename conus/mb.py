@@ -38,6 +38,10 @@ def get_bins(dem, bin_width=100.0):
 site='rainier'
 topdir='/Volumes/SHEAN_1TB_SSD/site_poly_highcount_rect3_rerun/rainier'
 
+writeout=True
+ts = datetime.now().strftime('%Y%m%d_%H%M')
+out_fn = '%s_mb_%s.csv' % (site, ts)
+
 if site == 'conus':
     #'+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
     outdir = os.path.join(topdir,'conus/dem2/conus_32611_8m/glac_poly_out')
@@ -72,7 +76,9 @@ elif site == 'hma':
     #SRTM
     z1_fn = os.path.join(topdir,'rpcdem/hma/srtm1/hma_srtm_gl1.vrt')
     z1_date = timelib.dt2decyear(datetime(2000,2,11))
-    z2_fn = os.path.join(topdir,'hma/hma1_2016dec22/hma_8m_tile/hma_8m.vrt')
+    #z2_fn = '/nobackup/deshean/hma/hma1_2016dec22/hma_8m_tile/hma_8m.vrt'
+    #z2_fn = os.path.join(topdir,'hma/hma1_2016dec22/hma_8m_tile/hma_8m.vrt')
+    z2_fn = os.path.join(topdir,'hma/hma1_2016dec22/hma_8m_tile_round2_20170220/hma_8m_round2.vrt')
     z2_date = 2015.0
 elif site == 'rainier':
     outdir = os.path.join(topdir,'mb')
@@ -118,8 +124,17 @@ if not os.path.exists(outdir):
 #field_defn = ogr.FieldDefn("mb_mwe", ogr.OFTReal)
 #glac_shp_lyr.CreateField(field_defn)
 
-for feat in glac_shp_lyr:
-    glacname = feat.GetField(glacname_fieldname)
+for n, feat in enumerate(glac_shp_lyr):
+    if site == 'conus':
+        glacname = feat.GetField("GLACNAME")
+        glacnum = int(feat.GetField("GLACNUM"))
+    else:
+        #Use RGI
+        #glacname = feat.GetField("Name")
+        glacname = None
+        #RGIId (String) = RGI50-01.00004
+        glacnum = float(feat.GetField("RGIId").split('-')[-1])*100000
+
     if glacname is None:
         glacname = ""
     else:
@@ -137,7 +152,7 @@ for feat in glac_shp_lyr:
         glacnum = float(glacnum.split('-')[-1])*100000
 
     feat_fn = "%s_%s" % (glacnum, glacname)
-    print("\n%s\n" % feat_fn)
+    print("\n%i of %i: %s\n" % (n+1, feat_count, feat_fn))
     glac_geom = feat.GetGeometryRef()
     glac_geom.AssignSpatialReference(glac_shp_srs)
     glac_geom_extent = geolib.geom_extent(glac_geom)
@@ -285,7 +300,6 @@ for feat in glac_shp_lyr:
     #Write to master list
     out.append(outlist)
 
-    writeout=True
     if writeout:
         out_dz_fn = os.path.join(outdir, feat_fn+'_dz.tif')
         iolib.writeGTiff(dz, out_dz_fn, ds_list[0])
