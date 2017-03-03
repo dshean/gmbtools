@@ -4,6 +4,10 @@
 Generate plots for regional glacier mass balance
 """
 
+#Clean up filenames with bad characters
+#for i in *tif; do mv $i $(echo $i | sed -e 's/[^A-Za-z0-9._-]/_/g'); done
+#cat hma_mb_20170222_0021.csv | awk -F',' '{($1=$1/100000); printf "RGI50-%0.5f, %0.2f, %0.2f, %0.2f, %0.2f\n", $1, $2, $3, $4, $7}' > hma_mb_20170222_0021_fmt.csv
+
 import os
 import sys
 import numpy as np
@@ -33,9 +37,8 @@ def add_legend(ax, sf=16, loc='upper right'):
     Create legend for scaled scatterplot markers
     """
     ax.autoscale(False)
-    print(sf)
     leg_s = np.array([0.1, 0.5, 1.0, 5.0, 10.0])
-    #leg_s = np.array([0.1, 1.0, 10.0, 100.0])
+    leg_s = np.array([0.1, 1.0, 10.0, 100.0])
     leg_x = np.full(leg_s.size, -999999999)
     leg_y = np.full(leg_s.size, -999999999)
     #leg_sc = ax.scatter(leg_x, leg_y, c='0.8', s=leg_s)
@@ -93,8 +96,10 @@ def mapplot(a, field, srs, sf=16, ax=None):
     print(extent)
     extent = geolib.pad_extent(geolib.extent_round(extent, precision=1000), width=100000)
     print(extent)
-    w = extent[2] - extent[0]
-    h = extent[3] - extent[1]
+    #w = extent[2] - extent[0]
+    #h = extent[3] - extent[1]
+    w = 2*np.abs([extent[0], extent[2]]).max()
+    h = 2*np.abs([extent[1], extent[3]]).max()
     lon_0, lat_0 = (srs.GetProjParm("longitude_of_center"), srs.GetProjParm("latitude_of_center"))
     lat_1, lat_2 = (srs.GetProjParm("standard_parallel_1"), srs.GetProjParm("standard_parallel_2"))
     proj_kwargs = {'projection':'aea','lat_1':lat_1,'lat_2':lat_2,'lon_0':lon_0,'lat_0':lat_0,'ellps':'WGS84'}
@@ -106,17 +111,17 @@ def mapplot(a, field, srs, sf=16, ax=None):
     x = a['x'] + xoff
     y = a['y'] + yoff
     m.fillcontinents(color='0.9',zorder=0)
-    m.drawcoastlines(linewidth=0.25)
-    m.drawcountries(linewidth=0.25)
-    m.drawstates(linewidth=0.25)
-    m.drawrivers(color='lightblue',linewidth=0.25,zorder=1)
+    m.drawcoastlines(linewidth=0.25,zorder=1)
+    m.drawcountries(linewidth=0.25,zorder=1)
+    m.drawstates(linewidth=0.25,zorder=1)
+    m.drawrivers(color='lightblue',linewidth=0.25,zorder=2)
     #m.shadedrelief()
     #m.bluemarble()
     #m.drawmapscale(-115,37,lon_0,lat_0,400,barstyle='fancy',zorder=10)
     parallels = np.arange(0.,91.,5.)
-    m.drawparallels(parallels,linewidth=0.5,labels=[True,False,False,False])
+    m.drawparallels(parallels,linewidth=0.5,labels=[True,False,False,False],zorder=2)
     meridians = np.arange(-180.,181.,10.)
-    m.drawmeridians(meridians,linewidth=0.5,labels=[False,False,False,True])
+    m.drawmeridians(meridians,linewidth=0.5,labels=[False,False,False,True],zorder=2)
     if field == 'mb_mwea':
         cmap = 'RdBu'
         label = 'Mass balance (m we/yr)'
@@ -204,7 +209,7 @@ if True:
     plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
 
 #3D plot - pretty slow
-if True:
+if False:
     f = plt.figure()
     ax = f.add_subplot(111, projection='3d')
     #ax = scplot3D(lon, lat, a['z_med'], a['mb_mwea'], a['area_km2']*4, ax=ax, clim=(vmin, vmax))
