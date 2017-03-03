@@ -16,47 +16,72 @@ from pygeotools.lib import geolib
 from pygeotools.lib import iolib
 from pygeotools.lib import timelib
 
-from datetime import datetime
+from imview.lib import pltlib
+
+from datetime import datetime, timedelta
 import time
 
+def get_bins(dem, bin_width=100.0):
+    #Define min and max elevation
+    minz, maxz= list(malib.calcperc(dem, perc=(0.01, 99.99)))
+    minz = np.floor(minz/bin_width) * bin_width
+    maxz = np.ceil(maxz/bin_width) * bin_width
+    #Compute bin edges and centers
+    bin_edges = np.arange(minz, maxz + bin_width, bin_width)
+    bin_centers = bin_edges[:-1] + np.diff(bin_edges)/2.0
+    return bin_edges, bin_centers
+
+#topdir='/nobackup/deshean'
 #site='conus'
-site='hma'
+#site='hma'
+
+site='rainier'
+topdir='/Volumes/SHEAN_1TB_SSD/site_poly_highcount_rect3_rerun/rainier'
 
 if site == 'conus':
     #'+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
-    outdir = '/nobackup/deshean/conus/dem2/conus_32611_8m/glac_poly_out'
+    outdir = os.path.join(topdir,'conus/dem2/conus_32611_8m/glac_poly_out')
     aea_srs = geolib.conus_aea_srs
 
     #Glacier shp
     #ogr2ogr -t_srs '+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs ' 24k_selection_aea.shp 24k_selection_32610.shp
     #glac_shp_fn = '/nobackupp8/deshean/conus/shp/24k_selection_aea.shp'
     #This has already been filtered by area
-    glac_shp_fn = '/nobackupp8/deshean/conus/shp/24k_selection_aea_min0.1km2.shp'
+    glac_shp_fn = os.path.join(topdir,'conus/shp/24k_selection_aea_min0.1km2.shp')
 
     #Raster difference map between NED and WV mosaic
-    z1_fn = '/nobackupp8/deshean/rpcdem/ned1_2003/ned1_2003_adj.vrt'
-    z2_fn = '/nobackupp8/deshean/conus/dem2/conus_8m_tile_coreg_round3_summer2014-2016/conus_8m_tile_coreg_round3_summer2014-2016.vrt'
-
+    z1_fn = os.path.join(topdir,'rpcdem/ned1_2003/ned1_2003_adj.vrt')
     #NED 2003 dates
-    z1_date_shp_fn = '/nobackupp8/deshean/rpcdem/ned1_2003/meta0306_PAL_24k_10kmbuffer_clean_dissolve_aea.shp'
+    z1_date_shp_fn = os.path.join(topdir,'rpcdem/ned1_2003/meta0306_PAL_24k_10kmbuffer_clean_dissolve_aea.shp')
     #ogr2ogr -t_srs '+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs ' meta0306_PAL_24k_10kmbuffer_clean_dissolve_aea.shp meta0306_PAL_24k_10kmbuffer_clean_dissolve_32611.shp
     z1_date_shp_ds = ogr.Open(z1_date_shp_fn)
     z1_date_shp_lyr = z1_date_shp_ds.GetLayer()
     z1_date_shp_srs = z1_date_shp_lyr.GetSpatialRef()
     z1_date_shp_lyr.ResetReading()
 
+    z2_fn = os.path.join(topdir,'conus/dem2/conus_8m_tile_coreg_round3_summer2014-2016/conus_8m_tile_coreg_round3_summer2014-2016.vrt')
+    z2_date = 2015.0
     #PRISM climate data, 800-m 
-    prism_ppt_fn = '/nobackupp8/deshean/conus/prism/normals/annual/ppt/PRISM_ppt_30yr_normal_800mM2_annual_bil.bil'
-    prism_tmean_fn = '/nobackupp8/deshean/conus/prism/normals/annual/tmean/PRISM_tmean_30yr_normal_800mM2_annual_bil.bil'
+    prism_ppt_fn = os.path.join(topdir,'conus/prism/normals/annual/ppt/PRISM_ppt_30yr_normal_800mM2_annual_bil.bil')
+    prism_tmean_fn = os.path.join(topdir,'conus/prism/normals/annual/tmean/PRISM_tmean_30yr_normal_800mM2_annual_bil.bil')
 elif site == 'hma':
     #'+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
-    outdir = '/nobackupp8/deshean/hma/hma1_2016dec22/glac_poly_out'
-    aea_srs = geolib.hma_aea_srs
-    glac_shp_fn = '/nobackup/deshean/data/rgi50/regions/rgi50_hma_aea.shp'
+    outdir = os.path.join(topdir,'hma/hma1_2016dec22/glac_poly_out')
+    aea_srs = geolib.conus_aea_srs
+    glac_shp_fn = os.path.join(topdir,'data/rgi50/regions/rgi50_hma_aea.shp')
     #SRTM
-    z1_fn = '/nobackup/deshean/rpcdem/hma/srtm1/hma_srtm_gl1.vrt'
+    z1_fn = os.path.join(topdir,'rpcdem/hma/srtm1/hma_srtm_gl1.vrt')
     z1_date = timelib.dt2decyear(datetime(2000,2,11))
-    z2_fn = '/nobackup/deshean/hma/hma1_2016dec22/hma_8m_tile/hma_8m.vrt'
+    z2_fn = os.path.join(topdir,'hma/hma1_2016dec22/hma_8m_tile/hma_8m.vrt')
+    z2_date = 2015.0
+elif site == 'rainier':
+    outdir = os.path.join(topdir,'mb')
+    aea_srs = geolib.conus_aea_srs
+    glac_shp_fn = '/Users/dshean/data/conus_glacierpoly_24k/rainier_24k_1970-2015_mb_aea.shp'
+    z1_fn = sys.argv[1]
+    z1_date = timelib.mean_date(timelib.fn_getdatetime_list(z1_fn))
+    z2_fn = sys.argv[2]
+    z2_date = timelib.mean_date(timelib.fn_getdatetime_list(z2_fn))
 else:
     sys.exit()
 
@@ -65,6 +90,17 @@ min_glac_area = 0.1 #km^2
 
 #List to hold output
 out = []
+
+if '24k' in glac_shp_fn: 
+    glacname_fieldname = "GLACNAME"
+    glacnum_fieldname = "GLACNUM"
+elif 'rgi' in glac_shp_fn:
+    #Use RGI
+    glacname_fieldname = "Name"
+    #RGIId (String) = RGI50-01.00004
+    glacnum_fieldname = "RGIId"
+else:
+    sys.exit('Unrecognized glacier shp filename')
 
 glac_shp_ds = ogr.Open(glac_shp_fn, 0)
 glac_shp_lyr = glac_shp_ds.GetLayer()
@@ -83,20 +119,22 @@ if not os.path.exists(outdir):
 #glac_shp_lyr.CreateField(field_defn)
 
 for feat in glac_shp_lyr:
-    if site == 'conus':
-        glacname = feat.GetField("GLACNAME")
-        glacnum = int(feat.GetField("GLACNUM"))
-    else:
-        #Use RGI
-        glacname = feat.GetField("Name")
-        #RGIId (String) = RGI50-01.00004
-        glacnum = float(feat.GetField("RGIId").split('-')[-1])*100000
-
+    glacname = feat.GetField(glacname_fieldname)
     if glacname is None:
         glacname = ""
     else:
         glacname = glacname.replace(" ", "")
         glacname = glacname.replace("_", "")
+
+    #if glacname != "EmmonsGlacier":
+    if glacname != "Nisqually-WilsonGlacier":
+        continue
+
+    glacnum = feat.GetField(glacnum_fieldname)
+    if '24k' in glac_shp_fn:
+        glacnum = int(glacnum)
+    else:
+        glacnum = float(glacnum.split('-')[-1])*100000
 
     feat_fn = "%s_%s" % (glacnum, glacname)
     print("\n%s\n" % feat_fn)
@@ -133,12 +171,17 @@ for feat in glac_shp_lyr:
         print("No valid dz pixels")
         continue
 
+    #Remove clearly bogus pixels
+    bad_perc = (0.1, 99.9)
+    rangelim = malib.calcperc(dz, bad_perc)
+    dz = np.ma.masked_outside(dz, *rangelim)
+
     ds_res = geolib.get_res(ds_list[0])
     valid_area = dz.count()*ds_res[0]*ds_res[1]
     valid_area_perc = valid_area/glac_area
     min_valid_area_perc = 0.80
     if valid_area_perc < min_valid_area_perc:
-        print("Not enough valid pixels. %0.1f%% percent of glacier polygon area" % valid_area_perc)
+        print("Not enough valid pixels. %0.1f%% percent of glacier polygon area" % (100*valid_area_perc))
         continue
 
     #Rasterize NED source dates
@@ -157,10 +200,12 @@ for feat in glac_shp_lyr:
     z2_elev_p84 = z2_stats[12]
 
     #These can be timestamp arrays or datetime objects
-    t2 = 2015.0
     t1 = z1_date
+    t2 = z2_date
     #This is decimal years
     dt = t2 - t1
+    if isinstance(dt, timedelta):
+        dt = dt.total_seconds()/timelib.spy
     #m/yr
     dhdt = dz/dt
     #dhdt_stats = malib.print_stats(dhdt)
@@ -170,6 +215,12 @@ for feat in glac_shp_lyr:
     if site == 'conus':
         t1 = t1.mean()
         dt = dt.mean()
+
+    if isinstance(t1, datetime):
+        t1 = timelib.dt2decyear(t1)
+
+    if isinstance(t2, datetime):
+        t2 = timelib.dt2decyear(t2)
 
     rho_i = 0.91
     rho_s = 0.50
@@ -214,7 +265,7 @@ for feat in glac_shp_lyr:
     dmbdt_total_myr = mb_mean*glac_area
     mb_sum = np.sum(mb)*ds_res[0]*ds_res[1]
 
-    outlist = [glacnum, cx, cy, z2_elev_med, z2_elev_p16, z2_elev_p84, mb_mean, (glac_area/1E6), t1, dt]
+    outlist = [glacnum, cx, cy, z2_elev_med, z2_elev_p16, z2_elev_p84, mb_mean, (glac_area/1E6), t1, t2, dt]
 
     if site == 'conus':
         prism_ppt = np.ma.array(iolib.ds_getma(ds_list[2]), mask=glac_geom_mask)/1000.
@@ -234,7 +285,7 @@ for feat in glac_shp_lyr:
     #Write to master list
     out.append(outlist)
 
-    writeout=False
+    writeout=True
     if writeout:
         out_dz_fn = os.path.join(outdir, feat_fn+'_dz.tif')
         iolib.writeGTiff(dz, out_dz_fn, ds_list[0])
@@ -268,6 +319,61 @@ for feat in glac_shp_lyr:
 
     #Error analysis assuming date is wrong by +/- 1-2 years
 
+    z_bin_edges, z_bin_centers = get_bins(z1, 10.)
+    z1_bin_counts, z1_bin_edges = np.histogram(z1, bins=z_bin_edges)
+    z1_bin_areas = z1_bin_counts * ds_res[0] * ds_res[1] / 1E6
+    z2_bin_counts, z2_bin_edges = np.histogram(z2, bins=z_bin_edges)
+    z2_bin_areas = z2_bin_counts * ds_res[0] * ds_res[1] / 1E6
+
+    #dz_bin_edges, dz_bin_centers = get_bins(dz, 1.)
+    #dz_bin_counts, dz_bin_edges = np.histogram(dz, bins=dz_bin_edges)
+    #dz_bin_areas = dz_bin_counts * ds_res * ds_res / 1E6
+    dz_bin_med = np.ma.masked_all_like(z1_bin_areas)
+    dz_bin_mad = np.ma.masked_all_like(z1_bin_areas)
+    idx = np.digitize(z1, z_bin_edges)
+    for n in range(z_bin_centers.size):
+        dz_bin_samp = mb[(idx == n+1)]
+        #dz_bin_samp = dhdt[(idx == n+1)]
+        dz_bin_med[n] = malib.fast_median(dz_bin_samp)
+        dz_bin_mad[n] = malib.mad(dz_bin_samp)
+        dz_bin_med[n] = dz_bin_samp.mean()
+        dz_bin_mad[n] = dz_bin_samp.std()
+
+    f,axa = plt.subplots(1,4, figsize=(10,7.5))
+    f.suptitle(feat_fn)
+    z1_im = axa[0].imshow(z1, cmap='cpt_rainbow', vmin=z_bin_edges[0], vmax=z_bin_edges[-1])
+    axa[0].contour(z1, [z1_ela,], linewidths=0.5, linestyles=':', colors='k')
+    dz_clim = (-10, 10)
+    dz_im = axa[1].imshow(dhdt, cmap='RdBu', vmin=dz_clim[0], vmax=dz_clim[1])
+    pltlib.hide_ticks(axa[0])
+    pltlib.add_scalebar(axa[0], ds_res[0])
+    pltlib.hide_ticks(axa[1])
+    #pltlib.add_colorbar(axa[0], z1_im, label='Elevation (m WGS84)')
+    #pltlib.add_colorbar(axa[1], dz_im, label='dh/dt (m/yr)')
+    axa[2].plot(z1_bin_areas, z_bin_centers, label='%0.2f' % t1)
+    axa[2].plot(z2_bin_areas, z_bin_centers, label='%0.2f' % t2)
+    axa[2].axhline(z1_ela, ls=':', c='C0')
+    axa[2].axhline(z2_ela, ls=':', c='C1')
+    axa[2].legend(prop={'size':8})
+    #axa[2].set_ylabel('Elevation (m WGS84)')
+    axa[2].set_xlabel('Area $\mathregular{km^2}$')
+    axa[2].minorticks_on()
+    axa[3].yaxis.tick_right()
+    axa[3].yaxis.set_label_position("right")
+    axa[3].axvline(0, lw=0.5, c='k')
+    axa[3].axvline(mb_mean, ls=':', c='k', label='%0.2f m w.e./yr' % mb_mean)
+    axa[3].legend(prop={'size':8})
+    axa[3].plot(dz_bin_med, z_bin_centers, color='k')
+    axa[3].fill_betweenx(z_bin_centers, 0, dz_bin_med, where=(dz_bin_med<0), color='r', alpha=0.2)
+    axa[3].fill_betweenx(z_bin_centers, 0, dz_bin_med, where=(dz_bin_med>0), color='b', alpha=0.2)
+    axa[3].set_ylabel('Elevation (m WGS84)')
+    #axa[3].set_xlabel('dh/dt (m/yr)')
+    axa[3].set_xlabel('mb (m w.e./yr)')
+    axa[3].minorticks_on()
+    plt.tight_layout()
+    
+plt.show()
+
 glac_shp_ds = None
 
 out = np.array(out)
@@ -276,8 +382,9 @@ out = out[out[:,3].argsort()[::-1]]
 
 ts = datetime.now().strftime('%Y%m%d_%H%M')
 out_fn = '%s_mb_%s.csv' % (site, ts)
+out_fn = os.path.join(outdir, out_fn)
 
-out_header = 'glacnum,x,y,z_med,z_p16,z_p84,mb_mwea,area_km2,t1,dt'
+out_header = 'glacnum,x,y,z_med,z_p16,z_p84,mb_mwea,area_km2,t1,t2,dt'
 if site == 'conus':
     out_header += ',precip_mwe,temp'
 
