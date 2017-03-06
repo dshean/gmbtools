@@ -110,8 +110,17 @@ else:
 
 glac_shp_ds = ogr.Open(glac_shp_fn, 0)
 glac_shp_lyr = glac_shp_ds.GetLayer()
-feat_count = glac_shp_lyr.GetFeatureCount()
 glac_shp_srs = glac_shp_lyr.GetSpatialRef()
+feat_count = glac_shp_lyr.GetFeatureCount()
+print("Input glacier polygon count: %i" % feat_count)
+
+#Spatial filter
+z1_ds = gdal.Open(z1_fn)
+z2_ds = gdal.Open(z2_fn)
+dz_int_geom = geolib.ds_geom_intersection([z1_ds, z2_ds], t_srs=glac_shp_srs)
+glac_shp_lyr.SetSpatialFilter(dz_int_geom)
+feat_count = glac_shp_lyr.GetFeatureCount()
+print("Filtered glacier polygon count: %i" % feat_count)
 glac_shp_lyr.ResetReading()
 
 print("Processing %i features" % feat_count)
@@ -133,7 +142,7 @@ for n, feat in enumerate(glac_shp_lyr):
         #glacname = feat.GetField("Name")
         glacname = None
         #RGIId (String) = RGI50-01.00004
-        glacnum = float(feat.GetField("RGIId").split('-')[-1])*100000
+        glacnum = float(feat.GetField("RGIId").split('-')[-1])*1000000
 
     if glacname is None:
         glacname = ""
