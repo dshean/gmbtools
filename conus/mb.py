@@ -181,10 +181,11 @@ for n, feat in enumerate(glac_shp_lyr):
     #if glacname != "EmmonsGlacier":
     #if glacname != "Nisqually-WilsonGlacier":
     #if glacname != "SouthCascadeGlacier":
-    if glacnum not in glacier_dict.keys():
-        continue
-    else:
-        glacname = glacier_dict[glacnum]
+
+    #if glacnum not in glacier_dict.keys():
+    #    continue
+    #else:
+    #    glacname = glacier_dict[glacnum]
 
     feat_fn = "%s_%s" % (glacnum, glacname)
     print("\n%i of %i: %s\n" % (n+1, feat_count, feat_fn))
@@ -446,7 +447,7 @@ for n, feat in enumerate(glac_shp_lyr):
         t2_title = int(np.round(t2))
         axa[0].set_title(t1_title)
         axa[1].set_title(t2_title)
-        axa[2].set_title('%i to %i' % (t1_title, t2_title))
+        axa[2].set_title('%i to %i (%i yr)' % (t1_title, t2_title, (t2_title-t1_title)))
         #dz_clim = (-10, 10)
         dz_clim = (-2.0, 2.0)
         dz_im = axa[2].imshow(dhdt, cmap='RdBu', vmin=dz_clim[0], vmax=dz_clim[1])
