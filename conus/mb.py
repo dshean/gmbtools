@@ -31,12 +31,12 @@ def get_bins(dem, bin_width=100.0):
     bin_centers = bin_edges[:-1] + np.diff(bin_edges)/2.0
     return bin_edges, bin_centers
 
-#topdir='/nobackup/deshean'
-#site='conus'
+topdir='/nobackup/deshean'
+site='conus'
 #site='hma'
 
-site='rainier'
-topdir='/Volumes/SHEAN_1TB_SSD/site_poly_highcount_rect3_rerun/rainier'
+#topdir='/Volumes/SHEAN_1TB_SSD/site_poly_highcount_rect3_rerun/rainier'
+#site='rainier'
 
 writeout=True
 ts = datetime.now().strftime('%Y%m%d_%H%M')
@@ -44,7 +44,8 @@ out_fn = '%s_mb_%s.csv' % (site, ts)
 
 if site == 'conus':
     #'+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
-    outdir = os.path.join(topdir,'conus/dem2/conus_32611_8m/glac_poly_out')
+    #outdir = os.path.join(topdir,'conus/dem2/conus_32611_8m/glac_poly_out')
+    outdir = os.path.join(topdir,'conus/dem2/glac_poly_out')
     aea_srs = geolib.conus_aea_srs
 
     #Glacier shp
@@ -64,10 +65,36 @@ if site == 'conus':
     z1_date_shp_lyr.ResetReading()
 
     z2_fn = os.path.join(topdir,'conus/dem2/conus_8m_tile_coreg_round3_summer2014-2016/conus_8m_tile_coreg_round3_summer2014-2016.vrt')
+    z2_date = datetime(2015, 1, 1)
     z2_date = 2015.0
     #PRISM climate data, 800-m 
-    prism_ppt_fn = os.path.join(topdir,'conus/prism/normals/annual/ppt/PRISM_ppt_30yr_normal_800mM2_annual_bil.bil')
-    prism_tmean_fn = os.path.join(topdir,'conus/prism/normals/annual/tmean/PRISM_tmean_30yr_normal_800mM2_annual_bil.bil')
+    prism_ppt_annual_fn = os.path.join(topdir,'conus/prism/normals/annual/ppt/PRISM_ppt_30yr_normal_800mM2_annual_bil.bil')
+    prism_tmean_annual_fn = os.path.join(topdir,'conus/prism/normals/annual/tmean/PRISM_tmean_30yr_normal_800mM2_annual_bil.bil')
+    prism_ppt_summer_fn = os.path.join(topdir,'conus/prism/normals/monthly/PRISM_ppt_30yr_normal_800mM2_06-09_summer_mean.tif')
+    prism_ppt_winter_fn = os.path.join(topdir,'conus/prism/normals/monthly/PRISM_ppt_30yr_normal_800mM2_10-05_winter_mean.tif')
+    prism_tmean_summer_fn = os.path.join(topdir,'conus/prism/normals/monthly/PRISM_tmean_30yr_normal_800mM2_06-09_summer_mean.tif')
+    prism_tmean_winter_fn = os.path.join(topdir,'conus/prism/normals/monthly/PRISM_tmean_30yr_normal_800mM2_10-05_winter_mean.tif')
+
+    #Noisy Creek, Silver
+    glacier_dict = {}
+    glacier_dict[6012] = 'EmmonsGlacier'
+    glacier_dict[6096] = 'Nisqually-WilsonGlacier'
+    glacier_dict[10480] = 'SouthCascadeGlacier'
+    #Note: Sandalee has 3 records, 2693, 2695, 2696
+    glacier_dict[2696] = 'SandaleeGlacier'
+    glacier_dict[3070] = 'NorthKlawattiGlacier'
+    glacier_dict[1969] = 'NoisyCreekGlacier'
+    glacier_dict[2294] = 'SilverGlacier'
+    glacier_dict[2500] = 'EastonGlacier'
+    glacier_dict[5510] = 'BlueGlacier'
+    glacier_dict[5603] = 'EelGlacier'
+    glacier_dict[1589] = 'SperryGlacier'
+    glacier_dict[1277] = 'GrinnellGlacier'
+    glacier_dict[10490] = 'ConnessGlacier'
+    glacier_dict[10071] = 'WheelerGlacier'
+    glacier_dict[9129] = 'LyellGlacier'
+    glacier_dict[9130] = 'LyellGlacier'
+
 elif site == 'hma':
     #'+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
     outdir = os.path.join(topdir,'hma/hma1_2016dec22/glac_poly_out')
@@ -79,6 +106,7 @@ elif site == 'hma':
     #z2_fn = '/nobackup/deshean/hma/hma1_2016dec22/hma_8m_tile/hma_8m.vrt'
     #z2_fn = os.path.join(topdir,'hma/hma1_2016dec22/hma_8m_tile/hma_8m.vrt')
     z2_fn = os.path.join(topdir,'hma/hma1_2016dec22/hma_8m_tile_round2_20170220/hma_8m_round2.vrt')
+    z2_date = datetime(2015, 1, 1)
     z2_date = 2015.0
 elif site == 'rainier':
     outdir = os.path.join(topdir,'mb')
@@ -134,15 +162,8 @@ if not os.path.exists(outdir):
 #glac_shp_lyr.CreateField(field_defn)
 
 for n, feat in enumerate(glac_shp_lyr):
-    if site == 'conus':
-        glacname = feat.GetField("GLACNAME")
-        glacnum = int(feat.GetField("GLACNUM"))
-    else:
-        #Use RGI
-        #glacname = feat.GetField("Name")
-        glacname = None
-        #RGIId (String) = RGI50-01.00004
-        glacnum = float(feat.GetField("RGIId").split('-')[-1])*1000000
+
+    glacname = feat.GetField(glacname_fieldname)
 
     if glacname is None:
         glacname = ""
@@ -150,15 +171,20 @@ for n, feat in enumerate(glac_shp_lyr):
         glacname = glacname.replace(" ", "")
         glacname = glacname.replace("_", "")
 
-    #if glacname != "EmmonsGlacier":
-    if glacname != "Nisqually-WilsonGlacier":
-        continue
-
     glacnum = feat.GetField(glacnum_fieldname)
     if '24k' in glac_shp_fn:
         glacnum = int(glacnum)
     else:
-        glacnum = float(glacnum.split('-')[-1])*100000
+        #RGIId (String) = RGI50-01.00004
+        glacnum = float(glacnum.split('-')[-1])*1000000
+
+    #if glacname != "EmmonsGlacier":
+    #if glacname != "Nisqually-WilsonGlacier":
+    #if glacname != "SouthCascadeGlacier":
+    if glacnum not in glacier_dict.keys():
+        continue
+    else:
+        glacname = glacier_dict[glacnum]
 
     feat_fn = "%s_%s" % (glacnum, glacname)
     print("\n%i of %i: %s\n" % (n+1, feat_count, feat_fn))
@@ -195,10 +221,12 @@ for n, feat in enumerate(glac_shp_lyr):
         print("No valid dz pixels")
         continue
 
+    filter_outliers = False
     #Remove clearly bogus pixels
-    bad_perc = (0.1, 99.9)
-    rangelim = malib.calcperc(dz, bad_perc)
-    dz = np.ma.masked_outside(dz, *rangelim)
+    if filter_outliers:
+        bad_perc = (0.1, 99.9)
+        rangelim = malib.calcperc(dz, bad_perc)
+        dz = np.ma.masked_outside(dz, *rangelim)
 
     ds_res = geolib.get_res(ds_list[0])
     valid_area = dz.count()*ds_res[0]*ds_res[1]
@@ -342,60 +370,97 @@ for n, feat in enumerate(glac_shp_lyr):
 
     #Error analysis assuming date is wrong by +/- 1-2 years
 
-    z_bin_edges, z_bin_centers = get_bins(z1, 10.)
-    z1_bin_counts, z1_bin_edges = np.histogram(z1, bins=z_bin_edges)
-    z1_bin_areas = z1_bin_counts * ds_res[0] * ds_res[1] / 1E6
-    z2_bin_counts, z2_bin_edges = np.histogram(z2, bins=z_bin_edges)
-    z2_bin_areas = z2_bin_counts * ds_res[0] * ds_res[1] / 1E6
+    mb_plot = True
+    if mb_plot:
+        print("Generating histograms")
+        z_bin_edges, z_bin_centers = get_bins(z1, 10.)
+        z1_bin_counts, z1_bin_edges = np.histogram(z1, bins=z_bin_edges)
+        z1_bin_areas = z1_bin_counts * ds_res[0] * ds_res[1] / 1E6
+        z2_bin_counts, z2_bin_edges = np.histogram(z2, bins=z_bin_edges)
+        z2_bin_areas = z2_bin_counts * ds_res[0] * ds_res[1] / 1E6
 
-    #dz_bin_edges, dz_bin_centers = get_bins(dz, 1.)
-    #dz_bin_counts, dz_bin_edges = np.histogram(dz, bins=dz_bin_edges)
-    #dz_bin_areas = dz_bin_counts * ds_res * ds_res / 1E6
-    dz_bin_med = np.ma.masked_all_like(z1_bin_areas)
-    dz_bin_mad = np.ma.masked_all_like(z1_bin_areas)
-    idx = np.digitize(z1, z_bin_edges)
-    for n in range(z_bin_centers.size):
-        dz_bin_samp = mb[(idx == n+1)]
-        #dz_bin_samp = dhdt[(idx == n+1)]
-        dz_bin_med[n] = malib.fast_median(dz_bin_samp)
-        dz_bin_mad[n] = malib.mad(dz_bin_samp)
-        dz_bin_med[n] = dz_bin_samp.mean()
-        dz_bin_mad[n] = dz_bin_samp.std()
+        #dz_bin_edges, dz_bin_centers = get_bins(dz, 1.)
+        #dz_bin_counts, dz_bin_edges = np.histogram(dz, bins=dz_bin_edges)
+        #dz_bin_areas = dz_bin_counts * ds_res * ds_res / 1E6
+        dz_bin_med = np.ma.masked_all_like(z1_bin_areas)
+        dz_bin_mad = np.ma.masked_all_like(z1_bin_areas)
+        idx = np.digitize(z1, z_bin_edges)
+        for n in range(z_bin_centers.size):
+            dz_bin_samp = mb[(idx == n+1)]
+            #dz_bin_samp = dhdt[(idx == n+1)]
+            dz_bin_med[n] = malib.fast_median(dz_bin_samp)
+            dz_bin_mad[n] = malib.mad(dz_bin_samp)
+            dz_bin_med[n] = dz_bin_samp.mean()
+            dz_bin_mad[n] = dz_bin_samp.std()
 
-    f,axa = plt.subplots(1,4, figsize=(10,7.5))
-    f.suptitle(feat_fn)
-    z1_im = axa[0].imshow(z1, cmap='cpt_rainbow', vmin=z_bin_edges[0], vmax=z_bin_edges[-1])
-    axa[0].contour(z1, [z1_ela,], linewidths=0.5, linestyles=':', colors='k')
-    dz_clim = (-10, 10)
-    dz_im = axa[1].imshow(dhdt, cmap='RdBu', vmin=dz_clim[0], vmax=dz_clim[1])
-    pltlib.hide_ticks(axa[0])
-    pltlib.add_scalebar(axa[0], ds_res[0])
-    pltlib.hide_ticks(axa[1])
-    #pltlib.add_colorbar(axa[0], z1_im, label='Elevation (m WGS84)')
-    #pltlib.add_colorbar(axa[1], dz_im, label='dh/dt (m/yr)')
-    axa[2].plot(z1_bin_areas, z_bin_centers, label='%0.2f' % t1)
-    axa[2].plot(z2_bin_areas, z_bin_centers, label='%0.2f' % t2)
-    axa[2].axhline(z1_ela, ls=':', c='C0')
-    axa[2].axhline(z2_ela, ls=':', c='C1')
-    axa[2].legend(prop={'size':8})
-    #axa[2].set_ylabel('Elevation (m WGS84)')
-    axa[2].set_xlabel('Area $\mathregular{km^2}$')
-    axa[2].minorticks_on()
-    axa[3].yaxis.tick_right()
-    axa[3].yaxis.set_label_position("right")
-    axa[3].axvline(0, lw=0.5, c='k')
-    axa[3].axvline(mb_mean, ls=':', c='k', label='%0.2f m w.e./yr' % mb_mean)
-    axa[3].legend(prop={'size':8})
-    axa[3].plot(dz_bin_med, z_bin_centers, color='k')
-    axa[3].fill_betweenx(z_bin_centers, 0, dz_bin_med, where=(dz_bin_med<0), color='r', alpha=0.2)
-    axa[3].fill_betweenx(z_bin_centers, 0, dz_bin_med, where=(dz_bin_med>0), color='b', alpha=0.2)
-    axa[3].set_ylabel('Elevation (m WGS84)')
-    #axa[3].set_xlabel('dh/dt (m/yr)')
-    axa[3].set_xlabel('mb (m w.e./yr)')
-    axa[3].minorticks_on()
-    plt.tight_layout()
+        print("Generating plot")
+        f,axa = plt.subplots(1,3, figsize=(10,7.5))
+        f.suptitle(feat_fn)
+        alpha = 1.0
+        hs = True
+        if hs:
+            z1_hs = geolib.gdaldem_wrapper(out_z1_fn, product='hs', returnma=True)
+            z2_hs = geolib.gdaldem_wrapper(out_z2_fn, product='hs', returnma=True)
+            hs_clim = malib.calcperc(z2_hs, (2,98))
+            z1_hs_im = axa[0].imshow(z1_hs, cmap='gray', vmin=hs_clim[0], vmax=hs_clim[1])
+            z2_hs_im = axa[1].imshow(z2_hs, cmap='gray', vmin=hs_clim[0], vmax=hs_clim[1])
+            alpha = 0.5
+        z1_im = axa[0].imshow(z1, cmap='cpt_rainbow', vmin=z_bin_edges[0], vmax=z_bin_edges[-1], alpha=alpha)
+        z2_im = axa[1].imshow(z2, cmap='cpt_rainbow', vmin=z_bin_edges[0], vmax=z_bin_edges[-1], alpha=alpha)
+        axa[0].contour(z1, [z1_ela,], linewidths=0.5, linestyles=':', colors='w')
+        axa[1].contour(z2, [z2_ela,], linewidths=0.5, linestyles=':', colors='w')
+        t1_title = int(np.round(t1))
+        t2_title = int(np.round(t2))
+        axa[0].set_title(t1_title)
+        axa[1].set_title(t2_title)
+        axa[2].set_title('%i to %i' % (t1_title, t2_title))
+        #dz_clim = (-10, 10)
+        dz_clim = (-2.0, 2.0)
+        dz_im = axa[2].imshow(dhdt, cmap='RdBu', vmin=dz_clim[0], vmax=dz_clim[1])
+        for ax in axa:
+            pltlib.hide_ticks(ax)
+            ax.set_facecolor('k')
+        sb_loc = pltlib.best_scalebar_location(z1)
+        pltlib.add_scalebar(axa[0], ds_res[0], location=sb_loc)
+        pltlib.add_cbar(axa[0], z1_im, label='Elevation (m WGS84)')
+        pltlib.add_cbar(axa[1], z2_im, label='Elevation (m WGS84)')
+        pltlib.add_cbar(axa[2], dz_im, label='dh/dt (m/yr)')
+        plt.tight_layout()
+        #Make room for suptitle
+        plt.subplots_adjust(top=0.90)
+        fig_fn = os.path.join(outdir, feat_fn+'_mb_map.png')
+        plt.savefig(fig_fn, dpi=300)
+
+        f,axa = plt.subplots(1,2, figsize=(6, 6))
+        f.suptitle(feat_fn)
+        axa[0].plot(z1_bin_areas, z_bin_centers, label='%0.2f' % t1)
+        axa[0].plot(z2_bin_areas, z_bin_centers, label='%0.2f' % t2)
+        axa[0].axhline(z1_ela, ls=':', c='C0')
+        axa[0].axhline(z2_ela, ls=':', c='C1')
+        axa[0].legend(prop={'size':8}, loc='upper right')
+        axa[0].set_ylabel('Elevation (m WGS84)')
+        axa[0].set_xlabel('Area $\mathregular{km^2}$')
+        axa[0].minorticks_on()
+        axa[1].yaxis.tick_right()
+        axa[1].yaxis.set_label_position("right")
+        axa[1].axvline(0, lw=1.0, c='k')
+        axa[1].axvline(mb_mean, lw=0.5, ls=':', c='k', label='%0.2f m w.e./yr' % mb_mean)
+        axa[1].legend(prop={'size':8}, loc='upper right')
+        axa[1].plot(dz_bin_med, z_bin_centers, color='k')
+        axa[1].fill_betweenx(z_bin_centers, 0, dz_bin_med, where=(dz_bin_med<0), color='r', alpha=0.2)
+        axa[1].fill_betweenx(z_bin_centers, 0, dz_bin_med, where=(dz_bin_med>0), color='b', alpha=0.2)
+        #axa[1].set_ylabel('Elevation (m WGS84)')
+        #axa[1].set_xlabel('dh/dt (m/yr)')
+        axa[1].set_xlabel('mb (m w.e./yr)')
+        axa[1].minorticks_on()
+        axa[1].set_xlim(-2.0, 2.0)
+        plt.tight_layout()
+        #Make room for suptitle
+        plt.subplots_adjust(top=0.95)
+        fig_fn = os.path.join(outdir, feat_fn+'_mb_aed.png')
+        plt.savefig(fig_fn, dpi=300)
     
-plt.show()
+#plt.show()
 
 glac_shp_ds = None
 
