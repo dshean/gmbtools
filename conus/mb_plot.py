@@ -10,7 +10,10 @@ Generate plots for regional glacier mass balance
 
 import os
 import sys
+from datetime import datetime
+
 import numpy as np
+from numpy.lib import recfunctions
 import matplotlib.pyplot as plt
 from mpl_toolkits.basemap import Basemap as Basemap
 from mpl_toolkits.mplot3d import Axes3D
@@ -20,7 +23,10 @@ from pygeotools.lib import malib
 from pygeotools.lib import geolib 
 from imview.lib import pltlib
 
-from datetime import datetime
+glacier_dict = {}
+#glacier_dict[10480] = 'SouthCascadeGlacier'
+#glacier_dict[(-447928.98,614122.05)] = 'SCG'
+glacier_dict[10480] = 'SCG'
 
 def get_equal_vmin_vmax(x):
     a_stats = malib.print_stats(x)
@@ -38,7 +44,7 @@ def add_legend(ax, sf=16, loc='upper right'):
     """
     ax.autoscale(False)
     leg_s = np.array([0.1, 0.5, 1.0, 5.0, 10.0])
-    leg_s = np.array([0.1, 1.0, 10.0, 100.0])
+    #leg_s = np.array([0.1, 1.0, 10.0, 100.0])
     leg_x = np.full(leg_s.size, -999999999)
     leg_y = np.full(leg_s.size, -999999999)
     #leg_sc = ax.scatter(leg_x, leg_y, c='0.8', s=leg_s)
@@ -47,6 +53,17 @@ def add_legend(ax, sf=16, loc='upper right'):
         lbl = r'$%0.1f\/km^2$' % s
         ax.scatter(leg_x[i], leg_y[i], s=s*sf, c='gray', label=lbl)
     return ax.legend(title='Glacier Area', scatterpoints=1, loc=loc, prop={'size':8})
+
+def add_lbl(ax, a):
+    for pt,lbl in glacier_dict.iteritems():
+        ax.annotate(lbl,xy=pt)
+
+def scplot_fields(a, fx, fy, fc, fs, sf=16, ax=None, clim=None):
+    ax = scplot(a[fx], a[fy], a[fc], a[fs], sf, ax, clim)
+    for glacnum,lbl in glacier_dict.iteritems():
+        b = a[a['glacnum'] == float(glacnum)]
+        ax.annotate(lbl, xy=(b[fx], b[fy]), fontsize=6)
+    return ax
 
 def scplot(x, y, c, s, sf=16, ax=None, clim=None):
     """
@@ -169,6 +186,8 @@ elif site == 'hma':
 
 #Compute lat, lon
 lon, lat, dummy = geolib.cT_helper(a['x'],a['y'],0,aea_srs,geolib.wgs_srs)
+a = recfunctions.append_fields(a, 'lon', lon, dtypes=None, usemask=False)
+a = recfunctions.append_fields(a, 'lat', lat, dtypes=None, usemask=False)
 
 #utm_srs = osr.SpatialReference()
 #utm_srs.ImportFromEPSG(32610)
@@ -192,7 +211,8 @@ if False:
 
 if True:
     f, ax = plt.subplots()
-    ax = scplot(lat, a['z_med'], a['mb_mwea'], a['area_km2'], sf=sf, ax=ax, clim=(vmin, vmax))
+    #ax = scplot(lat, a['z_med'], a['mb_mwea'], a['area_km2'], sf=sf, ax=ax, clim=(vmin, vmax))
+    ax = scplot_fields(a, 'lat', 'z_med', 'mb_mwea', 'area_km2', sf=sf, ax=ax, clim=(vmin, vmax))
     ax.set_title(title)
     ax.set_xlabel('Latitude')
     ax.set_ylabel('Elevation (m WGS84)')
@@ -201,7 +221,8 @@ if True:
 
 if True:
     f, ax = plt.subplots()
-    ax = scplot(lon, a['z_med'], a['mb_mwea'], a['area_km2'], sf=sf, ax=ax, clim=(vmin, vmax))
+    #ax = scplot(lon, a['z_med'], a['mb_mwea'], a['area_km2'], sf=sf, ax=ax, clim=(vmin, vmax))
+    ax = scplot_fields(a, 'lon', 'z_med', 'mb_mwea', 'area_km2', sf=sf, ax=ax, clim=(vmin, vmax))
     ax.set_title(title)
     ax.set_xlabel('Longitude')
     ax.set_ylabel('Elevation (m WGS84)')
@@ -221,15 +242,40 @@ if False:
     #fig_fn = '%s_mb_elev_lat_%s.png' % (site, ts)
     #plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
 
-if False:
+if True:
     f, ax = plt.subplots()
-    ax = scplot(a['precip_mwe'], a['temp'], a['mb_mwea'], a['area_km2'], sf=sf, ax=ax, clim=(vmin, vmax))
+    #ax = scplot(a['ppt_a'], a['tmean_a'], a['mb_mwea'], a['area_km2'], sf=sf, ax=ax, clim=(vmin, vmax))
+    ax = scplot_fields(a, 'ppt_a', 'tmean_a', 'mb_mwea', 'area_km2', sf=sf, ax=ax, clim=(vmin, vmax))
     ax.set_title(title)
     ax.set_xlabel('Mean Annual Precip (m we)')
     ax.set_ylabel('Mean Annual Temp (C)')
     ax.set_ylim(-6,6)
     ax.axhline(0, ls=':', color='k', lw=0.5)
-    fig_fn = '%s_mb_precip_temp_%s.png' % (site, ts)
+    fig_fn = '%s_mb_ppt_a_tmean_a_%s.png' % (site, ts)
+    plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
+
+if True:
+    f, ax = plt.subplots()
+    #ax = scplot(a['ppt_w'], a['tmean_w'], a['mb_mwea'], a['area_km2'], sf=sf, ax=ax, clim=(vmin, vmax))
+    ax = scplot_fields(a, 'ppt_w', 'tmean_w', 'mb_mwea', 'area_km2', sf=sf, ax=ax, clim=(vmin, vmax))
+    ax.set_title(title)
+    ax.set_xlabel('Mean Winter Precip (m we)')
+    ax.set_ylabel('Mean Winter Temp (C)')
+    #ax.set_ylim(-6,6)
+    ax.axhline(0, ls=':', color='k', lw=0.5)
+    fig_fn = '%s_mb_ppt_w_tmean_w_%s.png' % (site, ts)
+    plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
+
+if True:
+    f, ax = plt.subplots()
+    #ax = scplot(a['ppt_w'], a['tmean_s'], a['mb_mwea'], a['area_km2'], sf=sf, ax=ax, clim=(vmin, vmax))
+    ax = scplot_fields(a, 'ppt_w', 'tmean_s', 'mb_mwea', 'area_km2', sf=sf, ax=ax, clim=(vmin, vmax))
+    ax.set_title(title)
+    ax.set_xlabel('Mean Winter Precip (m we)')
+    ax.set_ylabel('Mean Summer Temp (C)')
+    #ax.set_ylim(-6,6)
+    ax.axhline(0, ls=':', color='k', lw=0.5)
+    fig_fn = '%s_mb_ppt_w_tmean_s_%s.png' % (site, ts)
     plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
 
 plt.show()
