@@ -204,8 +204,9 @@ for n, feat in enumerate(glac_shp_lyr):
 
     if site == 'conus':
         #Add prism datasets
-        ds_list.extend(warplib.memwarp_multi_fn([prism_ppt_fn, prism_tmean_fn], res=ds_list[0], \
-                extent=glac_geom_extent, t_srs=aea_srs, verbose=False))
+        prism_fn_list = [prism_ppt_annual_fn, prism_tmean_annual_fn]
+        prism_fn_list.extend([prism_ppt_summer_fn, prism_ppt_winter_fn, prism_tmean_summer_fn, prism_tmean_winter_fn])
+        ds_list.extend(warplib.memwarp_multi_fn(prism_fn_list, res=ds_list[0], extent=glac_geom_extent, t_srs=aea_srs, verbose=False))
 
     #Check to see if z2 is empty, as z1 should be continuous
     z2 = iolib.ds_getma(ds_list[1])
@@ -320,13 +321,36 @@ for n, feat in enumerate(glac_shp_lyr):
     outlist = [glacnum, cx, cy, z2_elev_med, z2_elev_p16, z2_elev_p84, mb_mean, (glac_area/1E6), t1, t2, dt]
 
     if site == 'conus':
-        prism_ppt = np.ma.array(iolib.ds_getma(ds_list[2]), mask=glac_geom_mask)/1000.
-        prism_ppt_stats = malib.print_stats(prism_ppt)
-        prism_ppt_mean = prism_ppt_stats[3]
-        prism_tmean = np.ma.array(iolib.ds_getma(ds_list[3]), mask=glac_geom_mask)
-        prism_tmean_stats = malib.print_stats(prism_tmean)
-        prism_tmean_mean = prism_tmean_stats[3]
-        outlist.extend([prism_ppt_mean, prism_tmean_mean])
+        prism_ppt_annual = np.ma.array(iolib.ds_getma(ds_list[2]), mask=glac_geom_mask)/1000.
+        prism_ppt_annual_stats = malib.print_stats(prism_ppt_annual)
+        prism_ppt_annual_mean = prism_ppt_annual_stats[3]
+
+        prism_tmean_annual = np.ma.array(iolib.ds_getma(ds_list[3]), mask=glac_geom_mask)
+        prism_tmean_annual_stats = malib.print_stats(prism_tmean_annual)
+        prism_tmean_annual_mean = prism_tmean_annual_stats[3]
+
+        outlist.extend([prism_ppt_annual_mean, prism_tmean_annual_mean])
+
+        #This is mean monthly summer precip, need to multiply by nmonths to get cumulative
+        n_summer = 4
+        prism_ppt_summer = n_summer * np.ma.array(iolib.ds_getma(ds_list[4]), mask=glac_geom_mask)/1000.
+        prism_ppt_summer_stats = malib.print_stats(prism_ppt_summer)
+        prism_ppt_summer_mean = prism_ppt_summer_stats[3]
+
+        n_winter = 8
+        prism_ppt_winter = n_winter * np.ma.array(iolib.ds_getma(ds_list[5]), mask=glac_geom_mask)/1000.
+        prism_ppt_winter_stats = malib.print_stats(prism_ppt_winter)
+        prism_ppt_winter_mean = prism_ppt_winter_stats[3]
+
+        prism_tmean_summer = np.ma.array(iolib.ds_getma(ds_list[6]), mask=glac_geom_mask)
+        prism_tmean_summer_stats = malib.print_stats(prism_tmean_summer)
+        prism_tmean_summer_mean = prism_tmean_summer_stats[3]
+
+        prism_tmean_winter = np.ma.array(iolib.ds_getma(ds_list[7]), mask=glac_geom_mask)
+        prism_tmean_winter_stats = malib.print_stats(prism_tmean_winter)
+        prism_tmean_winter_mean = prism_tmean_winter_stats[3]
+
+        outlist.extend([prism_ppt_summer_mean, prism_ppt_winter_mean, prism_tmean_summer_mean, prism_tmean_winter_mean])
 
     print('Mean mb: %0.2f mwe/yr' % mb_mean)
     print('Sum/Area mb: %0.2f mwe/yr' % (mb_sum/glac_area))
@@ -351,11 +375,20 @@ for n, feat in enumerate(glac_shp_lyr):
             out_z1_date_fn = os.path.join(outdir, feat_fn+'_ned_date.tif')
             iolib.writeGTiff(z1_date, out_z1_date_fn, ds_list[0])
 
-            out_prism_ppt_fn = os.path.join(outdir, feat_fn+'_precip.tif')
-            iolib.writeGTiff(prism_ppt, out_prism_ppt_fn, ds_list[0])
+            out_prism_ppt_annual_fn = os.path.join(outdir, feat_fn+'_precip_annual.tif')
+            iolib.writeGTiff(prism_ppt_annual, out_prism_ppt_annual_fn, ds_list[0])
+            out_prism_tmean_annual_fn = os.path.join(outdir, feat_fn+'_tmean_annual.tif')
+            iolib.writeGTiff(prism_tmean_annual, out_prism_tmean_annual_fn, ds_list[0])
 
-            out_prism_tmean_fn = os.path.join(outdir, feat_fn+'_tmean.tif')
-            iolib.writeGTiff(prism_tmean, out_prism_tmean_fn, ds_list[0])
+            out_prism_ppt_summer_fn = os.path.join(outdir, feat_fn+'_precip_summer.tif')
+            iolib.writeGTiff(prism_ppt_summer, out_prism_ppt_summer_fn, ds_list[0])
+            out_prism_ppt_winter_fn = os.path.join(outdir, feat_fn+'_precip_winter.tif')
+            iolib.writeGTiff(prism_ppt_winter, out_prism_ppt_winter_fn, ds_list[0])
+
+            out_prism_tmean_summer_fn = os.path.join(outdir, feat_fn+'_tmean_summer.tif')
+            iolib.writeGTiff(prism_tmean_summer, out_prism_tmean_summer_fn, ds_list[0])
+            out_prism_tmean_winter_fn = os.path.join(outdir, feat_fn+'_tmean_winter.tif')
+            iolib.writeGTiff(prism_tmean_winter, out_prism_tmean_winter_fn, ds_list[0])
 
     add_fields = False
     if add_fields:
@@ -474,7 +507,8 @@ out_fn = os.path.join(outdir, out_fn)
 
 out_header = 'glacnum,x,y,z_med,z_p16,z_p84,mb_mwea,area_km2,t1,t2,dt'
 if site == 'conus':
-    out_header += ',precip_mwe,temp'
+    out_header += ',ppt_a,tmean_a'
+    out_header += ',ppt_s,ppt_w,tmean_s,tmean_w'
 
 np.savetxt(out_fn, out, fmt='%0.2f', delimiter=',', header=out_header)
 
