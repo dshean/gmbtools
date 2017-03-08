@@ -38,6 +38,10 @@ site='conus'
 #topdir='/Volumes/SHEAN_1TB_SSD/site_poly_highcount_rect3_rerun/rainier'
 #site='rainier'
 
+#topdir='/Volumes/SHEAN_1TB_SSD/site_poly_highcount_rect3_rerun/scg'
+topdir='.'
+site='other'
+
 writeout=True
 ts = datetime.now().strftime('%Y%m%d_%H%M')
 out_fn = '%s_mb_%s.csv' % (site, ts)
@@ -108,10 +112,12 @@ elif site == 'hma':
     z2_fn = os.path.join(topdir,'hma/hma1_2016dec22/hma_8m_tile_round2_20170220/hma_8m_round2.vrt')
     z2_date = datetime(2015, 1, 1)
     z2_date = 2015.0
-elif site == 'rainier':
+elif site == 'other':
     outdir = os.path.join(topdir,'mb')
     aea_srs = geolib.conus_aea_srs
-    glac_shp_fn = '/Users/dshean/data/conus_glacierpoly_24k/rainier_24k_1970-2015_mb_aea.shp'
+    #glac_shp_fn = '/Users/dshean/data/conus_glacierpoly_24k/rainier_24k_1970-2015_mb_aea.shp'
+    #glac_shp_fn = '/Users/dshean/data/conus_glacierpoly_24k/conus_glacierpoly_24k_aea.shp'
+    glac_shp_fn = '/Users/dshean/data/conus_glacierpoly_24k/conus_glacierpoly_24k_32610_scg_2008_aea.shp'
     z1_fn = sys.argv[1]
     z1_date = timelib.mean_date(timelib.fn_getdatetime_list(z1_fn))
     z2_fn = sys.argv[2]
@@ -223,10 +229,11 @@ for n, feat in enumerate(glac_shp_lyr):
         print("No valid dz pixels")
         continue
 
-    filter_outliers = False
+    filter_outliers = True 
     #Remove clearly bogus pixels
     if filter_outliers:
-        bad_perc = (0.1, 99.9)
+        #bad_perc = (0.1, 99.9)
+        bad_perc = (1, 99)
         rangelim = malib.calcperc(dz, bad_perc)
         dz = np.ma.masked_outside(dz, *rangelim)
 
@@ -313,6 +320,9 @@ for n, feat in enumerate(glac_shp_lyr):
         #Linear ramp
         #rho_f + z2*((rho_is - rho_f)/(z2_ela - z1_ela))
         #mb = np.where(dhdt < ela, dhdt*rho_i, dhdt*rho_s)
+
+    #Use this for winter balance
+    #mb = dhdt * rho_s
 
     mb_stats = malib.print_stats(mb)
     mb_mean = mb_stats[3]
@@ -419,13 +429,14 @@ for n, feat in enumerate(glac_shp_lyr):
         dz_bin_med = np.ma.masked_all_like(z1_bin_areas)
         dz_bin_mad = np.ma.masked_all_like(z1_bin_areas)
         idx = np.digitize(z1, z_bin_edges)
-        for n in range(z_bin_centers.size):
-            dz_bin_samp = mb[(idx == n+1)]
+        for bin_n in range(z_bin_centers.size):
+            dz_bin_samp = mb[(idx == bin_n+1)]
             #dz_bin_samp = dhdt[(idx == n+1)]
-            dz_bin_med[n] = malib.fast_median(dz_bin_samp)
-            dz_bin_mad[n] = malib.mad(dz_bin_samp)
-            dz_bin_med[n] = dz_bin_samp.mean()
-            dz_bin_mad[n] = dz_bin_samp.std()
+            if dz_bin_samp.count() > 0:
+                dz_bin_med[bin_n] = malib.fast_median(dz_bin_samp)
+                dz_bin_mad[bin_n] = malib.mad(dz_bin_samp)
+                dz_bin_med[bin_n] = dz_bin_samp.mean()
+                dz_bin_mad[bin_n] = dz_bin_samp.std()
 
         print("Generating plot")
         f,axa = plt.subplots(1,3, figsize=(10,7.5))
@@ -443,11 +454,15 @@ for n, feat in enumerate(glac_shp_lyr):
         z2_im = axa[1].imshow(z2, cmap='cpt_rainbow', vmin=z_bin_edges[0], vmax=z_bin_edges[-1], alpha=alpha)
         axa[0].contour(z1, [z1_ela,], linewidths=0.5, linestyles=':', colors='w')
         axa[1].contour(z2, [z2_ela,], linewidths=0.5, linestyles=':', colors='w')
-        t1_title = int(np.round(t1))
-        t2_title = int(np.round(t2))
+        #t1_title = int(np.round(t1))
+        #t2_title = int(np.round(t2))
+        #t1_title = int(t1)
+        #t2_title = int(t2)
+        t1_title = z1_date.strftime('%Y-%m-%d')
+        t2_title = z2_date.strftime('%Y-%m-%d')
         axa[0].set_title(t1_title)
         axa[1].set_title(t2_title)
-        axa[2].set_title('%i to %i (%i yr)' % (t1_title, t2_title, (t2_title-t1_title)))
+        axa[2].set_title('%s to %s (%0.2f yr)' % (t1_title, t2_title, dt))
         #dz_clim = (-10, 10)
         dz_clim = (-2.0, 2.0)
         dz_im = axa[2].imshow(dhdt, cmap='RdBu', vmin=dz_clim[0], vmax=dz_clim[1])
@@ -488,6 +503,7 @@ for n, feat in enumerate(glac_shp_lyr):
         axa[1].set_xlabel('mb (m w.e./yr)')
         axa[1].minorticks_on()
         axa[1].set_xlim(-2.0, 2.0)
+        #axa[1].set_xlim(-8.0, 8.0)
         plt.tight_layout()
         #Make room for suptitle
         plt.subplots_adjust(top=0.95)
