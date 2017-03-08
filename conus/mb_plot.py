@@ -79,7 +79,8 @@ def scplot(x, y, c, s, sf=16, ax=None, clim=None):
     sc = ax.scatter(x, y, c=c, s=s*sf, edgecolor='k', lw='0.2', cmap='RdBu', vmin=vmin, vmax=vmax)
     cbar = pltlib.add_cbar(ax, sc, label='Mass balance (m we/yr)')
     #leg = add_legend(ax, sf=sf, loc='lower left')
-    leg = add_legend(ax, sf=sf, loc='upper right')
+    #leg = add_legend(ax, sf=sf, loc='upper right')
+    leg = add_legend(ax, sf=sf, loc='lower right')
     ax.minorticks_on()
     #ax.tick_params(left=True, right=True, bottom=True, top=True)
     return ax
@@ -163,7 +164,7 @@ def mapplot(a, field, srs, sf=16, ax=None):
 
 csv_fn = sys.argv[1]
 
-if 'conus' in csv_fn:
+if 'conus' in csv_fn or 'other' in csv_fn:
     site = 'conus'
 elif 'hma' in csv_fn:
     site = 'hma'
@@ -242,40 +243,53 @@ if False:
     #fig_fn = '%s_mb_elev_lat_%s.png' % (site, ts)
     #plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
 
-if True:
-    f, ax = plt.subplots()
-    #ax = scplot(a['ppt_a'], a['tmean_a'], a['mb_mwea'], a['area_km2'], sf=sf, ax=ax, clim=(vmin, vmax))
-    ax = scplot_fields(a, 'ppt_a', 'tmean_a', 'mb_mwea', 'area_km2', sf=sf, ax=ax, clim=(vmin, vmax))
-    ax.set_title(title)
-    ax.set_xlabel('Mean Annual Precip (m we)')
-    ax.set_ylabel('Mean Annual Temp (C)')
-    ax.set_ylim(-6,6)
-    ax.axhline(0, ls=':', color='k', lw=0.5)
-    fig_fn = '%s_mb_ppt_a_tmean_a_%s.png' % (site, ts)
-    plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
+if 'ppt_a' in a.names:
+    if True:
+        f, ax = plt.subplots()
+        #ax = scplot(a['ppt_a'], a['tmean_a'], a['mb_mwea'], a['area_km2'], sf=sf, ax=ax, clim=(vmin, vmax))
+        ax = scplot_fields(a, 'ppt_a', 'tmean_a', 'mb_mwea', 'area_km2', sf=sf, ax=ax, clim=(vmin, vmax))
+        ax.set_title(title)
+        ax.set_xlabel('Mean Annual Precip (m we)')
+        ax.set_ylabel('Mean Annual Temp (C)')
+        ax.set_ylim(-6,6)
+        ax.axhline(0, ls=':', color='k', lw=0.5)
+        fig_fn = '%s_mb_ppt_a_tmean_a_%s.png' % (site, ts)
+        plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
 
-if True:
-    f, ax = plt.subplots()
-    #ax = scplot(a['ppt_w'], a['tmean_w'], a['mb_mwea'], a['area_km2'], sf=sf, ax=ax, clim=(vmin, vmax))
-    ax = scplot_fields(a, 'ppt_w', 'tmean_w', 'mb_mwea', 'area_km2', sf=sf, ax=ax, clim=(vmin, vmax))
-    ax.set_title(title)
-    ax.set_xlabel('Mean Winter Precip (m we)')
-    ax.set_ylabel('Mean Winter Temp (C)')
-    #ax.set_ylim(-6,6)
-    ax.axhline(0, ls=':', color='k', lw=0.5)
-    fig_fn = '%s_mb_ppt_w_tmean_w_%s.png' % (site, ts)
-    plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
+    if True:
+        f, ax = plt.subplots()
+        #ax = scplot(a['ppt_w'], a['tmean_w'], a['mb_mwea'], a['area_km2'], sf=sf, ax=ax, clim=(vmin, vmax))
+        ax = scplot_fields(a, 'ppt_w', 'tmean_a', 'mb_mwea', 'area_km2', sf=sf, ax=ax, clim=(vmin, vmax))
+        ax.set_title(title)
+        ax.set_xlabel('Mean Winter Precip (m we)')
+        ax.set_ylabel('Mean Annual Temp (C)')
+        ax.set_ylim(-6, 6)
+        ax.axhline(0, ls=':', color='k', lw=0.5)
+        fig_fn = '%s_mb_ppt_w_tmean_a_%s.png' % (site, ts)
+        plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
 
-if True:
-    f, ax = plt.subplots()
-    #ax = scplot(a['ppt_w'], a['tmean_s'], a['mb_mwea'], a['area_km2'], sf=sf, ax=ax, clim=(vmin, vmax))
-    ax = scplot_fields(a, 'ppt_w', 'tmean_s', 'mb_mwea', 'area_km2', sf=sf, ax=ax, clim=(vmin, vmax))
-    ax.set_title(title)
-    ax.set_xlabel('Mean Winter Precip (m we)')
-    ax.set_ylabel('Mean Summer Temp (C)')
-    #ax.set_ylim(-6,6)
-    ax.axhline(0, ls=':', color='k', lw=0.5)
-    fig_fn = '%s_mb_ppt_w_tmean_s_%s.png' % (site, ts)
-    plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
+    if True:
+        f, ax = plt.subplots()
+        #ax = scplot(a['ppt_w'], a['tmean_w'], a['mb_mwea'], a['area_km2'], sf=sf, ax=ax, clim=(vmin, vmax))
+        ax = scplot_fields(a, 'ppt_w', 'tmean_w', 'mb_mwea', 'area_km2', sf=sf, ax=ax, clim=(vmin, vmax))
+        ax.set_title(title)
+        ax.set_xlabel('Mean Winter Precip (m we)')
+        ax.set_ylabel('Mean Winter Temp (C)')
+        ax.set_ylim(-9,3)
+        ax.axhline(0, ls=':', color='k', lw=0.5)
+        fig_fn = '%s_mb_ppt_w_tmean_w_%s.png' % (site, ts)
+        plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
+
+    if True:
+        f, ax = plt.subplots()
+        #ax = scplot(a['ppt_w'], a['tmean_s'], a['mb_mwea'], a['area_km2'], sf=sf, ax=ax, clim=(vmin, vmax))
+        ax = scplot_fields(a, 'ppt_w', 'tmean_s', 'mb_mwea', 'area_km2', sf=sf, ax=ax, clim=(vmin, vmax))
+        ax.set_title(title)
+        ax.set_xlabel('Mean Winter Precip (m we)')
+        ax.set_ylabel('Mean Summer Temp (C)')
+        ax.set_ylim(1,13)
+        ax.axhline(0, ls=':', color='k', lw=0.5)
+        fig_fn = '%s_mb_ppt_w_tmean_s_%s.png' % (site, ts)
+        plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
 
 plt.show()
