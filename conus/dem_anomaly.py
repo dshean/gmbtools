@@ -15,7 +15,8 @@ from imview.lib import pltlib
 
 def makefig(dem, hs, anomaly, ds, title=None):
     f,axa = plt.subplots(1,2,figsize=(10,5))
-    dem_clim = (2300, 4200)
+    #dem_clim = (2300, 4200)
+    dem_clim = (1600, 2100)
     hs_clim = (1, 255)
     anomaly_clim = (-15, 15)
     hs_im = axa[0].imshow(hs, vmin=hs_clim[0], vmax=hs_clim[1], cmap='gray')
@@ -25,7 +26,8 @@ def makefig(dem, hs, anomaly, ds, title=None):
     pltlib.add_cbar(axa[0], dem_im, label='Elevation (m WGS84)')
     anomaly_im = axa[1].imshow(anomaly, vmin=anomaly_clim[0], vmax=anomaly_clim[1], cmap='RdBu')
     pltlib.add_cbar(axa[1], anomaly_im, label='Elevation Anomaly (m)')
-    pltlib.shp_overlay(axa[1], ds, shp_fn, color='darkgreen')
+    if shp_fn is not None:
+        pltlib.shp_overlay(axa[1], ds, shp_fn, color='darkgreen')
     plt.tight_layout()
     for ax in axa:
         pltlib.hide_ticks(ax)
@@ -34,10 +36,13 @@ def makefig(dem, hs, anomaly, ds, title=None):
             ax.set_title(title)
     return f
 
-dem_ref_fn = 'rainier_allgood_mos-tile-0_warp.tif'
-dem_ref = iolib.fn_getma(dem_ref_fn)
-dem_fn_list = glob.glob('*8m_trans_warp.tif')
+#dem_fn_list = glob.glob('*8m_trans_warp.tif')
+#dem_ref_fn = 'rainier_allgood_mos-tile-0_warp.tif'
 shp_fn = '/Volumes/SHEAN_1TB_SSD/usgs_dems/rainier/final_clip/rainier_24k_1970-2015_mb_lines.shp'
+dem_fn_list = glob.glob('*0_warp_ref.tif')
+dem_ref_fn = 'scg_all_2008-2016_mos-tile-0.tif'
+dem_ref = iolib.fn_getma(dem_ref_fn)
+shp_fn = None
 
 outdir = 'movie_2panel'
 if not os.path.exists(outdir):
@@ -54,7 +59,8 @@ for dem_fn in [dem_ref_fn]+dem_fn_list:
     if dt is not None:
         title = dt.strftime('%Y-%m-%d')
     else: 
-        title = 'Reference (2014-2016 DEM Mean)'
+        #title = 'Reference (2014-2016 DEM Mean)'
+        title = 'Reference (2008-2016 DEM Mean)'
     f = makefig(dem, dem_hs, anomaly, ds=dem_ds, title=title)
     out_fn = os.path.join(outdir, os.path.splitext(dem_fn)[0]+'_fig.png')
     f.savefig(out_fn, bbox_inches='tight', dpi=150)
