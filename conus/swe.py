@@ -19,11 +19,33 @@ def plothist(ax, x,y,xlim,ylim):
     H_clim = malib.calcperc(Hmasked, (0,99))
     ax.pcolormesh(xedges,yedges,Hmasked,cmap='hot',vmin=H_clim[0], vmax=H_clim[1])
 
+def get_snotel_sites(dem_ds):
+    snotel_fn = '/Users/dshean/src/conus/conus/snotel_latlon.csv'
+    snotel_srs = geolib.wgs_srs
+    sites = np.loadtxt(snotel_fn, delimiter=',', dtype=None)
+    dem_extent = geolib.ds_extent(dem_ds, snotel_srs)
+    valid_idx = ((sites[:,2] > dem_extent[0]) & (sites[:,2] < dem_extent[2]) & (sites[:,1] > dem_extent[1]) & (sites[:,1] < dem_extent[3]))
+    valid_sites = sites[valid_idx]
+    return valid_sites
+    
+def plot_snotel(ax, dem_ds):
+    sites = get_snotel_sites(dem_ds)
+    if sites.size > 0:
+        mX, mY, dummy = geolib.cT_helper(sites[:,2], sites[:,1], 0, geolib.wgs_srs, geolib.get_ds_srs(dem_ds))
+        pX, pY = geolib.mapToPixel(mX, mY, dem_ds.GetGeoTransform())
+        ax.scatter(pX, pY, s=16, facecolors='w', edgecolors='k')
+        for i, lbl in enumerate(sites[:,0]):
+            bbox=dict(boxstyle='round,pad=0.1', fc='k', alpha=0.7)
+            ax.annotate(str(int(lbl)), xy=(pX[i], pY[i]), xytext=(0, 4), textcoords='offset points', fontsize=8, color='w', bbox=bbox)
+
+site='baker'
+
 prism_fn = '/Users/dshean/data/PRISM_ppt_30yr_normal_800mM2_10-05_winter_cum.tif'
 dem_fn = sys.argv[1]
 #hs_fn = os.path.splitext(dem_fn)[0]+'_hs_az315.tif'
 dz_fn = sys.argv[2]
 dem_ts = timelib.fn_getdatetime(dem_fn)
+wy = dem_ts.year + 1
 
 hs = geolib.gdaldem_wrapper(dem_fn, product='hs')
 slope = geolib.gdaldem_wrapper(dem_fn, product='slope')
@@ -49,25 +71,31 @@ prism = iolib.ds_getma(prism_ds)/1000.
 prism = np.ma.array(prism, mask=np.ma.getmaskarray(dz))
 
 #Map plots
-f, axa = plt.subplots(1, 3, figsize=(10,5), sharex=True, sharey=True, subplot_kw={'aspect':'equal', 'adjustable':'box-forced'})
+f, axa = plt.subplots(1, 3, figsize=(10,4), sharex=True, sharey=True, subplot_kw={'aspect':'equal', 'adjustable':'box-forced'})
 hs_im = axa[0].imshow(hs, vmin=hs_clim[0], vmax=hs_clim[1], cmap='gray')
 dem_im = axa[0].imshow(dem, vmin=dem_clim[0], vmax=dem_clim[1], cmap='cpt_rainbow', alpha=0.5)
 axa[0].set_facecolor('k')
 swe_im = axa[1].imshow(swe, vmin=swe_clim[0], vmax=swe_clim[1], cmap='inferno')
-axa[1].set_facecolor('0.5')
+axa[1].set_facecolor('0.3')
 prism_im = axa[2].imshow(prism, vmin=swe_clim[0], vmax=swe_clim[1], cmap='inferno')
-axa[2].set_facecolor('0.5')
+axa[2].set_facecolor('0.3')
 for ax in axa:
     pltlib.hide_ticks(ax)
 
-axa[0].set_title('Summer %i' % dem_ts.year)
+axa[0].set_title('Late Summer %i' % dem_ts.year, fontdict={'fontsize':8})
 pltlib.add_cbar(axa[0], dem_im, label='Elevation (m WGS84)')
 pltlib.add_scalebar(axa[0], res)
-axa[1].set_title('WY%i' % dem_ts.year)
-pltlib.add_cbar(axa[1], swe_im, label='SWE (m w.e.)')
-axa[2].set_title('PRISM Oct-May Cumulative Precip')
-pltlib.add_cbar(axa[2], swe_im, label='Precip (m w.e.)')
+axa[1].set_title('WY%i (Summer %i to Spring %i Elev. Diff.)' % (wy, dem_ts.year, (dem_ts.year+1)), fontdict={'fontsize':8})
+pltlib.add_cbar(axa[1], swe_im, label=r'SWE Estimate (m w.e., $\rho_s$=0.5)')
+axa[2].set_title('~30-year PRISM Normal: Oct-May Precip', fontdict={'fontsize':8})
+pltlib.add_cbar(axa[2], swe_im, label='Cumulative Precip (m w.e.)')
+
+#plot_snotel(axa[2], dem_ds)
+plot_snotel(axa[0], dem_ds)
+
 plt.tight_layout()
+fig_fn = '%s_WY%i_SWE_maps.png' % (site, wy)
+plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
 
 #Histogram plots
 mask = malib.common_mask([dem, swe, slope, aspect])
