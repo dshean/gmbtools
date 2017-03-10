@@ -1,5 +1,7 @@
 #! /usr/bin/env python
 
+import numpy as np
+
 import ulmo
 
 """
@@ -21,11 +23,16 @@ wsdlurl = "http://worldwater.byu.edu/interactive/snotel/services/index.php/cuahs
 sites = ulmo.cuahsi.wof.get_sites(wsdlurl)
 lon = []
 lat = []
+code = []
 z = []
 for k,v in sites.iteritems():
     lon.append(float(v['location']['longitude']))
     lat.append(float(v['location']['latitude']))
+    code.append(int(v['code']))
     z.append(float(v['elevation_m']))
 
-plt.figure()
-plt.scatter(lon,lat)
+csv_fn = 'snotel_latlon.csv'
+np.savetxt(csv_fn, zip(code,lat,lon), delimiter=',', fmt='%i,%0.5f,%0.5f')
+
+#plt.figure()
+#plt.scatter(lon,lat)
