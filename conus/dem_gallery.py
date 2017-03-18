@@ -44,9 +44,13 @@ else:
 #    pltlib.hide_ticks(ax)
 #    ax.set_aspect('equal')
 
-#Should extract this automatically1
+#Should extract this automatically
+#Rainier
 #dem_clim = (1300, 3700)
-dem_clim = (760, 2270)
+#SCG
+#dem_clim = (760, 2270)
+#Baker
+dem_clim = (550, 2650)
 hs_clim = (1, 255)
 
 for i,dem_fn in enumerate(dem_fn_list):

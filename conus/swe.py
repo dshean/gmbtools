@@ -5,19 +5,20 @@ import sys
 
 import numpy as np
 import matplotlib.pyplot as plt
+import scipy.stats
 
 from imview.lib import pltlib
-from pygeotools.lib import warplib, geolib, iolib, malib, timelib
+from pygeotools.lib import warplib, geolib, iolib, malib, timelib, filtlib
 
 def plothist(ax, x,y,xlim,ylim):
     bins = (100, 100)
     H, xedges, yedges = np.histogram2d(x,y,range=[xlim,ylim],bins=bins)
     H = np.rot90(H)
     H = np.flipud(H)
-    #Hmasked = np.ma.masked_where(H==0,H)
-    Hmasked = H
+    Hmasked = np.ma.masked_where(H==0,H)
+    #Hmasked = H
     H_clim = malib.calcperc(Hmasked, (0,99))
-    ax.pcolormesh(xedges,yedges,Hmasked,cmap='hot',vmin=H_clim[0], vmax=H_clim[1])
+    ax.pcolormesh(xedges,yedges,Hmasked,cmap='inferno',vmin=H_clim[0], vmax=H_clim[1])
 
 def get_snotel_sites(dem_ds):
     snotel_fn = '/Users/dshean/src/conus/conus/snotel_latlon.csv'
@@ -65,37 +66,41 @@ rho_s = 0.5
 dz = iolib.ds_getma(dz_ds)
 swe = dz * rho_s
 #swe_clim = malib.calcperc(swe, (1,99))
-swe_clim = (0,6)
+swe_f = filtlib.rolling_fltr(swe, size=5)
+swe_f = filtlib.gauss_fltr_astropy(swe, size=9)
+swe = swe_f
+swe_clim = np.array((0,6))
 
 prism = iolib.ds_getma(prism_ds)/1000.
-prism = np.ma.array(prism, mask=np.ma.getmaskarray(dz))
+prism = np.ma.array(prism, mask=np.ma.getmaskarray(swe))
 
-#Map plots
-f, axa = plt.subplots(1, 3, figsize=(10,4), sharex=True, sharey=True, subplot_kw={'aspect':'equal', 'adjustable':'box-forced'})
-hs_im = axa[0].imshow(hs, vmin=hs_clim[0], vmax=hs_clim[1], cmap='gray')
-dem_im = axa[0].imshow(dem, vmin=dem_clim[0], vmax=dem_clim[1], cmap='cpt_rainbow', alpha=0.5)
-axa[0].set_facecolor('k')
-swe_im = axa[1].imshow(swe, vmin=swe_clim[0], vmax=swe_clim[1], cmap='inferno')
-axa[1].set_facecolor('0.3')
-prism_im = axa[2].imshow(prism, vmin=swe_clim[0], vmax=swe_clim[1], cmap='inferno')
-axa[2].set_facecolor('0.3')
-for ax in axa:
-    pltlib.hide_ticks(ax)
+if True:
+    #Map plots
+    f, axa = plt.subplots(1, 3, figsize=(10,4), sharex=True, sharey=True, subplot_kw={'aspect':'equal', 'adjustable':'box-forced'})
+    hs_im = axa[0].imshow(hs, vmin=hs_clim[0], vmax=hs_clim[1], cmap='gray')
+    dem_im = axa[0].imshow(dem, vmin=dem_clim[0], vmax=dem_clim[1], cmap='cpt_rainbow', alpha=0.5)
+    axa[0].set_facecolor('k')
+    swe_im = axa[1].imshow(swe, vmin=swe_clim[0], vmax=swe_clim[1], cmap='inferno')
+    axa[1].set_facecolor('0.3')
+    prism_im = axa[2].imshow(prism, vmin=swe_clim[0], vmax=swe_clim[1], cmap='inferno')
+    axa[2].set_facecolor('0.3')
+    for ax in axa:
+        pltlib.hide_ticks(ax)
 
-axa[0].set_title('Late Summer %i' % dem_ts.year, fontdict={'fontsize':8})
-pltlib.add_cbar(axa[0], dem_im, label='Elevation (m WGS84)')
-pltlib.add_scalebar(axa[0], res)
-axa[1].set_title('WY%i (Summer %i to Spring %i Elev. Diff.)' % (wy, dem_ts.year, (dem_ts.year+1)), fontdict={'fontsize':8})
-pltlib.add_cbar(axa[1], swe_im, label=r'SWE Estimate (m w.e., $\rho_s$=0.5)')
-axa[2].set_title('~30-year PRISM Normal: Oct-May Precip', fontdict={'fontsize':8})
-pltlib.add_cbar(axa[2], swe_im, label='Cumulative Precip (m w.e.)')
+    axa[0].set_title('Late Summer %i' % dem_ts.year, fontdict={'fontsize':8})
+    pltlib.add_cbar(axa[0], dem_im, label='Elevation (m WGS84)')
+    pltlib.add_scalebar(axa[0], res)
+    axa[1].set_title('WY%i (Summer %i to Spring %i Elev. Diff.)' % (wy, dem_ts.year, (dem_ts.year+1)), fontdict={'fontsize':8})
+    pltlib.add_cbar(axa[1], swe_im, label=r'SWE Estimate (m w.e., $\rho_s$=0.5)')
+    axa[2].set_title('~30-year PRISM Normal: Oct-May Precip', fontdict={'fontsize':8})
+    pltlib.add_cbar(axa[2], swe_im, label='Cumulative Precip (m w.e.)')
 
-#plot_snotel(axa[2], dem_ds)
-plot_snotel(axa[0], dem_ds)
+    #plot_snotel(axa[2], dem_ds)
+    plot_snotel(axa[0], dem_ds)
 
-plt.tight_layout()
-fig_fn = '%s_WY%i_SWE_maps.png' % (site, wy)
-plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
+    plt.tight_layout()
+    fig_fn = '%s_WY%i_SWE_maps.png' % (site, wy)
+    plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
 
 #Histogram plots
 mask = malib.common_mask([dem, swe, slope, aspect])
@@ -109,20 +114,54 @@ slope_clim = malib.calcperc(slope, (0,99))
 aspect = np.ma.array(aspect, mask=mask).compressed()
 aspect_clim = (0., 360.)
 
-f, axa = plt.subplots(1, 4, figsize=(10,5))
+swe_dem_slope, swe_dem_intercept, r_value, p_value, std_err = scipy.stats.linregress(swe, dem)
+swe_dem_f = swe_dem_slope * swe_clim + swe_dem_intercept
 
-plothist(axa[0], swe, dem, swe_clim, dem_clim)
-axa[0].set_xlabel('SWE (m w.e.)')
-axa[0].set_ylabel('Elevation (m WGS84)')
-plothist(axa[1], swe, slope, swe_clim, slope_clim)
-axa[1].set_xlabel('SWE (m w.e.)')
-axa[1].set_ylabel('Slope (deg)')
-plothist(axa[2], swe, aspect, swe_clim, aspect_clim)
-axa[2].set_xlabel('SWE (m w.e.)')
-axa[2].set_ylabel('Aspect (deg)')
-plothist(axa[3], swe, prism, swe_clim, swe_clim)
-axa[3].set_xlabel('SWE (m w.e.)')
-axa[3].set_ylabel('PRISM Precip (m w.e.)')
-plt.tight_layout()
+if True:
+    f, axa = plt.subplots(1, 4, figsize=(10,2.5))
+    dem_clim = malib.calcperc(dem, (5,99.9))
+    plothist(axa[0], dem, swe, dem_clim, swe_clim)
+    axa[0].set_ylabel('SWE (m w.e.)')
+    axa[0].set_xlabel('Elevation (m WGS84)')
+    axa[0].plot(swe_dem_f, swe_clim, color='limegreen', ls='--', lw=0.5)
+    plothist(axa[1], slope, swe, slope_clim, swe_clim)
+    axa[1].set_ylabel('SWE (m w.e.)')
+    axa[1].set_xlabel('Slope (deg)')
+    plothist(axa[2], aspect, swe, aspect_clim, swe_clim)
+    axa[2].set_ylabel('SWE (m w.e.)')
+    axa[2].set_xlabel('Aspect (deg)')
+    plothist(axa[3], prism, swe, swe_clim, swe_clim)
+    axa[3].set_ylabel('SWE (m w.e.)')
+    axa[3].set_xlabel('PRISM Precip (m w.e.)')
+    axa[3].plot(swe_clim, swe_clim, color='limegreen', ls='-', lw=0.5)
+    for ax in axa:
+        ax.set_facecolor('0.3')
+    plt.tight_layout()
+    fig_fn = '%s_WY%i_SWE_WV_plots.png' % (site, wy)
+    plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
+
+if True:
+    swe = prism
+    f, axa = plt.subplots(1, 4, figsize=(10,2.5), facecolor='w')
+    dem_clim = malib.calcperc(dem, (5,99.9))
+    plothist(axa[0], dem, swe, dem_clim, swe_clim)
+    axa[0].set_ylabel('PRISM Precip (m w.e.)')
+    axa[0].set_xlabel('Elevation (m WGS84)')
+    axa[0].plot(swe_dem_f, swe_clim, color='limegreen', ls='--', lw=0.5)
+    plothist(axa[1], slope, swe, slope_clim, swe_clim)
+    axa[1].set_ylabel('PRISM Precip (m w.e.)')
+    axa[1].set_xlabel('Slope (deg)')
+    plothist(axa[2], aspect, swe, aspect_clim, swe_clim)
+    axa[2].set_ylabel('PRISM Precip (m w.e.)')
+    axa[2].set_xlabel('Aspect (deg)')
+    plothist(axa[3], prism, swe, swe_clim, swe_clim)
+    axa[3].set_ylabel('PRISM Precip (m w.e.)')
+    axa[3].set_xlabel('PRISM Precip (m w.e.)')
+    axa[3].plot(swe_clim, swe_clim, color='limegreen', ls='-', lw=0.5)
+    for ax in axa:
+        ax.set_facecolor('0.3')
+    plt.tight_layout()
+    fig_fn = '%s_WY%i_SWE_PRISM_plots.png' % (site, wy)
+    plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
 
 plt.show()
