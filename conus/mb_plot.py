@@ -26,7 +26,7 @@ from imview.lib import pltlib
 glacier_dict = {}
 #glacier_dict[10480] = 'SouthCascadeGlacier'
 #glacier_dict[(-447928.98,614122.05)] = 'SCG'
-glacier_dict[10480] = 'SCG'
+#glacier_dict[10480] = 'SCG'
 
 def get_equal_vmin_vmax(x):
     a_stats = malib.print_stats(x)
@@ -43,8 +43,8 @@ def add_legend(ax, sf=16, loc='upper right'):
     Create legend for scaled scatterplot markers
     """
     ax.autoscale(False)
-    leg_s = np.array([0.1, 0.5, 1.0, 5.0, 10.0])
-    #leg_s = np.array([0.1, 1.0, 10.0, 100.0])
+    #leg_s = np.array([0.1, 0.5, 1.0, 5.0, 10.0])
+    leg_s = np.array([0.1, 1.0, 10.0, 100.0])
     leg_x = np.full(leg_s.size, -999999999)
     leg_y = np.full(leg_s.size, -999999999)
     #leg_sc = ax.scatter(leg_x, leg_y, c='0.8', s=leg_s)
@@ -197,14 +197,16 @@ a = recfunctions.append_fields(a, 'lat', lat, dtypes=None, usemask=False)
 vmin, vmax = get_equal_vmin_vmax(a['mb_mwea'])
 
 if True:
-    f, ax = plt.subplots(figsize=(8,8))
+    #f, ax = plt.subplots(figsize=(10,8))
+    f, ax = plt.subplots()
     ax = mapplot(a, field='mb_mwea', srs=aea_srs, sf=sf, ax=ax)
     fig_fn = '%s_mb_map_%s.png' % (site, ts)
     ax.set_title(title)
     plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
 
 if False:
-    f, ax = plt.subplots(figsize=(8,8))
+    #f, ax = plt.subplots(figsize=(10,8))
+    f, ax = plt.subplots()
     ax = mapplot(a, field='t1', srs=aea_srs, sf=sf, ax=ax)
     fig_fn = '%s_nedyear_map_%s.png' % (site, ts)
     plt.title("NED Source Date")
@@ -243,7 +245,7 @@ if False:
     #fig_fn = '%s_mb_elev_lat_%s.png' % (site, ts)
     #plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
 
-if 'ppt_a' in a.names:
+if 'ppt_a' in a.dtype.names:
     if True:
         f, ax = plt.subplots()
         #ax = scplot(a['ppt_a'], a['tmean_a'], a['mb_mwea'], a['area_km2'], sf=sf, ax=ax, clim=(vmin, vmax))
