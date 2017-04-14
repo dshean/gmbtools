@@ -32,17 +32,25 @@ def get_bins(dem, bin_width=100.0):
     return bin_edges, bin_centers
 
 topdir='/nobackup/deshean'
-site='conus'
-#site='hma'
+#site='conus'
+site='hma'
 
+#This was for focused mb at specific sites
 #topdir='/Volumes/SHEAN_1TB_SSD/site_poly_highcount_rect3_rerun/rainier'
 #site='rainier'
-
 #topdir='/Volumes/SHEAN_1TB_SSD/site_poly_highcount_rect3_rerun/scg'
-topdir='.'
-site='other'
+#topdir='.'
+#site='other'
 
+#Filter glacier poly - let's stick with big glaciers for now
+min_glac_area = 0.1 #km^2
+#Write out DEMs and dz map
 writeout=True
+#Generate figures
+mb_plot = True
+#Only write out for larger glaciers
+min_glac_area_writeout = 2.0
+
 ts = datetime.now().strftime('%Y%m%d_%H%M')
 out_fn = '%s_mb_%s.csv' % (site, ts)
 
@@ -101,17 +109,20 @@ if site == 'conus':
 
 elif site == 'hma':
     #'+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
-    outdir = os.path.join(topdir,'hma/hma1_2016dec22/glac_poly_out')
-    aea_srs = geolib.conus_aea_srs
+    #outdir = os.path.join(topdir,'hma/hma1_2016dec22/glac_poly_out')
+    outdir = os.path.join(topdir,'hma/hma_8m_mos_20170410/glac_poly_out')
+    aea_srs = geolib.hma_aea_srs
     glac_shp_fn = os.path.join(topdir,'data/rgi50/regions/rgi50_hma_aea.shp')
     #SRTM
     z1_fn = os.path.join(topdir,'rpcdem/hma/srtm1/hma_srtm_gl1.vrt')
-    z1_date = timelib.dt2decyear(datetime(2000,2,11))
+    #z1_date = timelib.dt2decyear(datetime(2000,2,11))
+    z1_date = datetime(2000,2,11)
     #z2_fn = '/nobackup/deshean/hma/hma1_2016dec22/hma_8m_tile/hma_8m.vrt'
     #z2_fn = os.path.join(topdir,'hma/hma1_2016dec22/hma_8m_tile/hma_8m.vrt')
-    z2_fn = os.path.join(topdir,'hma/hma1_2016dec22/hma_8m_tile_round2_20170220/hma_8m_round2.vrt')
+    #z2_fn = os.path.join(topdir,'hma/hma1_2016dec22/hma_8m_tile_round2_20170220/hma_8m_round2.vrt')
+    z2_fn = os.path.join(topdir,'hma/hma_8m_mos_20170410/hma_8m.vrt')
+    #z2_date = 2015.0
     z2_date = datetime(2015, 1, 1)
-    z2_date = 2015.0
 elif site == 'other':
     outdir = os.path.join(topdir,'mb')
     aea_srs = geolib.conus_aea_srs
@@ -124,9 +135,6 @@ elif site == 'other':
     z2_date = timelib.mean_date(timelib.fn_getdatetime_list(z2_fn))
 else:
     sys.exit()
-
-#Filter glacier poly - let's stick with big glaciers for now
-min_glac_area = 0.1 #km^2
 
 #List to hold output
 out = []
@@ -162,7 +170,12 @@ print("Processing %i features" % feat_count)
 if not os.path.exists(outdir):  
     os.makedirs(outdir)
 
-#Update shp
+#Create polygon for valid pixels in DEM mosaics
+#Intersect with each glacier polygon, only preserve those with 80% overlap
+#Go through shp, extract feat name/number and geom, create dict
+#Multiprocessing for valid
+
+#Update or create new shp with values appended
 #out_glac_shp_fn = os.path.join(outdir, os.path.splitext(glac_shp_fn)[0]+'_mb.shp')
 #field_defn = ogr.FieldDefn("mb_mwe", ogr.OFTReal)
 #glac_shp_lyr.CreateField(field_defn)
@@ -174,15 +187,21 @@ for n, feat in enumerate(glac_shp_lyr):
     if glacname is None:
         glacname = ""
     else:
+        #RGI has some nonstandard characters
+        #glacname = glacname.replace('\xc3\xa0', "")
+        glacname = glacname.decode('unicode_escape').encode('ascii','ignore')
         glacname = glacname.replace(" ", "")
         glacname = glacname.replace("_", "")
 
     glacnum = feat.GetField(glacnum_fieldname)
     if '24k' in glac_shp_fn:
         glacnum = int(glacnum)
+        glacnum_fmt = '%i'
     else:
         #RGIId (String) = RGI50-01.00004
-        glacnum = float(glacnum.split('-')[-1])*1000000
+        #glacnum = float(glacnum.split('-')[-1])*10000000
+        glacnum = float(glacnum.split('-')[-1])
+        glacnum_fmt = '%0.5f'
 
     #if glacname != "EmmonsGlacier":
     #if glacname != "Nisqually-WilsonGlacier":
@@ -193,7 +212,11 @@ for n, feat in enumerate(glac_shp_lyr):
     #else:
     #    glacname = glacier_dict[glacnum]
 
-    feat_fn = "%s_%s" % (glacnum, glacname)
+    if glacname:
+        feat_fn = "%s_%s" % (glacnum, glacname)
+    else:
+        feat_fn = str(glacnum)
+
     print("\n%i of %i: %s\n" % (n+1, feat_count, feat_fn))
     glac_geom = feat.GetGeometryRef()
     glac_geom.AssignSpatialReference(glac_shp_srs)
@@ -372,7 +395,8 @@ for n, feat in enumerate(glac_shp_lyr):
     #Write to master list
     out.append(outlist)
 
-    if writeout:
+    min_glac_area_writeout = 2.0
+    if writeout and (glac_area/1E6 > min_glac_area_writeout):
         out_dz_fn = os.path.join(outdir, feat_fn+'_dz.tif')
         iolib.writeGTiff(dz, out_dz_fn, ds_list[0])
 
@@ -414,8 +438,7 @@ for n, feat in enumerate(glac_shp_lyr):
 
     #Error analysis assuming date is wrong by +/- 1-2 years
 
-    mb_plot = True
-    if mb_plot:
+    if mb_plot and (glac_area/1E6 > min_glac_area_writeout):
         print("Generating histograms")
         z_bin_edges, z_bin_centers = get_bins(z1, 10.)
         z1_bin_counts, z1_bin_edges = np.histogram(z1, bins=z_bin_edges)
@@ -438,7 +461,7 @@ for n, feat in enumerate(glac_shp_lyr):
                 dz_bin_med[bin_n] = dz_bin_samp.mean()
                 dz_bin_mad[bin_n] = dz_bin_samp.std()
 
-        print("Generating plot")
+        print("Generating map plot")
         f,axa = plt.subplots(1,3, figsize=(10,7.5))
         f.suptitle(feat_fn)
         alpha = 1.0
@@ -477,9 +500,11 @@ for n, feat in enumerate(glac_shp_lyr):
         plt.tight_layout()
         #Make room for suptitle
         plt.subplots_adjust(top=0.90)
+        print("Saving map plot")
         fig_fn = os.path.join(outdir, feat_fn+'_mb_map.png')
         plt.savefig(fig_fn, dpi=300)
 
+        print("Generating aed plot")
         f,axa = plt.subplots(1,2, figsize=(6, 6))
         f.suptitle(feat_fn)
         axa[0].plot(z1_bin_areas, z_bin_centers, label='%0.2f' % t1)
@@ -507,6 +532,7 @@ for n, feat in enumerate(glac_shp_lyr):
         plt.tight_layout()
         #Make room for suptitle
         plt.subplots_adjust(top=0.95)
+        print("Saving aed plot")
         fig_fn = os.path.join(outdir, feat_fn+'_mb_aed.png')
         plt.savefig(fig_fn, dpi=300)
     
@@ -527,7 +553,9 @@ if site == 'conus':
     out_header += ',ppt_a,tmean_a'
     out_header += ',ppt_s,ppt_w,tmean_s,tmean_w'
 
-np.savetxt(out_fn, out, fmt='%0.2f', delimiter=',', header=out_header)
+out_fmt = [glacnum_fmt,] + ['%0.2f'] * (out.shape[1] - 1)
+
+np.savetxt(out_fn, out, fmt=out_fmt, delimiter=',', header=out_header)
 
 #Write out new shp with features containing stats
 #One shp preserves input features, regardless of source date
