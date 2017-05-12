@@ -560,3 +560,6 @@ np.savetxt(out_fn, out, fmt=out_fmt, delimiter=',', header=out_header)
 #Write out new shp with features containing stats
 #One shp preserves input features, regardless of source date
 #Another shp splits glacier poly based on NED source date
+
+#Transfer maps, figs, etc for largest glaciers
+#scpput $(ls $(ls -Sr *dz.tif | tail -n 20 | awk -F'_dz' '{print $1}' | sed 's/$/*png/')) /tmp/hma_png
