@@ -50,7 +50,9 @@ else:
 #SCG
 #dem_clim = (760, 2270)
 #Baker
-dem_clim = (550, 2650)
+#dem_clim = (550, 2650)
+#Ngozumpa
+dem_clim = (4500, 7400)
 hs_clim = (1, 255)
 
 for i,dem_fn in enumerate(dem_fn_list):
