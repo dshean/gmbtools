@@ -1,0 +1,247 @@
+David Shean
+10/24/16
+
+Systematic download and processing of LiDAR data for CONUS glaciers
+
+=================
+
+St. Helen's
+https://wagda.lib.washington.edu/data/type/elevation/lidar/st_helens/
+3 m DEM
+In addition to the metadata which is bundled with each zipped tile, an April 23, 2008 phone call to Fugro-EarthData Inc. clarified that the lidar data collection was conducted Oct 31-Nov 2, 2002. Although there were reflights in 2003 it is not clear which flight lines were effected. 
+NOTE: original grid is NAD27
+EPSG:26710
+
+=================
+
+Hood
+http://www.oregongeology.org/pubs/ldq/Lidar_Series_Index_Map_MtHood.pdf
+6 tiles downloaded
+2007
+http://www.oregongeology.org/pubs/ldq/reports/PDX-Hood_Lidar_Report_2007.pdf
+All other AOIs are delivered in Oregon State Plan
+e North, with horizontal units in International 
+Feet and vertical units in US Survey Feet
+, in the NAD83 HARN/NAVD88 datum (Geoid 03).
+Mt. Hood (south) October 14, 2007
+Mt. Hood (north) October 22-23, 2007
+Beyond Mt. Hood 2008
+Delivery Areas 6 & 7 – Mount Hood
+: These data were collected on October 14 and October 22-23, 2007 
+with the Leica ALS50 LiDAR System (in th
+e Mount Hood high relief settings, see 
+Table 2.1
+).  Due to 
+adverse weather, the area was acquired in two portions, one week apart.  
+Figure 2.4
+ below shows the 
+ extent of the Mount Hood area colle
+ cted, visually divided into the two different acquisition windows.  
+ As a result, the two areas reflect two different snow 
+ levels, both accurate for the acquisition date in 
+ which they were acquired. 
+
+ EPSG:2269
+
+#Commands
+gdalbuildvrt 20070315-20071107_hood_3m.vrt */*/HighestHit/hh* LDQ-2010-MtHood-Bundle6/Bundle_6/45121c7/HighestHit/hh*
+gdal_translate 20070315-20071107_hood_3m.vrt 20070315-20071107_hood_3m.tif
+setnodata.py *3m.tif -340282346638528859811704183484516925440.000
+gdal_edit.py -a_srs EPSG:2269 20070315-20071107_hood_3m.tif
+image_calc -o 20070315-20071107_hood_3m_unitmeters.tif -c "var_0*0.3048" -d float32 --threads 7 20070315-20071107_hood_3m.tif
+dem_geoid --reverse-adjustment 20070315-20071107_hood_3m_unitmeters.tif
+
+=================
+
+Sisters and Jefferson
+http://www.oregongeology.org/pubs/ldq/Lidar_Series_Index_Map_Deschutes_2012.pdf
+
+ http://www.oregongeology.org/dogamilidarviewer/
+
+In the report, the proj/datum are defined as EPSG:2994 
+Projection: Oregon Statewide Lambert Conformal Conic; horizontal and vertical datum: NAD83 (HARN)/NAVD88 (Geoid03); units: International Feet.
+
+Unfortunately, dem_geoid doesn't like the NAD(HARN) datum, so hack to use EPSG:2992 (NAD83 / Oregon Lambert (ft))
+
+=================
+
+Shasta
+
+gdal_edit.py -a_srs EPSG:26910 shastalidar1m
+gdal_translate shastalidar1m/ 20100902_shastalidar1m.tif
+gdal_edit.py -a_srs EPSG:26910 20100902_shastalidar1m.tif
+dem_geoid --reverse-adjustment 20100902_shastalidar1m.tif
+
+=================
+
+ Rainier 2012 (southwest)
+ http://opentopo.sdsc.edu/datasetMetadata.jsp?otCollectionID=OT.052013.26910.1
+     Horizontal: UTM Zone 10N NAD83 (2011) [EPSG: 26910]
+         Vertical: NAVD88 (Geoid 03) [EPSG: 5703] 
+1 m
+Acquired August 28, 2012 to September 1, 2012
+Converted to WGS84
+
+=================
+
+Glacier NP from PSU
+
+parallel 'point2dem --tr 3 --t_srs EPSG:32611 {}' ::: *laz
+parallel 'dem_geoid --geoid EGM2008 --reverse-adjustment {}' ::: *DEM.tif
+
+================
+
+Glacier Peak
+
+Gridded raster tiles, 1-m , 1x1km
+NAD83
+NAD83_High_Accuracy_Reference_Network
+
+================
+
+North Puget Sound
+
+gdalbuildvrt northpugetsound2006_6ft.vrt *e00
+image_calc -o northpugetsound2006_6ft_unitmeters.tif -c "var_0*0.3048" -d float32 --threads 7 northpugetsound2006_6ft.vrt
+gdal_edit.py -a_srs EPSG:2285 northpugetsound2006_6ft_unitmeters.tif
+dem_geoid --reverse-adjustment northpugetsound2006_6ft_unitmeters.tif
+
+==============
+
+Sauk
+
+gdalbuildvrt saukdem_fr_6ft.vrt saukdem_fr.e00
+image_calc -o saukdem_fr_6ft_unitmeters.tif  -c "var_0*0.3048" -d float32 --threads 7 saukdem_fr_6ft.vrt
+#Note: this is this is NAD83 / Washington North (ftUS)
+gdal_edit.py -a_srs EPSG:2285 saukdem_fr_6ft_unitmeters.tif
+dem_geoid --reverse-adjustment saukdem_fr_6ft_unitmeters.tif
+
+===============
+
+Nooksack 2013
+Downloaded from WA DNR Lidar portal
+NAD_1983_HARN_StatePlane_Washington_South_FIPS_4602_Feet
+
+gdalbuildvrt nooksack_2013_3m.vrt *tif
+image_calc -o test.tif -c "var_0*0.3048" -d float32 --threads 7 nooksack_2013_3m.vrt
+#Note: this is NAD83 / Washington South (ftUS), not NAD83HARN
+#dem_geoid doesn't properly handle HARN, so need just NAD83 here
+gdal_edit.py -a_srs EPSG:2286 nooksack_2013_3m_unitmeters.tif
+dem_geoid --reverse-adjustment nooksack_2013_3m_unitmeters.tif
+
+==============
+
+Klickitat 2015 same as Nooksack
+#Note this is P3 area in metadata, south of Adams
+
+Tulalip 2013 same as Nooksack
+
+Ahtanum 2006 same as Nooksack
+
+==============
+
+Pierce
+
+#Note 2927 is HARN
+gdalbuildvrt -a_srs EPSG:2927 pierce_2011_3ft.vrt *tif
+
+=============
+
+King Count 2016
+
+i=kingcounty_delivery4_block1_be.tif
+#WA state plane N NAD83 feet
+epsg=2285
+image_calc -o ${i%.*}_3ft_unitmeters.tif -c "var_0*0.3048" -d float32 --threads 7 $i
+gdal_edit.py -a_srs EPSG:$epsg ${i%.*}_3ft_unitmeters.tif
+dem_geoid --reverse-adjustment ${i%.*}_3ft_unitmeters.tif
+rm ${i%.*}_3ft_unitmeters.tif
+
+========
+
+Wenatchee
+
+#already EPSG:26910
+gdalbuildvrt 20061012-20061028_wenatchee_2007_3ft.vrt *e00
+dem_geoid --reverse-adjustment 20061012-20061028_wenatchee_2007_3ft.vrt
+
+==========
+
+Yellowstone River Catchment
+
+replace_ndv.py 2004-2007_yellowstone_river_catchment.vrt -9999.0
+dem_geoid --reverse-adjustment 2004-2007_yellowstone_river_catchment_ndv.tif
+
+========
+
+Clallam 2001
+
+#Some e00 have bad proj info
+gdalbuildvrt -allow_projection_difference 2001_clallam.vrt *e00
+image_calc -o 2001_clallam_6ft_unitmeters.tif -c "var_0*0.3048" -d float32 --threads 7 2001_clallam.vrt
+gdal_edit.py -a_srs EPSG:2285 2001_clallam_6ft_unitmeters.tif
+dem_geoid --reverse-adjustment 2001_clallam_6ft_unitmeters.tif
+
+========
+
+Lower puget Jefferson Mason Counties
+
+gdalbuildvrt -allow_projection_difference 2002_puget_lowlands.vrt *e00
+image_calc -o 2002_puget_lowlands_6ft_unitmeters.tif -c "var_0*0.3048" -d float32 --threads 7 2002_puget_lowlands.vrt 
+gdal_edit.py -a_srs EPSG:2285 2002_puget_lowlands_6ft_unitmeters.tif
+dem_geoid --reverse-adjustment !$
+
+=========
+
+Lewis County 2009
+
+wget -r --user=dshean@uw.edu --password=bcec305d http://pugetsoundlidar.ess.washington.edu/lidardata/restricted/be_dem/pslc2009/lewis/be_e00/hot/
+
+gdalbuildvrt -allow_projection_difference 20070902-20090726_lewis_2009_3ft.vrt *e00
+image_calc -o 20070902-20090726_lewis_2009_3ft_unitmeters.tif -c "var_0*0.3048" -d float32 --threads 7 20070902-20090726_lewis_2009_3ft.vrt
+gdal_edit.py -a_srs EPSG:2286 20070902-20090726_lewis_2009_3ft_unitmeters.tif
+
+============
+
+MT05_05Lorang
+#The projection is UTM Zone 12 with units in meters. Heights are NAVD88 orthometric heights computed using NGS GEOID03 model. 
+point2dem --tr 1.0 --t_srs EPSG:32612 -o 2005_MT05_05Lorang-DEM.tif *laz
+gdal_edit.py -a_srs EPSG:26912 2005_MT05_05Lorang-DEM.tif
+dem_geoid --reverse-adjustment 2005_MT05_05Lorang-DEM.tif
+#Date is 20050529
+
+============
+
+Yosemite
+
+#Originally used existing grids
+wget -r -np https://cloud.sdsc.edu/v1/AUTH_opentopography/Raster/CA07_Stock/
+parallel 'dem_geoid --reverse-adjustment {}' ::: *grd
+
+#Start from scratch with laz
+#These are NAVD88, EPSG:26910
+for i in *DEM.tif; do gdal_edit.py -a_srs EPSG:26910 $i; done
+parallel 'dem_geoid --reverse-adjustment {}' ::: *DEM.tif
+gdalbuildvrt 20070726_Yosemite.vrt *adj.tif
+
+==========
+
+Baker
+
+gdalbuildvrt -vrtnodata -9999.0 -a_srs EPSG:26910 bakerlidar.vrt bakerlidar/
+dem_geoid --reverse-adjustment bakerlidar.vrt
+
+===========
+
+Denver
+#This is more efficient, but may result in gaps around tile boundaries
+parallel -j 32 --delay 0.5 'point2dem --threads 1 --tr 1 --csv-proj4 EPSG:2232 --t_srs EPSG:26912 -o {.} {}' ::: *las
+gdalbuildvrt -vrtnodata -9999 denver_1m_mos.vrt *DEM.tif
+image_calc -o denver_1m_mos_unitmeters.tif -c "var_0*0.3048" -d float32 --threads 7 denver_1m_mos.vrt
+dem_geoid --reverse-adjustment denver_1m_mos_unitmeters.tif
+
+#This creates one big DEM from all input las
+point2dem --tr 1 --csv-proj4 EPSG:2232 --t_srs EPSG:26912 -o denver_2011 *las
+image_calc -o denver_2011-DEM_unitmeters.tif -c "var_0*0.3048" -d float32 --threads 7 denver_2011-DEM.tif
+dem_geoid --reverse-adjustment denver_2011-DEM_unitmeters.tif
+
