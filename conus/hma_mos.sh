@@ -4,10 +4,16 @@
 #cd /nobackup/deshean/hma
 #~/src/conus/conus/hma_mos.sh
 
+#Set open file limit
+#Default is 2048
+ulimit -n 65536
+
+#res=32
+res=8
 count=true
 index=true
 tileindex=true
-res=8
+
 ncpu=$(cat /proc/cpuinfo | egrep "core id|physical id" | tr -d "\n" | sed s/physical/\\nphysical/g | grep -v ^$ | sort | uniq | wc -l)
 threads=$((ncpu-1))
 tilesize=100000
@@ -31,7 +37,7 @@ list=$(ls */*/*00/dem*/*-DEM_${res}m.tif */*00/dem*/*-DEM_${res}m.tif)
 #list=$(ls */*/dem*/*-DEM_${res}m_aea.tif)
 
 if [ ! -d $(dirname $out) ] ; then 
-    mkdir $(dirname $out)
+    mkdir -p $(dirname $out)
     lfs setstripe -c $threads $(dirname $out)
 fi
 
