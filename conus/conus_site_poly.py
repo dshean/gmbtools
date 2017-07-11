@@ -11,6 +11,7 @@ Identify CONUS sites, isolate DEMs, and make stack for each site
 #cd /nobackup/deshean/conus/dem2
 #raster2shp.py -merge_fn shp/conus_32m_trans_n284_20170202.shp */*/*32m_trans.tif
 #~/src/conus/conus/conus_site_poly.py ../shp/conus_site_poly_highcount_rect_32611.shp  shp/conus_32m_n366_20160928_1436.shp
+#~/src/conus/conus/conus_site_poly.py ../shp/conus_site_poly_highcount_rect_32611.shp  shp/conus_32m_trans_n284_20170202.shp
 
 import sys
 import os
@@ -50,7 +51,7 @@ dem_shp_srs = dem_shp_lyr.GetSpatialRef()
 
 #outdir = os.path.splitext(shp_fn)[0]+'_stack'
 #outdir = 'range_poly'
-outdir = 'site_poly_highcount_rect3_rerun'
+outdir = 'site_poly_highcount_rect3_rerun_olympics'
 if not os.path.exists(outdir):
     os.makedirs(outdir)
 
@@ -61,7 +62,9 @@ buffer = None
 min_area = 1000000
 
 #Use Albers Equal Area
-dst_srs = geolib.conus_aea_srs
+#dst_srs = geolib.conus_aea_srs
+dst_srs = osr.SpatialReference()
+dst_srs.ImportFromEPSG(32610)
 
 #For rectangles
 site_name_field = 1 
@@ -72,9 +75,19 @@ dem_name_field = 0
 mos_cmd_list = []
 std_cmd_list = []
 dz_cmd_list = []
+
+valid_sites = ['olympus', 'eel']
+
 for n,site_feat in enumerate(site_shp_lyr):
     site_name = site_feat.GetFieldAsString(site_name_field) 
     site_name = site_name.replace(" ", "_").lower()
+
+    print("========================\n")
+    print("Site name: %s" % site_name)
+
+    if site_name not in valid_sites:
+        continue
+
     #Could output json here
     stackdir=os.path.join(outdir,site_name)
     if not os.path.exists(stackdir):
@@ -95,8 +108,6 @@ for n,site_feat in enumerate(site_shp_lyr):
     #This is xmin, xmax, ymin, ymax
     site_extent = geolib.geom_extent(site_geom)
     
-    print("========================\n")
-    print("Site name: %s" % site_name)
     print("Extent:", site_extent)
     print("Width/Height (km)", np.array(geolib.geom_wh(site_geom))/1000.)
     print("Area (km2)", site_geom.Area()/1E6)
