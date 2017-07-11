@@ -45,14 +45,11 @@ site='hma'
 #Filter glacier poly - let's stick with big glaciers for now
 min_glac_area = 0.1 #km^2
 #Write out DEMs and dz map
-writeout=True
+writeout= False
 #Generate figures
-mb_plot = True
+mb_plot = False 
 #Only write out for larger glaciers
 min_glac_area_writeout = 2.0
-
-ts = datetime.now().strftime('%Y%m%d_%H%M')
-out_fn = '%s_mb_%s.csv' % (site, ts)
 
 if site == 'conus':
     #'+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
@@ -110,7 +107,9 @@ if site == 'conus':
 elif site == 'hma':
     #'+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
     #outdir = os.path.join(topdir,'hma/hma1_2016dec22/glac_poly_out')
-    outdir = os.path.join(topdir,'hma/hma_8m_mos_20170410/glac_poly_out')
+    #outdir = os.path.join(topdir,'hma/hma_8m_mos_20170410/glac_poly_out')
+    mosdir = 'hma_20170710_mos'
+    outdir = os.path.join(topdir,'hma/mos/%s/mb' % mosdir)
     aea_srs = geolib.hma_aea_srs
     glac_shp_fn = os.path.join(topdir,'data/rgi50/regions/rgi50_hma_aea.shp')
     #SRTM
@@ -120,7 +119,8 @@ elif site == 'hma':
     #z2_fn = '/nobackup/deshean/hma/hma1_2016dec22/hma_8m_tile/hma_8m.vrt'
     #z2_fn = os.path.join(topdir,'hma/hma1_2016dec22/hma_8m_tile/hma_8m.vrt')
     #z2_fn = os.path.join(topdir,'hma/hma1_2016dec22/hma_8m_tile_round2_20170220/hma_8m_round2.vrt')
-    z2_fn = os.path.join(topdir,'hma/hma_8m_mos_20170410/hma_8m.vrt')
+    #z2_fn = os.path.join(topdir,'hma/hma_8m_mos_20170410/hma_8m.vrt')
+    z2_fn = os.path.join(topdir,'hma/mos/%s/mos_8m/%s_8m.vrt' % (mosdir, mosdir))
     #z2_date = 2015.0
     z2_date = datetime(2015, 1, 1)
 elif site == 'other':
@@ -135,6 +135,15 @@ elif site == 'other':
     z2_date = timelib.mean_date(timelib.fn_getdatetime_list(z2_fn))
 else:
     sys.exit()
+
+ts = datetime.now().strftime('%Y%m%d_%H%M')
+out_fn = '%s_mb_%s.csv' % (site, ts)
+out_fn = os.path.join(outdir, out_fn)
+
+#Write out temporary file line by line, incase processes interrupted
+import csv
+f = open(os.path.splitext(out_fn)[0]+'_temp.csv', 'wb')
+writer = csv.writer(f)
 
 #List to hold output
 out = []
@@ -394,6 +403,9 @@ for n, feat in enumerate(glac_shp_lyr):
 
     #Write to master list
     out.append(outlist)
+    #Write to temporary file
+    writer.writerow(outlist)
+    f.flush()
 
     min_glac_area_writeout = 2.0
     if writeout and (glac_area/1E6 > min_glac_area_writeout):
@@ -543,10 +555,6 @@ glac_shp_ds = None
 out = np.array(out)
 #Sort by area
 out = out[out[:,3].argsort()[::-1]]
-
-ts = datetime.now().strftime('%Y%m%d_%H%M')
-out_fn = '%s_mb_%s.csv' % (site, ts)
-out_fn = os.path.join(outdir, out_fn)
 
 out_header = 'glacnum,x,y,z_med,z_p16,z_p84,mb_mwea,area_km2,t1,t2,dt'
 if site == 'conus':
