@@ -6,12 +6,13 @@ Compute dh/dt and mass balance for input DEMs and glacier polygons
 """
 Todo:
 Write z1, z2, dz, stats etc to GlacFeat object
+Export polygons with mb numbers as geojson, spatialite, shp?
+
 Clean up mb_proc function, one return, globals
 Should move everything to main, pass args to mb_proc
 CONUS z1_date update in mb_proc
 
-Export mb curves
-Penetration correction
+Better penetration correction
 Filling gaps
 Error estimates
 """
