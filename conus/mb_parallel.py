@@ -219,9 +219,9 @@ site='hma'
 #Filter glacier poly - let's stick with big glaciers for now
 min_glac_area = 0.1 #km^2
 #Write out DEMs and dz map
-writeout = True 
+writeout = False 
 #Generate figures
-mb_plot = True 
+mb_plot = False 
 #Only write out for larger glaciers
 min_glac_area_writeout = 2.0
 #Run in parallel, set to False for serial loop
@@ -643,7 +643,7 @@ def mb_calc(gf, verbose=False):
 
 
 # For testing
-#glacfeat_list_in = glacfeat_list[0:300]
+#glacfeat_list_in = glacfeat_list[0:60]
 glacfeat_list_in = glacfeat_list
 
 if parallel:
@@ -690,7 +690,7 @@ else:
         out.append(mb_calc(gf))
 
 #Remove any None entries
-out = np.array([i for i in out if i is not None])
+out = np.array([i for i in out if i is not None], dtype=float)
 
 #Sort by area
 out = out[out[:,3].argsort()[::-1]]
