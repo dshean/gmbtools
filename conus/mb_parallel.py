@@ -1,10 +1,24 @@
 #! /usr/bin/env python
 """
-Loop through input polygon features, compute dh/dt and mass balance
+Compute dh/dt and mass balance for input DEMs and glacier polygons
+"""
+
+"""
+Todo:
+Write z1, z2, dz, stats etc to GlacFeat object
+Clean up mb_proc function, one return, globals
+Should move everything to main, pass args to mb_proc
+CONUS z1_date update in mb_proc
+
+Export mb curves
+Penetration correction
+Filling gaps
+Error estimates
 """
 
 import sys
 import os
+import subprocess
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -43,7 +57,7 @@ class GlacFeat:
             self.glacnum = int(self.glacnum)
         else:
             #RGIId (String) = RGI50-01.00004
-            self.glacnum = float(self.glacnum.split('-')[-1])
+            self.glacnum = '%0.5f' % float(self.glacnum.split('-')[-1])
 
         if self.glacname:
             self.feat_fn = "%s_%s" % (self.glacnum, self.glacname)
@@ -58,6 +72,13 @@ class GlacFeat:
         self.glac_area = self.glac_geom.GetArea()
         self.cx, self.cy = self.glac_geom.Centroid().GetPoint_2D()
 
+def srtm_corr(z1):
+    #Should separate into different regions from Kaab et al (2012)
+    #Should separate into firn/snow, clean ice, and debris-covered ice
+    #This is average for entire region 2.1 +/- 0.4
+    offset = 2.1
+    return z1 + offset
+
 def get_bins(dem, bin_width=100.0):
     #Define min and max elevation
     minz, maxz= list(malib.calcperc(dem, perc=(0.01, 99.99)))
@@ -68,9 +89,10 @@ def get_bins(dem, bin_width=100.0):
     bin_centers = bin_edges[:-1] + np.diff(bin_edges)/2.0
     return bin_edges, bin_centers
 
-def hist_plot(z1, z2, ds_res, gf, outdir):
-    print("Generating histograms")
-    z_bin_edges, z_bin_centers = get_bins(z1, 10.)
+def hist_plot(z1, z2, ds_res, dhdt, mb, gf, t1, t2, z1_ela, z2_ela, mb_mean, outdir):
+    #print("Generating histograms")
+    bin_width = 10.0
+    z_bin_edges, z_bin_centers = get_bins(z1, bin_width)
     z1_bin_counts, z1_bin_edges = np.histogram(z1, bins=z_bin_edges)
     z1_bin_areas = z1_bin_counts * ds_res[0] * ds_res[1] / 1E6
     z2_bin_counts, z2_bin_edges = np.histogram(z2, bins=z_bin_edges)
@@ -79,19 +101,33 @@ def hist_plot(z1, z2, ds_res, gf, outdir):
     #dz_bin_edges, dz_bin_centers = get_bins(dz, 1.)
     #dz_bin_counts, dz_bin_edges = np.histogram(dz, bins=dz_bin_edges)
     #dz_bin_areas = dz_bin_counts * ds_res * ds_res / 1E6
+    mb_bin_med = np.ma.masked_all_like(z1_bin_areas)
+    mb_bin_mad = np.ma.masked_all_like(z1_bin_areas)
     dz_bin_med = np.ma.masked_all_like(z1_bin_areas)
     dz_bin_mad = np.ma.masked_all_like(z1_bin_areas)
     idx = np.digitize(z1, z_bin_edges)
     for bin_n in range(z_bin_centers.size):
-        dz_bin_samp = mb[(idx == bin_n+1)]
-        #dz_bin_samp = dhdt[(idx == n+1)]
+        mb_bin_samp = mb[(idx == bin_n+1)]
+        if mb_bin_samp.count() > 0:
+            mb_bin_med[bin_n] = malib.fast_median(mb_bin_samp)
+            mb_bin_mad[bin_n] = malib.mad(mb_bin_samp)
+            mb_bin_med[bin_n] = mb_bin_samp.mean()
+            mb_bin_mad[bin_n] = mb_bin_samp.std()
+        dz_bin_samp = dhdt[(idx == bin_n+1)]
         if dz_bin_samp.count() > 0:
             dz_bin_med[bin_n] = malib.fast_median(dz_bin_samp)
             dz_bin_mad[bin_n] = malib.mad(dz_bin_samp)
             dz_bin_med[bin_n] = dz_bin_samp.mean()
             dz_bin_mad[bin_n] = dz_bin_samp.std()
 
-    print("Generating aed plot")
+    #Should also export original dh/dt numbers, not mb
+    outbins = np.ma.dstack([z_bin_centers, z1_bin_counts, dz_bin_med, dz_bin_mad, mb_bin_med, mb_bin_mad]).astype('float32')[0]
+    np.ma.set_fill_value(outbins, -9999.0)
+    outbins_fn = os.path.join(outdir, gf.feat_fn+'_mb_bins.csv')
+    outbins_header = 'bin_center_elev, bin_count, dhdt_bin_med, dhdt_bin_mad, mb_bin_med, mb_bin_mad'
+    np.savetxt(outbins_fn, outbins, fmt='%0.2f', delimiter=',', header=outbins_header)
+
+    #print("Generating aed plot")
     f,axa = plt.subplots(1,2, figsize=(6, 6))
     f.suptitle(gf.feat_fn)
     axa[0].plot(z1_bin_areas, z_bin_centers, label='%0.2f' % t1)
@@ -107,9 +143,9 @@ def hist_plot(z1, z2, ds_res, gf, outdir):
     axa[1].axvline(0, lw=1.0, c='k')
     axa[1].axvline(mb_mean, lw=0.5, ls=':', c='k', label='%0.2f m w.e./yr' % mb_mean)
     axa[1].legend(prop={'size':8}, loc='upper right')
-    axa[1].plot(dz_bin_med, z_bin_centers, color='k')
-    axa[1].fill_betweenx(z_bin_centers, 0, dz_bin_med, where=(dz_bin_med<0), color='r', alpha=0.2)
-    axa[1].fill_betweenx(z_bin_centers, 0, dz_bin_med, where=(dz_bin_med>0), color='b', alpha=0.2)
+    axa[1].plot(mb_bin_med, z_bin_centers, color='k')
+    axa[1].fill_betweenx(z_bin_centers, 0, mb_bin_med, where=(mb_bin_med<0), color='r', alpha=0.2)
+    axa[1].fill_betweenx(z_bin_centers, 0, mb_bin_med, where=(mb_bin_med>0), color='b', alpha=0.2)
     #axa[1].set_ylabel('Elevation (m WGS84)')
     #axa[1].set_xlabel('dh/dt (m/yr)')
     axa[1].set_xlabel('mb (m w.e./yr)')
@@ -119,20 +155,20 @@ def hist_plot(z1, z2, ds_res, gf, outdir):
     plt.tight_layout()
     #Make room for suptitle
     plt.subplots_adjust(top=0.95)
-    print("Saving aed plot")
+    #print("Saving aed plot")
     fig_fn = os.path.join(outdir, gf.feat_fn+'_mb_aed.png')
     plt.savefig(fig_fn, dpi=300)
     return z_bin_edges
 
-def map_plot(gf, out_z1_fn, out_z2_fn, z1, z2, z1_ela, z2_ela, z_bin_edges, z1_date, z2_date, dt, dhdt, outdir):
-    print("Generating map plot")
+def map_plot(gf, out_z1_fn, out_z2_fn, z1, z2, z1_ela, z2_ela, z_bin_edges, z1_date, z2_date, dt, dhdt, ds_res, outdir):
+    #print("Generating map plot")
     f,axa = plt.subplots(1,3, figsize=(10,7.5))
     f.suptitle(gf.feat_fn)
     alpha = 1.0
     hs = True
     if hs:
-        z1_hs = geolib.gdaldem_wrapper(out_z1_fn, product='hs', returnma=True)
-        z2_hs = geolib.gdaldem_wrapper(out_z2_fn, product='hs', returnma=True)
+        z1_hs = geolib.gdaldem_wrapper(out_z1_fn, product='hs', returnma=True, verbose=False)
+        z2_hs = geolib.gdaldem_wrapper(out_z2_fn, product='hs', returnma=True, verbose=False)
         hs_clim = malib.calcperc(z2_hs, (2,98))
         z1_hs_im = axa[0].imshow(z1_hs, cmap='gray', vmin=hs_clim[0], vmax=hs_clim[1])
         z2_hs_im = axa[1].imshow(z2_hs, cmap='gray', vmin=hs_clim[0], vmax=hs_clim[1])
@@ -164,7 +200,7 @@ def map_plot(gf, out_z1_fn, out_z2_fn, z1, z2, z1_ela, z2_ela, z_bin_edges, z1_d
     plt.tight_layout()
     #Make room for suptitle
     plt.subplots_adjust(top=0.90)
-    print("Saving map plot")
+    #print("Saving map plot")
     fig_fn = os.path.join(outdir, gf.feat_fn+'_mb_map.png')
     plt.savefig(fig_fn, dpi=300)
     
@@ -182,11 +218,15 @@ site='hma'
 #Filter glacier poly - let's stick with big glaciers for now
 min_glac_area = 0.1 #km^2
 #Write out DEMs and dz map
-writeout= False
+writeout = True 
 #Generate figures
-mb_plot = False 
+mb_plot = True 
 #Only write out for larger glaciers
 min_glac_area_writeout = 2.0
+#Run in parallel, set to False for serial loop
+parallel = True 
+#Number of parallel processes
+nproc = iolib.cpu_count() - 1
 
 """
 #Store setup variables in dictionary that can be passed to Process
@@ -215,6 +255,8 @@ if site == 'conus':
     z1_date_shp_lyr = z1_date_shp_ds.GetLayer()
     z1_date_shp_srs = z1_date_shp_lyr.GetSpatialRef()
     z1_date_shp_lyr.ResetReading()
+
+    penetration_corr = False
 
     z2_fn = os.path.join(topdir,'conus/dem2/conus_8m_tile_coreg_round3_summer2014-2016/conus_8m_tile_coreg_round3_summer2014-2016.vrt')
     z2_date = datetime(2015, 1, 1)
@@ -252,13 +294,17 @@ elif site == 'hma':
     #outdir = os.path.join(topdir,'hma/hma1_2016dec22/glac_poly_out')
     #outdir = os.path.join(topdir,'hma/hma_8m_mos_20170410/glac_poly_out')
     mosdir = 'hma_20170710_mos'
-    outdir = os.path.join(topdir,'hma/mos/%s/mb' % mosdir)
+    #outdir = os.path.join(topdir,'hma/mos/%s/mb' % mosdir)
+    outdir = os.path.join(topdir,'hma/mos/%s/mb_parallel' % mosdir)
     aea_srs = geolib.hma_aea_srs
     glac_shp_fn = os.path.join(topdir,'data/rgi50/regions/rgi50_hma_aea.shp')
     #SRTM
     z1_fn = os.path.join(topdir,'rpcdem/hma/srtm1/hma_srtm_gl1.vrt')
     #z1_date = timelib.dt2decyear(datetime(2000,2,11))
     z1_date = datetime(2000,2,11)
+
+    penetration_corr = True
+
     #z2_fn = '/nobackup/deshean/hma/hma1_2016dec22/hma_8m_tile/hma_8m.vrt'
     #z2_fn = os.path.join(topdir,'hma/hma1_2016dec22/hma_8m_tile/hma_8m.vrt')
     #z2_fn = os.path.join(topdir,'hma/hma1_2016dec22/hma_8m_tile_round2_20170220/hma_8m_round2.vrt')
@@ -284,9 +330,9 @@ out_fn = '%s_mb_%s.csv' % (site, ts)
 out_fn = os.path.join(outdir, out_fn)
 
 #Write out temporary file line by line, incase processes interrupted
-import csv
-f = open(os.path.splitext(out_fn)[0]+'_temp.csv', 'wb')
-writer = csv.writer(f)
+#import csv
+#f = open(os.path.splitext(out_fn)[0]+'_temp.csv', 'wb')
+#writer = csv.writer(f)
 
 #List to hold output
 out = []
@@ -332,6 +378,10 @@ print("Processing %i features" % feat_count)
 if not os.path.exists(outdir):  
     os.makedirs(outdir)
 
+#Set higher stripe count so we're not thrashing one disk
+cmd = ['lfs', 'setstripe', '-c', str(nproc), outdir]
+subprocess.call(cmd)
+
 #Create polygon for valid pixels in DEM mosaics
 #Intersect with each glacier polygon, only preserve those with 80% overlap
 #Go through shp, extract feat name/number and geom, create dict
@@ -342,67 +392,61 @@ if not os.path.exists(outdir):
 #field_defn = ogr.FieldDefn("mb_mwe", ogr.OFTReal)
 #glac_shp_lyr.CreateField(field_defn)
 
-glacfeat_list = []
-
-for n, feat in enumerate(glac_shp_lyr):
-    gf = GlacFeat(feat, glacname_fieldname, glacnum_fieldname)
-    print("%i of %i: %s" % (n+1, feat_count, gf.feat_fn))
-    glacfeat_list.append(gf)
+import pickle
+glacfeat_fn = "glacfeat_list.p"
+if os.path.exists(glacfeat_fn):
+    print("Loading %s" % glacfeat_fn)
+    glacfeat_list = pickle.load(open(glacfeat_fn,"rb"))
+else:
+    glacfeat_list = []
+    for n, feat in enumerate(glac_shp_lyr):
+        gf = GlacFeat(feat, glacname_fieldname, glacnum_fieldname)
+        print("%i of %i: %s" % (n+1, feat_count, gf.feat_fn))
+        glacfeat_list.append(gf)
+    pickle.dump(glacfeat_list, open(glacfeat_fn,"wb"))
 
 glac_shp_lyr = None
 glac_shp_ds = None
 
-"""
-from multiprocessing import Pool
-p = Pool(8)
-out = p.map(mb_calc, glacfeat_list)
-
-def mb_calc(gf):
-"""
-
-for n, gf in enumerate(glacfeat_list[0:10]):
-
-    print("\n%i of %i: %s\n" % (n+1, len(glacfeat_list), gf.feat_fn))
-
+def mb_calc(gf, verbose=False):
+    #print("\n%i of %i: %s\n" % (n+1, len(glacfeat_list), gf.feat_fn))
     #Calculate area, extent, centroid
     gf.geom_attributes()
 
     #This should already be handled by earlier attribute filter, but RGI area could be wrong
     if gf.glac_area/1E6 < min_glac_area:
-        print("Glacier area below %0.1f km2 threshold" % min_glac_area)
-        continue
-
-    #if glacname != "EmmonsGlacier":
-    #if glacname != "Nisqually-WilsonGlacier":
-    #if glacname != "SouthCascadeGlacier":
-    #if glacnum not in glacier_dict.keys():
-    #    continue
-    #else:
-    #    glacname = glacier_dict[glacnum]
+        if verbose:
+            print("Glacier area below %0.1f km2 threshold" % min_glac_area)
+        return None
 
     #Warp everything to common res/extent/proj
     ds_list = warplib.memwarp_multi_fn([z1_fn, z2_fn], res='min', \
-            extent=gf.glac_geom_extent, t_srs=aea_srs, verbose=False)
+            extent=gf.glac_geom_extent, t_srs=aea_srs, verbose=verbose)
 
     if site == 'conus':
         #Add prism datasets
         prism_fn_list = [prism_ppt_annual_fn, prism_tmean_annual_fn]
         prism_fn_list.extend([prism_ppt_summer_fn, prism_ppt_winter_fn, prism_tmean_summer_fn, prism_tmean_winter_fn])
-        ds_list.extend(warplib.memwarp_multi_fn(prism_fn_list, res=ds_list[0], extent=gf.glac_geom_extent, t_srs=aea_srs, verbose=False))
+        ds_list.extend(warplib.memwarp_multi_fn(prism_fn_list, res=ds_list[0], extent=gf.glac_geom_extent, t_srs=aea_srs, verbose=verbose))
 
     #Check to see if z2 is empty, as z1 should be continuous
     z2 = iolib.ds_getma(ds_list[1])
     if z2.count() == 0:
-        print("No z2 pixels")
-        continue
+        if verbose:
+            print("No z2 pixels")
+        return None
 
     glac_geom_mask = geolib.geom2mask(gf.glac_geom, ds_list[0])
     z1 = np.ma.array(iolib.ds_getma(ds_list[0]), mask=glac_geom_mask)
+    #Apply penetration correction
+    if penetration_corr:
+        z1 = srtm_corr(z1)
     z2 = np.ma.array(z2, mask=glac_geom_mask)
     dz = z2 - z1
     if dz.count() == 0:
-        print("No valid dz pixels")
-        continue
+        if verbose:
+            print("No valid dz pixels")
+        return None 
 
     filter_outliers = True 
     #Remove clearly bogus pixels
@@ -417,20 +461,21 @@ for n, gf in enumerate(glacfeat_list[0:10]):
     valid_area_perc = valid_area/gf.glac_area
     min_valid_area_perc = 0.80
     if valid_area_perc < min_valid_area_perc:
-        print("Not enough valid pixels. %0.1f%% percent of glacier polygon area" % (100*valid_area_perc))
-        continue
+        if verbose:
+            print("Not enough valid pixels. %0.1f%% percent of glacier polygon area" % (100*valid_area_perc))
+        return None
 
     #Rasterize NED source dates
     if site == 'conus':
         z1_date_r_ds = iolib.mem_drv.CreateCopy('', ds_list[0])
         gdal.RasterizeLayer(z1_date_r_ds, [1], z1_date_shp_lyr, options=["ATTRIBUTE=S_DATE_CLN"])
-        z1_date = np.ma.array(iolib.ds_getma(z1_date_r_ds), mask=gf.glac_geom_mask)
+        #z1_date = np.ma.array(iolib.ds_getma(z1_date_r_ds), mask=gf.glac_geom_mask)
 
     #Filter dz - throw out abs differences >150 m
 
     #Compute dz, volume change, mass balance and stats
-    z1_stats = malib.print_stats(z1)
-    z2_stats = malib.print_stats(z2)
+    z1_stats = malib.get_stats(z1)
+    z2_stats = malib.get_stats(z2)
     z2_elev_med = z2_stats[5]
     z2_elev_p16 = z2_stats[11]
     z2_elev_p84 = z2_stats[12]
@@ -444,7 +489,7 @@ for n, gf in enumerate(glacfeat_list[0:10]):
         dt = dt.total_seconds()/timelib.spy
     #m/yr
     dhdt = dz/dt
-    #dhdt_stats = malib.print_stats(dhdt)
+    #dhdt_stats = malib.get_stats(dhdt)
     #dhdt_mean = dhdt_stats[3]
 
     #Output mean values for timestamp arrays
@@ -469,8 +514,9 @@ for n, gf in enumerate(glacfeat_list[0:10]):
     z2_ela = z2_stats[3]
     #Note: in theory, the ELA should get higher with mass loss
     #In practice, using mean and same polygon, ELA gets lower as glacier surface thins
-    print("ELA(t1): %0.1f" % z1_ela)
-    print("ELA(t2): %0.1f" % z2_ela)
+    if verbose:
+        print("ELA(t1): %0.1f" % z1_ela)
+        print("ELA(t2): %0.1f" % z2_ela)
 
     if z1_ela > z2_ela:
         min_ela = z2_ela
@@ -499,7 +545,7 @@ for n, gf in enumerate(glacfeat_list[0:10]):
     #Use this for winter balance
     #mb = dhdt * rho_s
 
-    mb_stats = malib.print_stats(mb)
+    mb_stats = malib.get_stats(mb)
     mb_mean = mb_stats[3]
     dmbdt_total_myr = mb_mean*gf.glac_area
     mb_sum = np.sum(mb)*ds_res[0]*ds_res[1]
@@ -508,11 +554,11 @@ for n, gf in enumerate(glacfeat_list[0:10]):
 
     if site == 'conus':
         prism_ppt_annual = np.ma.array(iolib.ds_getma(ds_list[2]), mask=glac_geom_mask)/1000.
-        prism_ppt_annual_stats = malib.print_stats(prism_ppt_annual)
+        prism_ppt_annual_stats = malib.get_stats(prism_ppt_annual)
         prism_ppt_annual_mean = prism_ppt_annual_stats[3]
 
         prism_tmean_annual = np.ma.array(iolib.ds_getma(ds_list[3]), mask=glac_geom_mask)
-        prism_tmean_annual_stats = malib.print_stats(prism_tmean_annual)
+        prism_tmean_annual_stats = malib.get_stats(prism_tmean_annual)
         prism_tmean_annual_mean = prism_tmean_annual_stats[3]
 
         outlist.extend([prism_ppt_annual_mean, prism_tmean_annual_mean])
@@ -520,35 +566,36 @@ for n, gf in enumerate(glacfeat_list[0:10]):
         #This is mean monthly summer precip, need to multiply by nmonths to get cumulative
         n_summer = 4
         prism_ppt_summer = n_summer * np.ma.array(iolib.ds_getma(ds_list[4]), mask=glac_geom_mask)/1000.
-        prism_ppt_summer_stats = malib.print_stats(prism_ppt_summer)
+        prism_ppt_summer_stats = malib.get_stats(prism_ppt_summer)
         prism_ppt_summer_mean = prism_ppt_summer_stats[3]
 
         n_winter = 8
         prism_ppt_winter = n_winter * np.ma.array(iolib.ds_getma(ds_list[5]), mask=glac_geom_mask)/1000.
-        prism_ppt_winter_stats = malib.print_stats(prism_ppt_winter)
+        prism_ppt_winter_stats = malib.get_stats(prism_ppt_winter)
         prism_ppt_winter_mean = prism_ppt_winter_stats[3]
 
         prism_tmean_summer = np.ma.array(iolib.ds_getma(ds_list[6]), mask=glac_geom_mask)
-        prism_tmean_summer_stats = malib.print_stats(prism_tmean_summer)
+        prism_tmean_summer_stats = malib.get_stats(prism_tmean_summer)
         prism_tmean_summer_mean = prism_tmean_summer_stats[3]
 
         prism_tmean_winter = np.ma.array(iolib.ds_getma(ds_list[7]), mask=glac_geom_mask)
-        prism_tmean_winter_stats = malib.print_stats(prism_tmean_winter)
+        prism_tmean_winter_stats = malib.get_stats(prism_tmean_winter)
         prism_tmean_winter_mean = prism_tmean_winter_stats[3]
 
         outlist.extend([prism_ppt_summer_mean, prism_ppt_winter_mean, prism_tmean_summer_mean, prism_tmean_winter_mean])
 
-    print('Mean mb: %0.2f mwe/yr' % mb_mean)
-    print('Sum/Area mb: %0.2f mwe/yr' % (mb_sum/gf.glac_area))
-    print('Mean mb * Area: %0.2f mwe/yr' % dmbdt_total_myr)
-    print('Sum mb: %0.2f mwe/yr' % mb_sum)
-    print('-------------------------------')
+    if verbose:
+        print('Mean mb: %0.2f mwe/yr' % mb_mean)
+        print('Sum/Area mb: %0.2f mwe/yr' % (mb_sum/gf.glac_area))
+        print('Mean mb * Area: %0.2f mwe/yr' % dmbdt_total_myr)
+        print('Sum mb: %0.2f mwe/yr' % mb_sum)
+        #print('-------------------------------')
 
     #Write to master list
-    out.append(outlist)
+    #out.append(outlist)
     #Write to temporary file
-    writer.writerow(outlist)
-    f.flush()
+    #writer.writerow(outlist)
+    #f.flush()
 
     min_glac_area_writeout = 2.0
     if writeout and (gf.glac_area/1E6 > min_glac_area_writeout):
@@ -588,10 +635,62 @@ for n, gf in enumerate(glacfeat_list[0:10]):
     #Error analysis assuming date is wrong by +/- 1-2 years
 
     if mb_plot and (gf.glac_area/1E6 > min_glac_area_writeout):
-        z_bin_edges = hist_plot(z1, z2, ds_res, gf, outdir)
-        map_plot(gf, out_z1_fn, out_z2_fn, z1, z2, z2_ela, z2_ela, z_bin_edges, z1_date, z2_date, dt, dhdt, outdir)
+        z_bin_edges = hist_plot(z1, z2, ds_res, dhdt, mb, gf, t1, t2, z1_ela, z2_ela, mb_mean, outdir)
+        map_plot(gf, out_z1_fn, out_z2_fn, z1, z2, z2_ela, z2_ela, z_bin_edges, z1_date, z2_date, dt, dhdt, ds_res, outdir)
 
-out = np.array(out)
+    return outlist
+
+
+# For testing
+#glacfeat_list_in = glacfeat_list[0:300]
+glacfeat_list_in = glacfeat_list
+
+if parallel:
+    print("Running in parallel")
+    from multiprocessing import Pool
+    # By default, use all cores - 1
+    p = Pool(nproc)
+
+    """
+    # Simple mapping
+    # No progress bar
+    #out = p.map(mb_calc, glacfeat_list_in)
+    """
+
+    """
+    # Using imap_unordered - apparently slower than map_async
+    results = p.imap_unordered(mb_calc, glacfeat_list_in, 1)
+    p.close()
+    import time
+    while True:
+        ndone = results._index
+        if ndone == len(glacfeat_list_in): break
+        print('%i of %i done' % (ndone, len(glacfeat_list_in)))
+        time.sleep(1)
+        #sys.stderr.write('%i of %i done' % (i, len(glacfeat_list))) 
+    out = [j for j in results]
+    """
+
+    # Using map_async
+    results = p.map_async(mb_calc, glacfeat_list_in, 1)
+    p.close()
+    import time
+    while True:
+        if results.ready(): break
+        ndone = len(glacfeat_list_in) - results._number_left
+        print('%i of %i done' % (ndone, len(glacfeat_list_in)))
+        time.sleep(2)
+        #sys.stderr.write('%i of %i done' % (i, len(glacfeat_list))) 
+    out = results.get()
+else:
+    print("Running serially")
+    for n, gf in enumerate(glacfeat_list_in):
+        print('%i of %i: %s' % (n, len(glacfeat_list_in), gf.feat_fn))
+        out.append(mb_calc(gf))
+
+#Remove any None entries
+out = np.array([i for i in out if i is not None])
+
 #Sort by area
 out = out[out[:,3].argsort()[::-1]]
 
