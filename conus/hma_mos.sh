@@ -8,8 +8,8 @@
 #Default is 2048
 ulimit -n 65536
 
-#res=32
-res=8
+res=32
+#res=8
 count=true
 index=true
 tileindex=true
@@ -30,7 +30,8 @@ proj='+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS
 
 #Should add option to split annually
 echo "Identifying input DEMs"
-list=$(ls */*/*00/dem*/*-DEM_${res}m.tif */*00/dem*/*-DEM_${res}m.tif)
+#list=$(ls */*/*00/dem*/*-DEM_${res}m.tif */*00/dem*/*-DEM_${res}m.tif)
+list=$(ls */stereo/*00/dem*/*-DEM_${res}m.tif */*00/dem*/*-DEM_${res}m.tif)
 #list=$(ls */*/*/dem*/*-DEM_8m_trans.tif | grep -v QB)
 #parallel -j $threads "if [ ! -e {.}_aea.tif ] ; then gdalwarp -overwrite -r cubic -t_srs \"$proj\" -tr $res $res -dstnodata -9999 {} {.}_aea.tif; fi" ::: $list
 #list=$(echo $list | sed "s/DEM_${res}m.tif/DEM_${res}m_aea.tif/g")
@@ -75,12 +76,9 @@ if (( "$res" == "32" )) ; then
             parallel -j $threads "if [ ! -e {.}_${lowres}m.tif ] ; then gdalwarp -overwrite -r cubic -t_srs \"$proj\" -tr $lowres $lowres -dstnodata -9999 {} {.}_${lowres}m.tif; fi" ::: $list
             raster2shp.py -merge_fn ${out}_stripindex.shp $(echo $list | sed "s/DEM_${res}m.tif/DEM_${res}m_${lowres}m.tif/g") 
             echo "Removing intermediate files"
-            for i in $list
-            do
-                rm_list=$(echo $i | sed "s/DEM_${res}m.tif/DEM_${res}m_${lowres}m.{shp,shx,dbf,prj,tif}/")
-                rm $(eval ls $rm_list)
-            done
+            eval rm $(echo $list | sed "s/DEM_${res}m.tif/DEM_${res}m_${lowres}m.{shp,shx,dbf,prj,tif}/")
             ogr2ogr -simplify $tol ${out}_stripindex_simp.shp ${out}_stripindex.shp
+            rm ${out}_stripindex.{shp,dbf,prj,shx}
             if [ ! -e ${out}_stripindex_simp.kml ] ; then 
                 ogr2ogr -f KML ${out}_stripindex_simp.kml ${out}_stripindex_simp.shp
             fi
@@ -90,5 +88,15 @@ if (( "$res" == "32" )) ; then
     if $tileindex ; then 
         raster2shp.py -merge_fn ${out}_tileindex.shp $(gdalinfo $out.vrt | grep tif)
         ogr2ogr -simplify $tol ${out}_tileindex_simp.shp ${out}_tileindex.shp
+        echo "Removing intermediate files"
+        rm ${out}_tileindex.{shp,dbf,prj,shx}
+        eval rm $(gdalinfo $out.vrt | grep tif | sed 's/tif/{shp,dbf,prj,shx}/')
+        if [ ! -e ${out}_tileindex_simp.kml ] ; then 
+            ogr2ogr -f KML ${out}_tileindex_simp.kml ${out}_tileindex_simp.shp
+        fi
     fi
 fi
+
+#Set permissions
+chmod -R 755 mos
+chmod 644 $out/*
