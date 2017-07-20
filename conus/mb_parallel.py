@@ -20,6 +20,9 @@ Error estimates
 import sys
 import os
 import subprocess
+from datetime import datetime, timedelta
+import time
+import pickle
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -32,9 +35,6 @@ from pygeotools.lib import iolib
 from pygeotools.lib import timelib
 
 from imview.lib import pltlib
-
-from datetime import datetime, timedelta
-import time
 
 """
 Class to store relevant feature attributes and derived values
@@ -77,8 +77,18 @@ def srtm_corr(z1):
     #Should separate into different regions from Kaab et al (2012)
     #Should separate into firn/snow, clean ice, and debris-covered ice
     #This is average for entire region 2.1 +/- 0.4
+
+    #Integrate Batu's debris-cover maps
+    #Kaab LS classification?
+
+    #Snowcover from MODSCAG
+    #modscag_srtm_fn = '/nobackup/deshean/data/srtm_corr/20000224_snow_fraction_20000309_snow_fraction_stack_15_med.tif'
+
     offset = 2.1
     return z1 + offset
+
+def z_vs_dz(z,dz):
+    plt.scatter(z.compressed(), dz.compressed())
 
 def get_bins(dem, bin_width=100.0):
     #Define min and max elevation
@@ -218,6 +228,8 @@ site='hma'
 
 #Filter glacier poly - let's stick with big glaciers for now
 min_glac_area = 0.1 #km^2
+#Minimum percentage of glacier poly covered by valid dz
+min_valid_area_perc = 0.80
 #Write out DEMs and dz map
 writeout = False 
 #Generate figures
@@ -228,6 +240,8 @@ min_glac_area_writeout = 2.0
 parallel = True 
 #Number of parallel processes
 nproc = iolib.cpu_count() - 1
+#This stores collection of feature geometries, independent of shapefile
+glacfeat_fn = "glacfeat_list.p"
 
 """
 #Store setup variables in dictionary that can be passed to Process
@@ -246,6 +260,8 @@ if site == 'conus':
     #glac_shp_fn = '/nobackupp8/deshean/conus/shp/24k_selection_aea.shp'
     #This has already been filtered by area
     glac_shp_fn = os.path.join(topdir,'conus/shp/24k_selection_aea_min0.1km2.shp')
+    #This stores collection of feature geometries, independent of shapefile
+    glacfeat_fn = os.path.splitext(glac_shp_fn)[0]+'_glacfeat_list.p'
 
     #Raster difference map between NED and WV mosaic
     z1_fn = os.path.join(topdir,'rpcdem/ned1_2003/ned1_2003_adj.vrt')
@@ -294,11 +310,12 @@ elif site == 'hma':
     #'+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
     #outdir = os.path.join(topdir,'hma/hma1_2016dec22/glac_poly_out')
     #outdir = os.path.join(topdir,'hma/hma_8m_mos_20170410/glac_poly_out')
-    mosdir = 'hma_20170710_mos'
+    mosdir = 'hma_20170716_mos'
     #outdir = os.path.join(topdir,'hma/mos/%s/mb' % mosdir)
     outdir = os.path.join(topdir,'hma/mos/%s/mb_parallel' % mosdir)
     aea_srs = geolib.hma_aea_srs
     glac_shp_fn = os.path.join(topdir,'data/rgi50/regions/rgi50_hma_aea.shp')
+    glacfeat_fn = os.path.splitext(glac_shp_fn)[0]+'_glacfeat_list.p'
     #SRTM
     z1_fn = os.path.join(topdir,'rpcdem/hma/srtm1/hma_srtm_gl1.vrt')
     #z1_date = timelib.dt2decyear(datetime(2000,2,11))
@@ -393,8 +410,6 @@ subprocess.call(cmd)
 #field_defn = ogr.FieldDefn("mb_mwe", ogr.OFTReal)
 #glac_shp_lyr.CreateField(field_defn)
 
-import pickle
-glacfeat_fn = "glacfeat_list.p"
 if os.path.exists(glacfeat_fn):
     print("Loading %s" % glacfeat_fn)
     glacfeat_list = pickle.load(open(glacfeat_fn,"rb"))
@@ -449,6 +464,9 @@ def mb_calc(gf, verbose=False):
             print("No valid dz pixels")
         return None 
 
+    #Should add better filtering here
+    #Elevation dependent abs. threshold filter?
+
     filter_outliers = True 
     #Remove clearly bogus pixels
     if filter_outliers:
@@ -460,7 +478,6 @@ def mb_calc(gf, verbose=False):
     ds_res = geolib.get_res(ds_list[0])
     valid_area = dz.count()*ds_res[0]*ds_res[1]
     valid_area_perc = valid_area/gf.glac_area
-    min_valid_area_perc = 0.80
     if valid_area_perc < min_valid_area_perc:
         if verbose:
             print("Not enough valid pixels. %0.1f%% percent of glacier polygon area" % (100*valid_area_perc))
@@ -705,6 +722,10 @@ out_fmt = [glacnum_fmt,] + ['%0.2f'] * (out.shape[1] - 1)
 np.savetxt(out_fn, out, fmt=out_fmt, delimiter=',', header=out_header)
 
 #Write out new shp with features containing stats
+
+#Join field is: 
+#'RGI50-'+tostring("glacnum")
+
 #One shp preserves input features, regardless of source date
 #Another shp splits glacier poly based on NED source date
 
