@@ -52,7 +52,11 @@ else:
 #Baker
 #dem_clim = (550, 2650)
 #Ngozumpa
-dem_clim = (4500, 7400)
+#dem_clim = (4500, 7400)
+#GM
+#dem_clim = (1766, 3247)
+#SBB
+dem_clim = (2934, 3983)
 hs_clim = (1, 255)
 
 for i,dem_fn in enumerate(dem_fn_list):
@@ -66,7 +70,7 @@ for i,dem_fn in enumerate(dem_fn_list):
     if dt is not None:
         title = dt.strftime('%Y-%m-%d')
         t = ax.set_title(title, fontdict={'fontsize':8})
-        t.set_position([0.5, 0.95])
+        #t.set_position([0.5, 0.95])
     hs_im = ax.imshow(dem_hs, vmin=hs_clim[0], vmax=hs_clim[1], cmap='gray')
     dem_im = ax.imshow(dem, vmin=dem_clim[0], vmax=dem_clim[1], cmap='cpt_rainbow', alpha=0.5)
     ax.set_facecolor('k') 
