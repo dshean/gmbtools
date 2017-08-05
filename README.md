@@ -1,7 +1,9 @@
 # gmbtools
-A set of utilities for DEM processing/analysis, calculating geodetic mass balance, and plotting
+Utilities for DEM processing/analysis, calculating geodetic mass balance, and plotting
 
-## Generic tools (some still have hardcoded paths):
+Developed for the [NASA High-mountain Asia Team (HiMAT)](http://himat.org/) and [USGS](https://www2.usgs.gov/climate_landuse/clu_rd/glacierstudies/)/[NPS](https://science.nature.nps.gov/im/units/nccn/monitor/glaciers.cfm) CONUS glacier programs. Scripts are in various stages of development, and many still have hardcoded paths.
+
+## Generic tools:
 - `make_mos.sh` - create 2, 8 and 32-m tiled mosaics, count maps, indices, etc. from a set of input DEMs
 - `dem_mosaic_validtiles.py` - wrapper around ASP dem_mosaic utility to write valid mosaic tiles in parallel
 - `mb_parallel.py` - parallel computation of geodetic mass balance for a set of input glacier polygons and DEM sources
