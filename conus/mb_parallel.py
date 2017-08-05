@@ -102,12 +102,18 @@ def get_bins(dem, bin_width=100.0):
 
 def hist_plot(z1, z2, ds_res, dhdt, mb, gf, t1, t2, z1_ela, z2_ela, mb_mean, outdir):
     #print("Generating histograms")
-    bin_width = 10.0
+    #RGI uses 50 m bins
+    #bin_width = 10.0
+    bin_width = 50.0
     z_bin_edges, z_bin_centers = get_bins(z1, bin_width)
     z1_bin_counts, z1_bin_edges = np.histogram(z1, bins=z_bin_edges)
     z1_bin_areas = z1_bin_counts * ds_res[0] * ds_res[1] / 1E6
+    #RGI standard is integer thousandths of glaciers total area
+    #Should check to make sure sum of bin areas equals total area
+    z1_bin_areas_perc = 100. * z1_bin_areas / np.sum(z1_bin_areas)
     z2_bin_counts, z2_bin_edges = np.histogram(z2, bins=z_bin_edges)
     z2_bin_areas = z2_bin_counts * ds_res[0] * ds_res[1] / 1E6
+    z2_bin_areas_perc = 100. * z2_bin_areas / np.sum(z2_bin_areas)
 
     #dz_bin_edges, dz_bin_centers = get_bins(dz, 1.)
     #dz_bin_counts, dz_bin_edges = np.histogram(dz, bins=dz_bin_edges)
@@ -132,11 +138,15 @@ def hist_plot(z1, z2, ds_res, dhdt, mb, gf, t1, t2, z1_ela, z2_ela, mb_mean, out
             dz_bin_mad[bin_n] = dz_bin_samp.std()
 
     #Should also export original dh/dt numbers, not mb
-    outbins = np.ma.dstack([z_bin_centers, z1_bin_counts, dz_bin_med, dz_bin_mad, mb_bin_med, mb_bin_mad]).astype('float32')[0]
+    #outbins_header = 'bin_center_elev, bin_count, dhdt_bin_med, dhdt_bin_mad, mb_bin_med, mb_bin_mad'
+    #outbins = np.ma.dstack([z_bin_centers, z1_bin_counts, dz_bin_med, dz_bin_mad, mb_bin_med, mb_bin_mad]).astype('float32')[0]
+    #fmt='%0.2f'
+    outbins_header = 'bin_center_elev_m, z1_bin_count_valid, z1_bin_area_valid_km2, z1_bin_area_perc, z2_bin_count_valid, z2_bin_area_valid_km2, z2_bin_area_perc, dhdt_bin_med_ma, dhdt_bin_mad_ma, mb_bin_med_mwe, mb_bin_mad_mwe'
+    fmt='%0.1f, %i, %0.3f, %0.2f, %i, %0.3f, %0.2f, %0.2f, %0.2f, %0.2f, %0.2f' 
+    outbins = np.ma.dstack([z_bin_centers, z1_bin_counts, z1_bin_areas, z1_bin_areas_perc, z2_bin_counts, z2_bin_areas, z2_bin_areas_perc, dz_bin_med, dz_bin_mad, mb_bin_med, mb_bin_mad]).astype('float32')[0]
     np.ma.set_fill_value(outbins, -9999.0)
     outbins_fn = os.path.join(outdir, gf.feat_fn+'_mb_bins.csv')
-    outbins_header = 'bin_center_elev, bin_count, dhdt_bin_med, dhdt_bin_mad, mb_bin_med, mb_bin_mad'
-    np.savetxt(outbins_fn, outbins, fmt='%0.2f', delimiter=',', header=outbins_header)
+    np.savetxt(outbins_fn, outbins, fmt=fmt, delimiter=',', header=outbins_header)
 
     #print("Generating aed plot")
     f,axa = plt.subplots(1,2, figsize=(6, 6))
