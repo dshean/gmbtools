@@ -7,6 +7,7 @@ Compute dh/dt and mass balance for input DEMs and glacier polygons
 Todo:
 Write z1, z2, dz, stats etc to GlacFeat object
 Export polygons with mb numbers as geojson, spatialite, shp?
+Add +/- std for each dh/dt polygon, some idea of spread
 
 Clean up mb_proc function, one return, globals
 Should move everything to main, pass args to mb_proc
@@ -76,15 +77,14 @@ class GlacFeat:
 def srtm_corr(z1):
     #Should separate into different regions from Kaab et al (2012)
     #Should separate into firn/snow, clean ice, and debris-covered ice
-    #This is average for entire region 2.1 +/- 0.4
+    #See Gardelle et al (2013) for updated numbers
+    #Integrate Batu's debris-cover maps or Kaab LS classification?
+    #Snowcover in Feb 2000 from MODSCAG:
+    #/nobackup/deshean/data/srtm_corr/20000224_snow_fraction_20000309_snow_fraction_stack_15_med.tif
 
-    #Integrate Batu's debris-cover maps
-    #Kaab LS classification?
-
-    #Snowcover from MODSCAG
-    #modscag_srtm_fn = '/nobackup/deshean/data/srtm_corr/20000224_snow_fraction_20000309_snow_fraction_stack_15_med.tif'
-
+    #For now, use Kaab et al (2012) region-wide mean of 2.1 +/- 0.4
     offset = 2.1
+
     return z1 + offset
 
 def z_vs_dz(z,dz):
