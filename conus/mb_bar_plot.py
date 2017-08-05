@@ -1,25 +1,29 @@
 #! /usr/bin/env python
 
+"""
+Create seasonal/annual mass balance bar plot similar to USGS standard
+"""
+
 import matplotlib.pyplot as plt
 from collections import OrderedDict
 
 #The term U.S.Geological Survey "water year" in reports that deal with surface-water supply is defined as the 12-month period October 1, for any given year through September 30, of the following year. The water year is designated by the calendar year in which it ends and which includes 9 of the 12 months. Thus, the year ending September 30, 1999 is called the "1999" water year.
 
 #Winter 2008/2009
-3.26, 3.13
+#3.26, 3.13
 #Winter 2013/2014
-3.64, 3.24
+#3.64, 3.24
 #Winter 2014/2015
-1.07, 1.03
+#1.07, 1.03
 #Winter 2015/2016
-1.56, 1.54
+#1.56, 1.54
 
 #Summer 2012 to Summer 2013
--1.81, -1.72
+#-1.81, -1.72
 #Summer 2013 to Summer 2014
-0.64, 0.63
+#0.64, 0.63
 #Summer 2014 to Summer 2015
--3.15, -3.12
+#-3.15, -3.12
 
 mbd = OrderedDict() 
 mbd[2009] = {'w':3.26}
