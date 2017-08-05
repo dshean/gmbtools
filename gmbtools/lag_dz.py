@@ -23,11 +23,12 @@ import glob
 import gdal
 import numpy as np
 
-from lib import malib
-from lib import geolib
-from lib import warplib
-from lib import glaclib
-from lib import filtlib
+from pygeotools.lib import iolib
+from pygeotools.lib import malib
+from pygeotools.lib import geolib
+from pygeotools.lib import warplib
+from pygeotools.lib import filtlib
+#from lib import glaclib
 
 #This is output ndv, avoid using 0 for differences
 diffndv = -9999
@@ -67,8 +68,8 @@ outprefix = os.path.splitext(os.path.split(dem1_fn)[1])[0]+'_'+os.path.splitext(
 
 #Load input DEMs into masked arrays
 print "Loading input DEMs into masked arrays"
-dem1 = malib.ds_getma(dem1_ds, 1)
-dem2 = malib.ds_getma(dem2_ds, 1)
+dem1 = iolib.ds_getma(dem1_ds, 1)
+dem2 = iolib.ds_getma(dem2_ds, 1)
 
 print
 
@@ -94,14 +95,14 @@ if rates:
         print "Preparing timestamp arrays"
         t1_ds, t2_ds = warplib.memwarp_multi_fn([t1_fn, t2_fn], extent=dem1_ds, res=dem1_ds)
         print "Loading timestamps into masked arrays"
-        t1 = malib.ds_getma(t1_ds)
-        t2 = malib.ds_getma(t2_ds)
+        t1 = iolib.ds_getma(t1_ds)
+        t2 = iolib.ds_getma(t2_ds)
         #Compute dt in days
         t_factor = t2 - t1
         t_factor /= 365.25
     else:
         from datetime import datetime, timedelta
-        from lib import timelib 
+        from pygeotools.lib import timelib 
         t1 = timelib.fn_getdatetime(dem1_fn)
         t2 = timelib.fn_getdatetime(dem2_fn)
         if t1 is not None and t2 is not None and t1 != t2:  
@@ -145,11 +146,11 @@ if tidecorr:
         dem2_tide_fn = findfile(dem2_fn_base, 'tidemodel_smooth_full_clip.tif')
     if dem1_tide_fn and dem2_tide_fn:
         dem1_tide_ds, dem2_tide_ds = warplib.memwarp_multi_fn([dem1_tide_fn, dem2_tide_fn], extent=dem1_ds, res=dem1_ds)
-        dem1_tide = malib.ds_getma(dem1_tide_ds)
-        dem2_tide = malib.ds_getma(dem2_tide_ds)
+        dem1_tide = iolib.ds_getma(dem1_tide_ds)
+        dem2_tide = iolib.ds_getma(dem2_tide_ds)
         tide_diff = dem2_tide - dem1_tide
         dst_fn = os.path.join(outdir, outprefix+'_tide_diff.tif')
-        malib.writeGTiff(tide_diff, dst_fn, dem1_ds, ndv=diffndv)
+        iolib.writeGTiff(tide_diff, dst_fn, dem1_ds, ndv=diffndv)
         #These values are tide prediction, to remove, want to subtract from observed elevation
         #Need to fill with 0 to prevent clipping to floating ice
         dem1 -= dem1_tide.filled(0)
@@ -167,11 +168,11 @@ if firnair:
     dem2_firnair_fn = findfile(dem2_fn_base, 'racmo_FirnAir.tif')
     if dem1_firnair_fn and dem2_firnair_fn:
         dem1_firnair_ds, dem2_firnair_ds = warplib.memwarp_multi_fn([dem1_firnair_fn, dem2_firnair_fn], extent=dem1_ds, res=dem1_ds)
-        dem1_firnair = malib.ds_getma(dem1_firnair_ds)
-        dem2_firnair = malib.ds_getma(dem2_firnair_ds)
+        dem1_firnair = iolib.ds_getma(dem1_firnair_ds)
+        dem2_firnair = iolib.ds_getma(dem2_firnair_ds)
         firnair_diff = dem2_firnair - dem1_firnair 
         dst_fn = os.path.join(outdir, outprefix+'_FirnAir_diff.tif')
-        malib.writeGTiff(firnair_diff, dst_fn, dem1_ds, ndv=diffndv)
+        iolib.writeGTiff(firnair_diff, dst_fn, dem1_ds, ndv=diffndv)
         #These values are positive, total firn air content, want to subtract
         #dem1 -= dem1_firnair
         #dem2 -= dem2_firnair
@@ -185,14 +186,14 @@ if zs:
     dem2_zs_fn = findfile(dem2_fn_base, 'racmo_zs.tif')
     if dem1_zs_fn and dem2_zs_fn:
         dem1_zs_ds, dem2_zs_ds = warplib.memwarp_multi_fn([dem1_zs_fn, dem2_zs_fn], extent=dem1_ds, res=dem1_ds)
-        dem1_zs = malib.ds_getma(dem1_zs_ds)
-        dem2_zs = malib.ds_getma(dem2_zs_ds)
+        dem1_zs = iolib.ds_getma(dem1_zs_ds)
+        dem2_zs = iolib.ds_getma(dem2_zs_ds)
         zs_diff = dem2_zs - dem1_zs
         dst_fn = os.path.join(outdir, outprefix+'_zs_diff.tif')
-        malib.writeGTiff(zs_diff, dst_fn, dem1_ds, ndv=diffndv)
+        iolib.writeGTiff(zs_diff, dst_fn, dem1_ds, ndv=diffndv)
         smb_diff = zs_diff - firnair_diff 
         #dst_fn = os.path.join(outdir, outprefix+'_smb_diff.tif')
-        #malib.writeGTiff(smb_diff, dst_fn, dem1_ds, ndv=diffndv)
+        #iolib.writeGTiff(smb_diff, dst_fn, dem1_ds, ndv=diffndv)
 
 #Check to make sure inputs actually intersect
 #Masked pixels are True
@@ -219,32 +220,32 @@ if True:
     print "Writing Eulerian elevation difference map"
     dst_fn = os.path.join(outdir, outprefix+'_dz_eul.tif')
     print dst_fn
-    malib.writeGTiff(diff_euler, dst_fn, dem1_ds, ndv=diffndv)
+    iolib.writeGTiff(diff_euler, dst_fn, dem1_ds, ndv=diffndv)
     if rates:
         print "Writing Eulerian rate map"
         dst_fn = os.path.join(outdir, outprefix+'_dz_eul_rate.tif')
         print dst_fn
-        malib.writeGTiff(diff_euler/t_factor, dst_fn, dem1_ds, ndv=diffndv)
+        iolib.writeGTiff(diff_euler/t_factor, dst_fn, dem1_ds, ndv=diffndv)
 
 if False:
     print "Writing Eulerian relative elevation difference map"
     diff_euler_rel = diff_euler - diff_euler_med
     dst_fn = os.path.join(outdir, outprefix+'_dz_eul_rel.tif')
     print dst_fn
-    malib.writeGTiff(diff_euler_rel, dst_fn, dem1_ds, ndv=diffndv)
+    iolib.writeGTiff(diff_euler_rel, dst_fn, dem1_ds, ndv=diffndv)
 
 if False:
     print "Writing out DEM2 with median elevation difference removed"
     dst_fn = os.path.splitext(dem2_fn)[0]+'_med'+diff_euler_med+'.tif'
     print dst_fn
-    malib.writeGTiff(dem2 - diff_euler_med, dst_fn, dem1_ds, ndv=diffndv)
+    iolib.writeGTiff(dem2 - diff_euler_med, dst_fn, dem1_ds, ndv=diffndv)
 
 if False:
     print "Writing Eulerian elevation difference percentage map"
     diff_euler_perc = 100.0*diff_euler/dem1
     dst_fn = os.path.join(outdir, outprefix+'_dz_eul_perc.tif')
     print dst_fn
-    malib.writeGTiff(diff_euler_perc, dst_fn, dem1_ds, ndv=diffndv)
+    iolib.writeGTiff(diff_euler_perc, dst_fn, dem1_ds, ndv=diffndv)
 
 #def compute_dh_vs_z(ref_dem, dh, nbins=20, binwidth=None):
 if False:
@@ -310,8 +311,8 @@ if disp_ds is not None:
     #Load disparity values into masked arrays
     #Note: need to represent these as integers, as they will be used as indices for an array
     print "Loading disparity maps into masked arrays"
-    disp_x_f_in = malib.ds_getma(disp_ds, 1)
-    disp_y_f_in = malib.ds_getma(disp_ds, 2)
+    disp_x_f_in = iolib.ds_getma(disp_ds, 1)
+    disp_y_f_in = iolib.ds_getma(disp_ds, 2)
 
     #If the input disp_ds (not velocities) has been resampled from original pixel dimensions, must alter values
     #disp_scaling = 0.57/32.0
@@ -404,10 +405,10 @@ if disp_ds is not None:
     u = disp_x_f*x_res*proj_scale_factor/t_factor_lag
     v = disp_y_f*y_res*proj_scale_factor/t_factor_lag
     v_mag = np.ma.sqrt(u**2 + v**2) 
-    v_mag_f = malib.robust_spread_fltr(v_mag)
+    #v_mag_f = malib.robust_spread_fltr(v_mag)
     v_stats = malib.print_stats(v_mag_f)
     dst_fn = os.path.join(outdir, outprefix+'_vmag.tif')
-    malib.writeGTiff(v_mag_f.astype(float), dst_fn, dem1_ds, ndv=diffndv)
+    iolib.writeGTiff(v_mag_f.astype(float), dst_fn, dem1_ds, ndv=diffndv)
     #dem1_grad_adv = disp_x_abs_fwd*x_res * dem1_grad[1] + disp_y_abs_fwd*y_res * dem1_grad[0]
     #dem1_grad_adv = u * dem1_grad[1] + v * dem1_grad[0]
     #dem1_grad_adv = u*t_factor * dem1_grad[1] + v*t_factor * dem1_grad[0]
@@ -425,7 +426,8 @@ if disp_ds is not None:
     #NOTE: this was changed on 9/25/15 due to error in the Jak datset, but it didn't cause problems with earlier PIG data
 
     disp_m = np.percentile(np.sqrt(disp_x**2 + disp_y**2), 98)
-    disp_m = 59
+    #disp_m = 59
+    disp_m = 29
 
     dem1_smooth = filtlib.gauss_fltr_astropy(dem1,2*disp_m) 
     dem2_smooth = filtlib.gauss_fltr_astropy(dem2,2*disp_m) 
@@ -493,38 +495,38 @@ if disp_ds is not None:
         print "Writing Lagrangian elevation difference map"
         dst_fn = os.path.join(outdir, outprefix+'_dz_lag.tif')
         print dst_fn
-        malib.writeGTiff(diff_lag_fwd_obs, dst_fn, dem1_ds, ndv=diffndv)
+        iolib.writeGTiff(diff_lag_fwd_obs, dst_fn, dem1_ds, ndv=diffndv)
         if rates:
             print "Writing Lagrangian rate map"
             dst_fn = os.path.join(outdir, outprefix+'_dz_lag_rate.tif')
             print dst_fn
-            malib.writeGTiff(diff_lag_fwd_obs/t_factor_lag, dst_fn, dem1_ds, ndv=diffndv)
+            iolib.writeGTiff(diff_lag_fwd_obs/t_factor_lag, dst_fn, dem1_ds, ndv=diffndv)
     
     if False:
         print "Writing Lagrangian relative elevation difference map"
         diff_lag_fwd_obs_rel = diff_lag_fwd_obs - diff_lag_fwd_obs_med
         dst_fn = os.path.join(outdir, outprefix+'_dz_lag_rel.tif')
-        malib.writeGTiff(diff_lag_fwd_obs_rel, dst_fn, dem1_ds, ndv=diffndv)
+        iolib.writeGTiff(diff_lag_fwd_obs_rel, dst_fn, dem1_ds, ndv=diffndv)
 
     if True:
         print "Writing predicted elevation difference map for advection"
         dst_fn = os.path.join(outdir, outprefix+'_dz_lag_adv_exp.tif')
-        malib.writeGTiff(diff_lag_fwd_exp, dst_fn, dem1_ds, ndv=diffndv)
+        iolib.writeGTiff(diff_lag_fwd_exp, dst_fn, dem1_ds, ndv=diffndv)
     
     if True:
         print "Writing residual elevation difference map for advection"
         dst_fn = os.path.join(outdir, outprefix+'_dz_lag_adv_resid.tif')
-        malib.writeGTiff(diff_fwd_resid, dst_fn, dem1_ds, ndv=diffndv)
+        iolib.writeGTiff(diff_fwd_resid, dst_fn, dem1_ds, ndv=diffndv)
 
     if True:
         print "Writing residual elevation difference map for advection"
         dst_fn = os.path.join(outdir, outprefix+'_dz_lag_adv_exp_smooth.tif')
-        malib.writeGTiff(diff_fwd_exp, dst_fn, dem1_ds, ndv=diffndv)
+        iolib.writeGTiff(diff_fwd_exp, dst_fn, dem1_ds, ndv=diffndv)
 
     if True:
         print "Writing residual eulerian difference using predicted eulerian" 
         dst_fn = os.path.join(outdir, outprefix+'_dz_eul_adv_resid.tif')
-        malib.writeGTiff(diff_euler_resid, dst_fn, dem1_ds, ndv=diffndv)
+        iolib.writeGTiff(diff_euler_resid, dst_fn, dem1_ds, ndv=diffndv)
     
     if True:
         print "Computing velocity divergence"
@@ -545,12 +547,12 @@ if disp_ds is not None:
         #Could probably just filter by -0.2 < vdiv < 0.2
         vdiv_stats = malib.print_stats(vdiv_f)
         dst_fn = os.path.join(outdir, outprefix+'_vdiv.tif')
-        malib.writeGTiff(vdiv_f.astype(float), dst_fn, dem1_ds, ndv=diffndv)
+        iolib.writeGTiff(vdiv_f.astype(float), dst_fn, dem1_ds, ndv=diffndv)
 
     #Want to clip these products to floating regions 
     #Compute with bed?
 
-    if True:
+    if False:
         print "Computing basal melt rate"
         #Calculate height to use for floatation assumption (remove tide, remove firnair)
         #dem1_corr = dem1 - dem1_tide.filled(0) - dem1_firnair
@@ -576,4 +578,4 @@ if disp_ds is not None:
         mb_rate = glaclib.freeboard_thickness(-mb_f,clip=False)/t_factor_lag
         mb_stats = malib.print_stats(mb_rate)
         dst_fn = os.path.join(outdir, outprefix+'_meltrate.tif')
-        malib.writeGTiff(mb_rate.astype(float), dst_fn, dem1_ds, ndv=diffndv)
+        iolib.writeGTiff(mb_rate.astype(float), dst_fn, dem1_ds, ndv=diffndv)
