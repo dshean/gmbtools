@@ -5,6 +5,7 @@ Compute dh/dt and mass balance for input DEMs and glacier polygons
 
 """
 Todo:
+Add date fields to mb curve output
 Write z1, z2, dz, stats etc to GlacFeat object
 Export polygons with mb numbers as geojson, spatialite, shp?
 Add +/- std for each dh/dt polygon, some idea of spread
