@@ -9,11 +9,9 @@ Add date fields to mb curve output
 Write z1, z2, dz, stats etc to GlacFeat object
 Export polygons with mb numbers as geojson, spatialite, shp?
 Add +/- std for each dh/dt polygon, some idea of spread
-
 Clean up mb_proc function, one return, globals
 Should move everything to main, pass args to mb_proc
 CONUS z1_date update in mb_proc
-
 Better penetration correction
 Filling gaps
 Error estimates
@@ -40,7 +38,7 @@ from imview.lib import pltlib
 
 """
 Class to store relevant feature attributes and derived values
-Safe for non-sequential multiprocessing
+Safe for multiprocessing
 """
 class GlacFeat:
     def __init__(self, feat, glacname_fieldname, glacnum_fieldname):
@@ -69,6 +67,21 @@ class GlacFeat:
 
         self.glac_geom = geolib.geom_dup(feat.GetGeometryRef())
         #self.glac_geom.AssignSpatialReference(glac_shp_srs)
+
+        #Attributes written by mb_calc
+        self.z1 = None
+        self.z1_stats = None
+        self.z1_ela = None
+        self.z2 = None
+        self.z2_stats = None
+        self.z2_ela = None
+        self.res = None
+        self.dhdt = None
+        self.mb = None
+        self.mb_mean = None
+        self.t1 = None
+        self.t2 = None
+        self.dt = None
 
     def geom_attributes(self):
         self.glac_geom_extent = geolib.geom_extent(self.glac_geom)
@@ -101,37 +114,35 @@ def get_bins(dem, bin_width=100.0):
     bin_centers = bin_edges[:-1] + np.diff(bin_edges)/2.0
     return bin_edges, bin_centers
 
-def hist_plot(z1, z2, ds_res, dhdt, mb, gf, t1, t2, z1_ela, z2_ela, mb_mean, outdir):
+#RGI uses 50 m bins
+def hist_plot(gf, outdir, bin_width=10.0):
     #print("Generating histograms")
-    #RGI uses 50 m bins
-    #bin_width = 10.0
-    bin_width = 50.0
-    z_bin_edges, z_bin_centers = get_bins(z1, bin_width)
-    z1_bin_counts, z1_bin_edges = np.histogram(z1, bins=z_bin_edges)
-    z1_bin_areas = z1_bin_counts * ds_res[0] * ds_res[1] / 1E6
+    z_bin_edges, z_bin_centers = get_bins(gf.z1, bin_width)
+    z1_bin_counts, z1_bin_edges = np.histogram(gf.z1, bins=z_bin_edges)
+    z1_bin_areas = z1_bin_counts * gf.res[0] * gf.res[1] / 1E6
     #RGI standard is integer thousandths of glaciers total area
     #Should check to make sure sum of bin areas equals total area
     z1_bin_areas_perc = 100. * z1_bin_areas / np.sum(z1_bin_areas)
-    z2_bin_counts, z2_bin_edges = np.histogram(z2, bins=z_bin_edges)
-    z2_bin_areas = z2_bin_counts * ds_res[0] * ds_res[1] / 1E6
+    z2_bin_counts, z2_bin_edges = np.histogram(gf.z2, bins=z_bin_edges)
+    z2_bin_areas = z2_bin_counts * gf.res[0] * gf.res[1] / 1E6
     z2_bin_areas_perc = 100. * z2_bin_areas / np.sum(z2_bin_areas)
 
     #dz_bin_edges, dz_bin_centers = get_bins(dz, 1.)
     #dz_bin_counts, dz_bin_edges = np.histogram(dz, bins=dz_bin_edges)
-    #dz_bin_areas = dz_bin_counts * ds_res * ds_res / 1E6
+    #dz_bin_areas = dz_bin_counts * res * res / 1E6
     mb_bin_med = np.ma.masked_all_like(z1_bin_areas)
     mb_bin_mad = np.ma.masked_all_like(z1_bin_areas)
     dz_bin_med = np.ma.masked_all_like(z1_bin_areas)
     dz_bin_mad = np.ma.masked_all_like(z1_bin_areas)
-    idx = np.digitize(z1, z_bin_edges)
+    idx = np.digitize(gf.z1, z_bin_edges)
     for bin_n in range(z_bin_centers.size):
-        mb_bin_samp = mb[(idx == bin_n+1)]
+        mb_bin_samp = gf.mb[(idx == bin_n+1)]
         if mb_bin_samp.count() > 0:
             mb_bin_med[bin_n] = malib.fast_median(mb_bin_samp)
             mb_bin_mad[bin_n] = malib.mad(mb_bin_samp)
             mb_bin_med[bin_n] = mb_bin_samp.mean()
             mb_bin_mad[bin_n] = mb_bin_samp.std()
-        dz_bin_samp = dhdt[(idx == bin_n+1)]
+        dz_bin_samp = gf.dhdt[(idx == bin_n+1)]
         if dz_bin_samp.count() > 0:
             dz_bin_med[bin_n] = malib.fast_median(dz_bin_samp)
             dz_bin_mad[bin_n] = malib.mad(dz_bin_samp)
@@ -152,10 +163,10 @@ def hist_plot(z1, z2, ds_res, dhdt, mb, gf, t1, t2, z1_ela, z2_ela, mb_mean, out
     #print("Generating aed plot")
     f,axa = plt.subplots(1,2, figsize=(6, 6))
     f.suptitle(gf.feat_fn)
-    axa[0].plot(z1_bin_areas, z_bin_centers, label='%0.2f' % t1)
-    axa[0].plot(z2_bin_areas, z_bin_centers, label='%0.2f' % t2)
-    axa[0].axhline(z1_ela, ls=':', c='C0')
-    axa[0].axhline(z2_ela, ls=':', c='C1')
+    axa[0].plot(z1_bin_areas, z_bin_centers, label='%0.2f' % gf.t1)
+    axa[0].plot(z2_bin_areas, z_bin_centers, label='%0.2f' % gf.t2)
+    axa[0].axhline(gf.z1_ela, ls=':', c='C0')
+    axa[0].axhline(gf.z2_ela, ls=':', c='C1')
     axa[0].legend(prop={'size':8}, loc='upper right')
     axa[0].set_ylabel('Elevation (m WGS84)')
     axa[0].set_xlabel('Area $\mathregular{km^2}$')
@@ -163,7 +174,7 @@ def hist_plot(z1, z2, ds_res, dhdt, mb, gf, t1, t2, z1_ela, z2_ela, mb_mean, out
     axa[1].yaxis.tick_right()
     axa[1].yaxis.set_label_position("right")
     axa[1].axvline(0, lw=1.0, c='k')
-    axa[1].axvline(mb_mean, lw=0.5, ls=':', c='k', label='%0.2f m w.e./yr' % mb_mean)
+    axa[1].axvline(gf.mb_mean, lw=0.5, ls=':', c='k', label='%0.2f m w.e./yr' % gf.mb_mean)
     axa[1].legend(prop={'size':8}, loc='upper right')
     axa[1].plot(mb_bin_med, z_bin_centers, color='k')
     axa[1].fill_betweenx(z_bin_centers, 0, mb_bin_med, where=(mb_bin_med<0), color='r', alpha=0.2)
@@ -182,40 +193,40 @@ def hist_plot(z1, z2, ds_res, dhdt, mb, gf, t1, t2, z1_ela, z2_ela, mb_mean, out
     plt.savefig(fig_fn, dpi=300)
     return z_bin_edges
 
-def map_plot(gf, out_z1_fn, out_z2_fn, z1, z2, z1_ela, z2_ela, z_bin_edges, z1_date, z2_date, dt, dhdt, ds_res, outdir):
+def map_plot(gf, z_bin_edges, outdir):
     #print("Generating map plot")
     f,axa = plt.subplots(1,3, figsize=(10,7.5))
     f.suptitle(gf.feat_fn)
     alpha = 1.0
     hs = True
     if hs:
-        z1_hs = geolib.gdaldem_wrapper(out_z1_fn, product='hs', returnma=True, verbose=False)
-        z2_hs = geolib.gdaldem_wrapper(out_z2_fn, product='hs', returnma=True, verbose=False)
+        z1_hs = geolib.gdaldem_wrapper(gf.out_z1_fn, product='hs', returnma=True, verbose=False)
+        z2_hs = geolib.gdaldem_wrapper(gf.out_z2_fn, product='hs', returnma=True, verbose=False)
         hs_clim = malib.calcperc(z2_hs, (2,98))
         z1_hs_im = axa[0].imshow(z1_hs, cmap='gray', vmin=hs_clim[0], vmax=hs_clim[1])
         z2_hs_im = axa[1].imshow(z2_hs, cmap='gray', vmin=hs_clim[0], vmax=hs_clim[1])
         alpha = 0.5
-    z1_im = axa[0].imshow(z1, cmap='cpt_rainbow', vmin=z_bin_edges[0], vmax=z_bin_edges[-1], alpha=alpha)
-    z2_im = axa[1].imshow(z2, cmap='cpt_rainbow', vmin=z_bin_edges[0], vmax=z_bin_edges[-1], alpha=alpha)
-    axa[0].contour(z1, [z1_ela,], linewidths=0.5, linestyles=':', colors='w')
-    axa[1].contour(z2, [z2_ela,], linewidths=0.5, linestyles=':', colors='w')
-    #t1_title = int(np.round(t1))
-    #t2_title = int(np.round(t2))
-    #t1_title = int(t1)
-    #t2_title = int(t2)
-    t1_title = z1_date.strftime('%Y-%m-%d')
-    t2_title = z2_date.strftime('%Y-%m-%d')
+    z1_im = axa[0].imshow(gf.z1, cmap='cpt_rainbow', vmin=z_bin_edges[0], vmax=z_bin_edges[-1], alpha=alpha)
+    z2_im = axa[1].imshow(gf.z2, cmap='cpt_rainbow', vmin=z_bin_edges[0], vmax=z_bin_edges[-1], alpha=alpha)
+    axa[0].contour(gf.z1, [gf.z1_ela,], linewidths=0.5, linestyles=':', colors='w')
+    axa[1].contour(gf.z2, [gf.z2_ela,], linewidths=0.5, linestyles=':', colors='w')
+    #t1_title = int(np.round(gf.t1))
+    #t2_title = int(np.round(gf.t2))
+    t1_title = int(gf.t1)
+    t2_title = int(gf.t2)
+    #t1_title = gf.t1.strftime('%Y-%m-%d')
+    #t2_title = gf.t2.strftime('%Y-%m-%d')
     axa[0].set_title(t1_title)
     axa[1].set_title(t2_title)
-    axa[2].set_title('%s to %s (%0.2f yr)' % (t1_title, t2_title, dt))
+    axa[2].set_title('%s to %s (%0.2f yr)' % (t1_title, t2_title, gf.dt))
     #dz_clim = (-10, 10)
     dz_clim = (-2.0, 2.0)
-    dz_im = axa[2].imshow(dhdt, cmap='RdBu', vmin=dz_clim[0], vmax=dz_clim[1])
+    dz_im = axa[2].imshow(gf.dhdt, cmap='RdBu', vmin=dz_clim[0], vmax=dz_clim[1])
     for ax in axa:
         pltlib.hide_ticks(ax)
         ax.set_facecolor('k')
-    sb_loc = pltlib.best_scalebar_location(z1)
-    pltlib.add_scalebar(axa[0], ds_res[0], location=sb_loc)
+    sb_loc = pltlib.best_scalebar_location(gf.z1)
+    pltlib.add_scalebar(axa[0], gf.res[0], location=sb_loc)
     pltlib.add_cbar(axa[0], z1_im, label='Elevation (m WGS84)')
     pltlib.add_cbar(axa[1], z2_im, label='Elevation (m WGS84)')
     pltlib.add_cbar(axa[2], dz_im, label='dh/dt (m/yr)')
@@ -227,8 +238,8 @@ def map_plot(gf, out_z1_fn, out_z2_fn, z1, z2, z1_ela, z2_ela, z_bin_edges, z1_d
     plt.savefig(fig_fn, dpi=300)
     
 topdir='/nobackup/deshean'
-#site='conus'
-site='hma'
+site='conus'
+#site='hma'
 
 #This was for focused mb at specific sites
 #topdir='/Volumes/SHEAN_1TB_SSD/site_poly_highcount_rect3_rerun/rainier'
@@ -242,11 +253,11 @@ min_glac_area = 0.1 #km^2
 #Minimum percentage of glacier poly covered by valid dz
 min_valid_area_perc = 0.80
 #Write out DEMs and dz map
-writeout = False 
+writeout = True 
 #Generate figures
-mb_plot = False 
+mb_plot = True 
 #Only write out for larger glaciers
-min_glac_area_writeout = 2.0
+min_glac_area_writeout = 1.0
 #Run in parallel, set to False for serial loop
 parallel = True 
 #Number of parallel processes
@@ -261,9 +272,9 @@ setup['site'] = site
 """
 
 if site == 'conus':
+    mosdir = 'conus_20170901_mos'
+    outdir = os.path.join(topdir,'conus_combined/mos/%s/mb' % mosdir)
     #'+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
-    #outdir = os.path.join(topdir,'conus/dem2/conus_32611_8m/glac_poly_out')
-    outdir = os.path.join(topdir,'conus/dem2/glac_poly_out')
     aea_srs = geolib.conus_aea_srs
 
     #Glacier shp
@@ -287,6 +298,7 @@ if site == 'conus':
     penetration_corr = False
 
     z2_fn = os.path.join(topdir,'conus/dem2/conus_8m_tile_coreg_round3_summer2014-2016/conus_8m_tile_coreg_round3_summer2014-2016.vrt')
+    z2_fn = os.path.join(topdir,'conus_combined/mos/%s/mos_8m/%s_8m.vrt' % (mosdir, mosdir))
     z2_date = datetime(2015, 1, 1)
     z2_date = 2015.0
     #PRISM climate data, 800-m 
@@ -318,12 +330,9 @@ if site == 'conus':
     glacier_dict[9130] = 'LyellGlacier'
 
 elif site == 'hma':
-    #'+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
-    #outdir = os.path.join(topdir,'hma/hma1_2016dec22/glac_poly_out')
-    #outdir = os.path.join(topdir,'hma/hma_8m_mos_20170410/glac_poly_out')
     mosdir = 'hma_20170716_mos'
-    #outdir = os.path.join(topdir,'hma/mos/%s/mb' % mosdir)
-    outdir = os.path.join(topdir,'hma/mos/%s/mb_parallel' % mosdir)
+    outdir = os.path.join(topdir,'hma/mos/%s/mb' % mosdir)
+    #'+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
     aea_srs = geolib.hma_aea_srs
     glac_shp_fn = os.path.join(topdir,'data/rgi50/regions/rgi50_hma_aea.shp')
     glacfeat_fn = os.path.splitext(glac_shp_fn)[0]+'_glacfeat_list.p'
@@ -426,6 +435,7 @@ if os.path.exists(glacfeat_fn):
     glacfeat_list = pickle.load(open(glacfeat_fn,"rb"))
 else:
     glacfeat_list = []
+    print("Generating %s" % glacfeat_fn)
     for n, feat in enumerate(glac_shp_lyr):
         gf = GlacFeat(feat, glacname_fieldname, glacnum_fieldname)
         print("%i of %i: %s" % (n+1, feat_count, gf.feat_fn))
@@ -457,20 +467,20 @@ def mb_calc(gf, verbose=False):
         ds_list.extend(warplib.memwarp_multi_fn(prism_fn_list, res=ds_list[0], extent=gf.glac_geom_extent, t_srs=aea_srs, verbose=verbose))
 
     #Check to see if z2 is empty, as z1 should be continuous
-    z2 = iolib.ds_getma(ds_list[1])
-    if z2.count() == 0:
+    gf.z2 = iolib.ds_getma(ds_list[1])
+    if gf.z2.count() == 0:
         if verbose:
             print("No z2 pixels")
         return None
 
     glac_geom_mask = geolib.geom2mask(gf.glac_geom, ds_list[0])
-    z1 = np.ma.array(iolib.ds_getma(ds_list[0]), mask=glac_geom_mask)
+    gf.z1 = np.ma.array(iolib.ds_getma(ds_list[0]), mask=glac_geom_mask)
     #Apply penetration correction
     if penetration_corr:
-        z1 = srtm_corr(z1)
-    z2 = np.ma.array(z2, mask=glac_geom_mask)
-    dz = z2 - z1
-    if dz.count() == 0:
+        gf.z1 = srtm_corr(gf.z1)
+    gf.z2 = np.ma.array(gf.z2, mask=glac_geom_mask)
+    gf.dz = gf.z2 - gf.z1
+    if gf.dz.count() == 0:
         if verbose:
             print("No valid dz pixels")
         return None 
@@ -483,11 +493,11 @@ def mb_calc(gf, verbose=False):
     if filter_outliers:
         #bad_perc = (0.1, 99.9)
         bad_perc = (1, 99)
-        rangelim = malib.calcperc(dz, bad_perc)
-        dz = np.ma.masked_outside(dz, *rangelim)
+        rangelim = malib.calcperc(gf.dz, bad_perc)
+        gf.dz = np.ma.masked_outside(gf.dz, *rangelim)
 
-    ds_res = geolib.get_res(ds_list[0])
-    valid_area = dz.count()*ds_res[0]*ds_res[1]
+    gf.res = geolib.get_res(ds_list[0])
+    valid_area = gf.dz.count()*gf.res[0]*gf.res[1]
     valid_area_perc = valid_area/gf.glac_area
     if valid_area_perc < min_valid_area_perc:
         if verbose:
@@ -498,39 +508,39 @@ def mb_calc(gf, verbose=False):
     if site == 'conus':
         z1_date_r_ds = iolib.mem_drv.CreateCopy('', ds_list[0])
         gdal.RasterizeLayer(z1_date_r_ds, [1], z1_date_shp_lyr, options=["ATTRIBUTE=S_DATE_CLN"])
-        #z1_date = np.ma.array(iolib.ds_getma(z1_date_r_ds), mask=gf.glac_geom_mask)
+        z1_date = np.ma.array(iolib.ds_getma(z1_date_r_ds), mask=glac_geom_mask)
 
     #Filter dz - throw out abs differences >150 m
 
     #Compute dz, volume change, mass balance and stats
-    z1_stats = malib.get_stats(z1)
-    z2_stats = malib.get_stats(z2)
-    z2_elev_med = z2_stats[5]
-    z2_elev_p16 = z2_stats[11]
-    z2_elev_p84 = z2_stats[12]
+    gf.z1_stats = malib.get_stats(gf.z1)
+    gf.z2_stats = malib.get_stats(gf.z2)
+    z2_elev_med = gf.z2_stats[5]
+    z2_elev_p16 = gf.z2_stats[11]
+    z2_elev_p84 = gf.z2_stats[12]
 
     #These can be timestamp arrays or datetime objects
-    t1 = z1_date
-    t2 = z2_date
+    gf.t1 = z1_date
+    gf.t2 = z2_date
     #This is decimal years
-    dt = t2 - t1
-    if isinstance(dt, timedelta):
-        dt = dt.total_seconds()/timelib.spy
+    gf.dt = gf.t2 - gf.t1
+    if isinstance(gf.dt, timedelta):
+        gf.dt = gf.dt.total_seconds()/timelib.spy
     #m/yr
-    dhdt = dz/dt
+    gf.dhdt = gf.dz/gf.dt
     #dhdt_stats = malib.get_stats(dhdt)
     #dhdt_mean = dhdt_stats[3]
 
     #Output mean values for timestamp arrays
     if site == 'conus':
-        t1 = t1.mean()
-        dt = dt.mean()
+        gf.t1 = gf.t1.mean()
+        gf.dt = gf.dt.mean()
 
-    if isinstance(t1, datetime):
-        t1 = timelib.dt2decyear(t1)
+    if isinstance(gf.t1, datetime):
+        gf.t1 = timelib.dt2decyear(gf.t1)
 
-    if isinstance(t2, datetime):
-        t2 = timelib.dt2decyear(t2)
+    if isinstance(gf.t2, datetime):
+        gf.t2 = timelib.dt2decyear(gf.t2)
 
     rho_i = 0.91
     rho_s = 0.50
@@ -538,48 +548,53 @@ def mb_calc(gf, verbose=False):
     rho_is = 0.85
     #Can estimate ELA values computed from hypsometry and typical AAR
     #For now, assume ELA is mean
-    z1_ela = None
-    z1_ela = z1_stats[3]
-    z2_ela = z2_stats[3]
+    gf.z1_ela = None
+    gf.z1_ela = gf.z1_stats[3]
+    gf.z2_ela = gf.z2_stats[3]
     #Note: in theory, the ELA should get higher with mass loss
     #In practice, using mean and same polygon, ELA gets lower as glacier surface thins
     if verbose:
-        print("ELA(t1): %0.1f" % z1_ela)
-        print("ELA(t2): %0.1f" % z2_ela)
+        print("ELA(t1): %0.1f" % gf.z1_ela)
+        print("ELA(t2): %0.1f" % gf.z2_ela)
 
-    if z1_ela > z2_ela:
-        min_ela = z2_ela
-        max_ela = z1_ela
+    if gf.z1_ela > gf.z2_ela:
+        min_ela = gf.z2_ela
+        max_ela = gf.z1_ela
     else:
-        min_ela = z1_ela
-        max_ela = z2_ela
+        min_ela = gf.z1_ela
+        max_ela = gf.z2_ela
 
-    if z1_ela is None:
-        mb = dhdt * rho_is
+    gf.mb = gf.dhdt * rho_is
+
+    """
+    # This attempted to assign different densities above and below ELA
+    if gf.z1_ela is None:
+        gf.mb = gf.dhdt * rho_is
     else:
         #Initiate with average density
-        mb = dhdt*(rho_is + rho_f)/2.
+        gf.mb = gf.dhdt*(rho_is + rho_f)/2.
         #Everything that is above ELA at t2 is elevation change over firn, use firn density
-        accum_mask = (z2 > z2_ela).filled(0).astype(bool)
-        mb[accum_mask] = (dhdt*rho_f)[accum_mask]
+        accum_mask = (gf.z2 > gf.z2_ela).filled(0).astype(bool)
+        gf.mb[accum_mask] = (gf.dhdt*rho_f)[accum_mask]
         #Everything that is below ELA at t1 is elevation change over ice, use ice density
-        abl_mask = (z1 <= z1_ela).filled(0).astype(bool)
-        mb[abl_mask] = (dhdt*rho_is)[abl_mask]
+        abl_mask = (gf.z1 <= gf.z1_ela).filled(0).astype(bool)
+        gf.mb[abl_mask] = (gf.dhdt*rho_is)[abl_mask]
         #Everything in between, use average of ice and firn density
         #mb[(z1 > z1_ela) || (z2 <= z2_ela)] = dhdt*(rhois + rho_f)/2.
         #Linear ramp
         #rho_f + z2*((rho_is - rho_f)/(z2_ela - z1_ela))
         #mb = np.where(dhdt < ela, dhdt*rho_i, dhdt*rho_s)
+    """
 
     #Use this for winter balance
     #mb = dhdt * rho_s
 
-    mb_stats = malib.get_stats(mb)
-    mb_mean = mb_stats[3]
-    dmbdt_total_myr = mb_mean*gf.glac_area
-    mb_sum = np.sum(mb)*ds_res[0]*ds_res[1]
+    gf.mb_stats = malib.get_stats(gf.mb)
+    gf.mb_mean = gf.mb_stats[3]
+    dmbdt_total_myr = gf.mb_mean*gf.glac_area
+    mb_sum = np.sum(gf.mb)*gf.res[0]*gf.res[1]
 
-    outlist = [gf.glacnum, gf.cx, gf.cy, z2_elev_med, z2_elev_p16, z2_elev_p84, mb_mean, (gf.glac_area/1E6), t1, t2, dt]
+    outlist = [gf.glacnum, gf.cx, gf.cy, z2_elev_med, z2_elev_p16, z2_elev_p84, gf.mb_mean, (gf.glac_area/1E6), gf.t1, gf.t2, gf.dt]
 
     if site == 'conus':
         prism_ppt_annual = np.ma.array(iolib.ds_getma(ds_list[2]), mask=glac_geom_mask)/1000.
@@ -614,7 +629,7 @@ def mb_calc(gf, verbose=False):
         outlist.extend([prism_ppt_summer_mean, prism_ppt_winter_mean, prism_tmean_summer_mean, prism_tmean_winter_mean])
 
     if verbose:
-        print('Mean mb: %0.2f mwe/yr' % mb_mean)
+        print('Mean mb: %0.2f mwe/yr' % gf.mb_mean)
         print('Sum/Area mb: %0.2f mwe/yr' % (mb_sum/gf.glac_area))
         print('Mean mb * Area: %0.2f mwe/yr' % dmbdt_total_myr)
         print('Sum mb: %0.2f mwe/yr' % mb_sum)
@@ -626,16 +641,15 @@ def mb_calc(gf, verbose=False):
     #writer.writerow(outlist)
     #f.flush()
 
-    min_glac_area_writeout = 2.0
     if writeout and (gf.glac_area/1E6 > min_glac_area_writeout):
         out_dz_fn = os.path.join(outdir, gf.feat_fn+'_dz.tif')
-        iolib.writeGTiff(dz, out_dz_fn, ds_list[0])
+        iolib.writeGTiff(gf.dz, out_dz_fn, ds_list[0])
 
-        out_z1_fn = os.path.join(outdir, gf.feat_fn+'_z1.tif')
-        iolib.writeGTiff(z1, out_z1_fn, ds_list[0])
+        gf.out_z1_fn = os.path.join(outdir, gf.feat_fn+'_z1.tif')
+        iolib.writeGTiff(gf.z1, gf.out_z1_fn, ds_list[0])
 
-        out_z2_fn = os.path.join(outdir, gf.feat_fn+'_z2.tif')
-        iolib.writeGTiff(z2, out_z2_fn, ds_list[0])
+        gf.out_z2_fn = os.path.join(outdir, gf.feat_fn+'_z2.tif')
+        iolib.writeGTiff(gf.z2, gf.out_z2_fn, ds_list[0])
 
         if site == 'conus':
             out_z1_date_fn = os.path.join(outdir, gf.feat_fn+'_ned_date.tif')
@@ -664,14 +678,14 @@ def mb_calc(gf, verbose=False):
     #Error analysis assuming date is wrong by +/- 1-2 years
 
     if mb_plot and (gf.glac_area/1E6 > min_glac_area_writeout):
-        z_bin_edges = hist_plot(z1, z2, ds_res, dhdt, mb, gf, t1, t2, z1_ela, z2_ela, mb_mean, outdir)
-        map_plot(gf, out_z1_fn, out_z2_fn, z1, z2, z2_ela, z2_ela, z_bin_edges, z1_date, z2_date, dt, dhdt, ds_res, outdir)
+        #Now just pass gf to these functions
+        z_bin_edges = hist_plot(gf, outdir)
+        map_plot(gf, z_bin_edges, outdir)
 
     return outlist
 
-
 # For testing
-#glacfeat_list_in = glacfeat_list[0:60]
+#glacfeat_list_in = glacfeat_list[0:20]
 glacfeat_list_in = glacfeat_list
 
 if parallel:
