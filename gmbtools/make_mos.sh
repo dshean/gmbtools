@@ -8,8 +8,8 @@
 #Default is 2048
 ulimit -n 65536
 
-res=32
-#res=8
+#res=32
+res=8
 count=true
 index=true
 tileindex=true
@@ -23,11 +23,11 @@ tol=0.001
 
 ts=`date +%Y%m%d`
 
-site=hma
-proj='+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
+#site=hma
+#proj='+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
 
-#site=conus
-#proj='+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
+site=conus
+proj='+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
 
 out=mos/${site}_${ts}_mos/mos_${res}m/${site}_${ts}_mos_${res}m
 
@@ -36,6 +36,7 @@ echo "Identifying input DEMs"
 #list=$(ls */*/*00/dem*/*-DEM_${res}m.tif */*00/dem*/*-DEM_${res}m.tif)
 list=$(ls */stereo/*00/dem*/*-DEM_${res}m.tif */*00/dem*/*-DEM_${res}m.tif)
 #list=$(ls */*/*/dem*/*-DEM_8m_trans.tif | grep -v QB)
+list=$(ls *00/dem*/*-DEM_${res}m.tif)
 #parallel -j $threads "if [ ! -e {.}_aea.tif ] ; then gdalwarp -overwrite -r cubic -t_srs \"$proj\" -tr $res $res -dstnodata -9999 {} {.}_aea.tif; fi" ::: $list
 #list=$(echo $list | sed "s/DEM_${res}m.tif/DEM_${res}m_aea.tif/g")
 #list=$(ls */*/dem*/*-DEM_${res}m_aea.tif)
