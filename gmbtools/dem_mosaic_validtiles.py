@@ -98,8 +98,7 @@ def main():
         o = os.path.join(odir, o)
     if not os.path.exists(odir): 
         os.makedirs(odir)
-        cmd = ['lfs', 'setstripe', odir, '--count', str(threads)]
-        subprocess.call(cmd)
+    iolib.setstripe(odir, threads)
 
     #Compute extent geom for all input datsets
     print("Computing extent geom for all input datasets")

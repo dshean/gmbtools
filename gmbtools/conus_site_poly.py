@@ -23,6 +23,7 @@ import numpy as np
 from osgeo import gdal, ogr, osr
 
 from pygeotools.lib import malib
+from pygeotools.lib import iolib
 from pygeotools.lib import geolib
 from pygeotools.lib import timelib
 from pygeotools.lib import warplib
@@ -49,9 +50,13 @@ dem_shp_ds = ogr.Open(dem_shp_fn)
 dem_shp_lyr = dem_shp_ds.GetLayer()
 dem_shp_srs = dem_shp_lyr.GetSpatialRef()
 
+topdir='/nobackupp8/deshean/conus_combined'
+
 #outdir = os.path.splitext(shp_fn)[0]+'_stack'
 #outdir = 'range_poly'
-outdir = 'site_poly_highcount_rect3_rerun_olympics'
+#outdir = 'site_poly_highcount_rect3_rerun_olympics'
+outdir = 'sites'
+outdir = os.path.join(topdir, outdir)
 if not os.path.exists(outdir):
     os.makedirs(outdir)
 
@@ -76,7 +81,8 @@ mos_cmd_list = []
 std_cmd_list = []
 dz_cmd_list = []
 
-valid_sites = ['olympus', 'eel']
+#valid_sites = ['olympus', 'eel']
+valid_sites = ['rainier',]
 
 for n,site_feat in enumerate(site_shp_lyr):
     site_name = site_feat.GetFieldAsString(site_name_field) 
@@ -107,6 +113,7 @@ for n,site_feat in enumerate(site_shp_lyr):
 
     #This is xmin, xmax, ymin, ymax
     site_extent = geolib.geom_extent(site_geom)
+    site_extent_str = ' '.join(map(str, site_extent)) 
     
     print("Extent:", site_extent)
     print("Width/Height (km)", np.array(geolib.geom_wh(site_geom))/1000.)
@@ -135,19 +142,32 @@ for n,site_feat in enumerate(site_shp_lyr):
                 if igeom.Area() > min_area:
                     dem_fn_list.append(dem_name)
                 #Write out interseciton geom to new file
-        #dem_feat.Destroy()
 
     if dem_fn_list:
+        #Correct path
+        dem_fn_list = [os.path.join(topdir,dem_fn) for dem_fn in dem_fn_list]
+
         #Sort, assuming date is first key in file name
         dem_fn_list = sorted(dem_fn_list, key=lambda x: os.path.split(x)[-1])
         print(dem_fn_list)
 
         #Hack to use different DEM resolutions
         dem_ext = dem_fn_list[0].split('-')[-1]
-        dem_fn_list = [i.replace(dem_ext,'DEM_%im_trans.tif' % res) for i in dem_fn_list]
+
+        #Make sure we have the appropriate filename resolution (shp contains 32 m)
+        #dem_fn_list = [i.replace(dem_ext,'DEM_%im_trans.tif' % res) for i in dem_fn_list]
+        dem_fn_list = [i.replace(dem_ext,'DEM_%im.tif' % res) for i in dem_fn_list]
+
+        temp = []
+        print("\nChecking to make sure all %i input files exist" % len(dem_fn_list))
         for fn in dem_fn_list:
-            f.write(fn+'\n')
+            if iolib.fn_check(fn):
+                temp.append(fn)
+                f.write(fn+'\n')
+            else:
+                print("Unable to find %s" % fn)
         f = None
+        dem_fn_list = temp
 
         #print "Generating stack"
         #s = malib.DEMStack(fn_list=dem_fn_list, outdir=stackdir, res=res, extent=site_extent, srs=dst_srs, trend=True)
@@ -184,36 +204,50 @@ for n,site_feat in enumerate(site_shp_lyr):
             for y in validyears:
                 if (y, 'spring') in mos_fn_dict:
                     if (y, 'summer') in mos_fn_dict:
-                        dz_cmd_list.append(['compute_dz.py', mos_fn_dict[(y, 'spring')], mos_fn_dict[(y, 'summer')]])
+                        dz_fn = '%s_%s_dz_eul.tif' % (mos_fn_dict[(y, 'spring')], mos_fn_dict[(y, 'summer')])
+                        if not os.path.exists(dz_fn):
+                            dz_cmd_list.append(['compute_dz.py', mos_fn_dict[(y, 'spring')], mos_fn_dict[(y, 'summer')]])
                 if (y, 'summer') in mos_fn_dict:
                     if (y+1, 'spring') in mos_fn_dict:
-                        dz_cmd_list.append(['compute_dz.py', mos_fn_dict[(y, 'summer')], mos_fn_dict[(y+1, 'spring')]])
+                        dz_fn = '%s_%s_dz_eul.tif' % (mos_fn_dict[(y, 'summer')], mos_fn_dict[(y+1, 'spring')])
+                        if not os.path.exists(dz_fn):
+                            dz_cmd_list.append(['compute_dz.py', mos_fn_dict[(y, 'summer')], mos_fn_dict[(y+1, 'spring')]])
                 if (y, 'summer') in mos_fn_dict:
                     if (y+1, 'summer') in mos_fn_dict:
-                        dz_cmd_list.append(['compute_dz.py', mos_fn_dict[(y, 'summer')], mos_fn_dict[(y+1, 'summer')]])
+                        dz_fn = '%s_%s_dz_eul.tif' % (mos_fn_dict[(y, 'summer')], mos_fn_dict[(y+1, 'summer')])
+                        if not os.path.exists(dz_fn):
+                            dz_cmd_list.append(['compute_dz.py', mos_fn_dict[(y, 'summer')], mos_fn_dict[(y+1, 'summer')]])
                 if (y, 'spring') in mos_fn_dict:
                     if (y+1, 'spring') in mos_fn_dict:
-                        dz_cmd_list.append(['compute_dz.py', mos_fn_dict[(y, 'spring')], mos_fn_dict[(y+1, 'spring')]])
+                        dz_fn = '%s_%s_dz_eul.tif' % (mos_fn_dict[(y, 'spring')], mos_fn_dict[(y+1, 'spring')])
+                        if not os.path.exists(dz_fn):
+                            dz_cmd_list.append(['compute_dz.py', mos_fn_dict[(y, 'spring')], mos_fn_dict[(y+1, 'spring')]])
 
             #Make stack of all year/season products 
-            stack_cmd = ['make_stack.py', '--trend', '-outdir', os.path.join(stackdir, 'stack_all')]
+            stack_cmd = ['make_stack.py', '--trend', '--med', '-te', site_extent_str, '-outdir', os.path.join(stackdir, 'stack_all')]
             stack_cmd.extend(dem_fn_list)
             dz_cmd_list.append(stack_cmd)
+            mos_fn = os.path.join(stackdir, 'stack_all/%s_stack_all' % site_name)
+            cmd = geolib.get_dem_mosaic_cmd(dem_fn_list, mos_fn, tr=res, t_srs=dst_srs, t_projwin=site_extent, threads=8)
+            dz_cmd_list.append(cmd)
 
             #Make stack of all year/season products 
-            stack_cmd = ['make_stack.py', '--trend', '-outdir', os.path.join(stackdir, 'stack_seasonal_all')]
+            stack_cmd = ['make_stack.py', '--trend', '-te', site_extent_str, '-outdir', os.path.join(stackdir, 'stack_seasonal_all')]
             stack_fn_list = mos_fn_dict.values()
             stack_fn_list.sort()
             stack_cmd.extend(stack_fn_list)
             dz_cmd_list.append(stack_cmd)
 
             #Make stack of all year/summer products
-            stack_cmd = ['make_stack.py', '--trend', '-outdir', os.path.join(stackdir, 'stack_seasonal_summer')]
+            stack_cmd = ['make_stack.py', '--trend', '-te', site_extent_str, '-outdir', os.path.join(stackdir, 'stack_seasonal_summer')]
             stack_fn_list = [mos_fn_dict[k] for k in mos_fn_dict.keys() if 'summer' in k]
             if stack_fn_list:
                 stack_fn_list.sort()
                 stack_cmd.extend(stack_fn_list)
                 dz_cmd_list.append(stack_cmd)
+                mos_fn = os.path.join(stackdir, 'stack_seasonal_summer/%s_stack_seasonal_summer' % site_name)
+                cmd = geolib.get_dem_mosaic_cmd(stack_fn_list, mos_fn, tr=res, t_srs=dst_srs, t_projwin=site_extent, threads=8)
+                dz_cmd_list.append(cmd)
 
         """
                 #Compute seasonal balance each year, composites each spring and each summer, difference
@@ -234,10 +268,10 @@ for n,site_feat in enumerate(site_shp_lyr):
                 #Stats
         """
 
-    #site_feat.Destroy()
-
 from concurrent.futures import ThreadPoolExecutor
-threads = 8 
+#threads = 8 
+threads = iolib.cpu_count() 
+iolib.setstripe(outdir, threads)
 delay = 3.0
 outf = open(os.devnull, 'w')
 
