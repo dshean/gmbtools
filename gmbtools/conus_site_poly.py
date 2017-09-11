@@ -29,7 +29,7 @@ from pygeotools.lib import timelib
 from pygeotools.lib import warplib
 
 if len(sys.argv) != 3:
-    sys.exit('Usage is %s sitepoly.shp dempoly.shp' % sys.argv[0])
+    sys.exit('Usage is %s site_poly.shp dem_strip_poly.shp' % sys.argv[0])
 
 #This contains polygons defining study areas
 #Could also sort glacier polygons by area, then just use largest directly
@@ -179,6 +179,7 @@ for n,site_feat in enumerate(site_shp_lyr):
         summer_dict = timelib.dt_filter_rel_annual_idx(dem_dt_list, min_rel_dt=(8,1), max_rel_dt=(10,31))
         spring_dict = timelib.dt_filter_rel_annual_idx(dem_dt_list, min_rel_dt=(4,1), max_rel_dt=(6,15))
 
+        mosdir = os.path.join(stackdir, 'mos_seasonal')
         mos_fn_dict = {}
         for mos_prefix, dt_dict in (('spring', spring_dict), ('summer', summer_dict)):
             for year, dt_idx in dt_dict.iteritems():
@@ -187,7 +188,7 @@ for n,site_feat in enumerate(site_shp_lyr):
                 mos_dt_list = dem_dt_list[dt_idx]
                 mos_fn = '%s_%i_%s_n%i_%s-%s' % (site_name, year, mos_prefix, mos_fn_list.size, \
                         min(mos_dt_list).strftime('%Y%m%d'), max(mos_dt_list).strftime('%Y%m%d'))
-                mos_out_fn = os.path.join(stackdir, mos_fn) 
+                mos_out_fn = os.path.join(mosdir, mos_fn) 
                 print(mos_out_fn)
                 mos_fn_dict[(year, mos_prefix)] = mos_out_fn+'-tile-0.tif'
                 cmd = geolib.get_dem_mosaic_cmd(mos_fn_list, mos_out_fn, tr=res, t_srs=dst_srs, t_projwin=site_extent, threads=1)
@@ -206,22 +207,22 @@ for n,site_feat in enumerate(site_shp_lyr):
                     if (y, 'summer') in mos_fn_dict:
                         dz_fn = '%s_%s_dz_eul.tif' % (mos_fn_dict[(y, 'spring')], mos_fn_dict[(y, 'summer')])
                         if not os.path.exists(dz_fn):
-                            dz_cmd_list.append(['compute_dz.py', mos_fn_dict[(y, 'spring')], mos_fn_dict[(y, 'summer')]])
+                            dz_cmd_list.append(['compute_dz.py', '-outdir', os.path.join(stackdir, 'dz'), mos_fn_dict[(y, 'spring')], mos_fn_dict[(y, 'summer')]])
                 if (y, 'summer') in mos_fn_dict:
                     if (y+1, 'spring') in mos_fn_dict:
                         dz_fn = '%s_%s_dz_eul.tif' % (mos_fn_dict[(y, 'summer')], mos_fn_dict[(y+1, 'spring')])
                         if not os.path.exists(dz_fn):
-                            dz_cmd_list.append(['compute_dz.py', mos_fn_dict[(y, 'summer')], mos_fn_dict[(y+1, 'spring')]])
+                            dz_cmd_list.append(['compute_dz.py', '-outdir', os.path.join(stackdir, 'dz'), mos_fn_dict[(y, 'summer')], mos_fn_dict[(y+1, 'spring')]])
                 if (y, 'summer') in mos_fn_dict:
                     if (y+1, 'summer') in mos_fn_dict:
                         dz_fn = '%s_%s_dz_eul.tif' % (mos_fn_dict[(y, 'summer')], mos_fn_dict[(y+1, 'summer')])
                         if not os.path.exists(dz_fn):
-                            dz_cmd_list.append(['compute_dz.py', mos_fn_dict[(y, 'summer')], mos_fn_dict[(y+1, 'summer')]])
+                            dz_cmd_list.append(['compute_dz.py', '-outdir', os.path.join(stackdir, 'dz'), mos_fn_dict[(y, 'summer')], mos_fn_dict[(y+1, 'summer')]])
                 if (y, 'spring') in mos_fn_dict:
                     if (y+1, 'spring') in mos_fn_dict:
                         dz_fn = '%s_%s_dz_eul.tif' % (mos_fn_dict[(y, 'spring')], mos_fn_dict[(y+1, 'spring')])
                         if not os.path.exists(dz_fn):
-                            dz_cmd_list.append(['compute_dz.py', mos_fn_dict[(y, 'spring')], mos_fn_dict[(y+1, 'spring')]])
+                            dz_cmd_list.append(['compute_dz.py', '-outdir', os.path.join(stackdir, 'dz'), mos_fn_dict[(y, 'spring')], mos_fn_dict[(y+1, 'spring')]])
 
             #Make stack of all year/season products 
             stack_cmd = ['make_stack.py', '--trend', '--med', '-te', site_extent_str, '-outdir', os.path.join(stackdir, 'stack_all')]
