@@ -2,7 +2,7 @@
 
 #qsub -I -q devel -lselect=1:model=bro,walltime=2:00:00
 #cd /nobackup/deshean/hma
-#~/src/conus/conus/hma_mos.sh
+#make_mos.sh
 
 #Set open file limit
 #Default is 2048
