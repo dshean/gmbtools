@@ -12,16 +12,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import ImageGrid
 
-from pygeotools.lib import iolib, timelib, geolib
+from pygeotools.lib import iolib, timelib, geolib, malib
 from imview.lib import pltlib
 
 add_cbar = False
 
-site=sys.argv[1]
-
 #dem_fn_list = glob.glob('*32m.tif')
 #dem_ref_fn = 'rainier_allgood_mos-tile-0_warp.tif'
 dem_fn_list = sys.argv[1:]
+
+dems = np.ma.array([iolib.fn_getma(fn) for fn in dem_fn_list])
+dem_clim = malib.calcperc(dems, (2,98))
 
 w=10.0
 h=7.5
@@ -56,7 +57,7 @@ else:
 #GM
 #dem_clim = (1766, 3247)
 #SBB
-dem_clim = (2934, 3983)
+#dem_clim = (2934, 3983)
 hs_clim = (1, 255)
 
 for i,dem_fn in enumerate(dem_fn_list):
@@ -64,8 +65,9 @@ for i,dem_fn in enumerate(dem_fn_list):
     print(dem_fn)
     dem_ds = iolib.fn_getds(dem_fn)
     dem = iolib.ds_getma(dem_ds)
-    dem_hs_fn = os.path.splitext(dem_fn)[0]+'_hs_az315.tif'
-    dem_hs = iolib.fn_getma(dem_hs_fn)
+    #dem_hs_fn = os.path.splitext(dem_fn)[0]+'_hs_az315.tif'
+    #dem_hs = iolib.fn_getma(dem_hs_fn)
+    dem_hs = geolib.gdaldem_mem_ds(dem_ds, 'hillshade', returnma=True)
     dt = timelib.fn_getdatetime(dem_fn)
     if dt is not None:
         title = dt.strftime('%Y-%m-%d')
