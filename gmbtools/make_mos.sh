@@ -104,3 +104,10 @@ fi
 #Set permissions
 chmod -R 755 mos
 chmod 644 $out/*
+
+#Create symlink pointing to latest mosaic dir
+latest=mos/latest
+if [ -e $latest ] ; then
+    rm $latest
+fi
+ln -s ${site}_${ts}_mos $latest
