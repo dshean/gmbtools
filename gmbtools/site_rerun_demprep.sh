@@ -2,9 +2,13 @@
 
 #This script can be used to prepare a new basemap for a second iteration of high-quality DEM generation
 
+#This assumes output from conus_site_poly.py
 #dem=rainier_stack_all-tile-0.tif
+
 dem=$1
-ref_src=/nobackup/deshean/rpcdem/ned13/ned13_tiles_glac24k_115kmbuff.vrt 
+#ref_src=/nobackup/deshean/rpcdem/ned13/ned13_tiles_glac24k_115kmbuff.vrt 
+ref_src=/nobackup/deshean/hma/mos/latest/mos_8m/*mos_8m.vrt
+#ref_src=/nobackup/deshean/hma/mos/latest/mos_32m/*mos_32m.vrt
 
 #Prepare reference DEM
 ref_bn=$(basename $ref_src)
