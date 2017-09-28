@@ -1,5 +1,32 @@
 #! /bin/bash
 
+#On lfe - Khumbu rerun, 9/12/17
+
+#cd ~/hma
+#nbdir=/nobackupp8/deshean/hma/sites/khumbu/rerun
+#pushd $nbdir
+#pairlist=$(ls -d *00)
+#pushd
+#for pair in $pairlist; do echo $pair; p=$(find 2* -name $pair) ; shiftc -R $p $nbdir ; done
+#Crosstrack
+#pushd $nbdir/crosstrack
+#pairlist=$(ls -d *00)
+#for pair in $pairlist ; do id1=$(echo $pair | awk -F'_' '{print $3}') ; id2=$(echo $pair | awk -F'_' '{print $4}') ; echo $pair ; shiftc -R $id1.r100* $id2.r100* /nobackupp8/deshean/hma/sites/khumbu/rerun/crosstrack/$pair/ ; done
+
+#Create list of IDs to reprocess
+
+#This creates dir of links, avoids find, can just find pairname directly
+#ids=$(cat good_list_dem.txt  | awk -F'_' '{print $3}')
+#for id in $ids; do pair=$(ls -d /nobackupp8/deshean/conus_dir/*${id}* | awk -F'/' '{print $NF}'); echo $pair >> pairlist; done
+#shiftc -L -r -d --include 'r100.tif' --include 'r100.xml' $(cat pairlist | sed 's#^#/nobackup/deshean/conus_dir/#')
+
+#for i in $idlist
+#do
+#    i=$(find conus[1-5] -name "$id.r100.tif")
+#    #i=conus2/WV01_20151014_1020010043334500_1020010044474A00
+#    rsync -av --include='*/' --include='*r100*' --exclude='*' $i /nobackupp8/deshean/conus/scg_rerun/
+#done
+
 #Run on tpfe1 or `qsub -I -q devel -lselect=1:model=bro,walltime=2:00:00`
 #topdir=/nobackupp8/deshean/conus_combined
 topdir=/nobackupp8/deshean/hma
@@ -57,35 +84,4 @@ do
 
     #Generate new orthoimages
     #parallel --jobs 14 --delay 1 --verbose --progress 'ortho_proc.sh {}' ::: *00
-
-
-done
-
-
-exit
-
-#On lfe - Khumbu rerun, 9/12/17
-
-#cd ~/hma
-#pushd /nobackupp8/deshean/hma/sites/khumbu/rerun
-#pairlist=$(ls -d *00)
-#pushd
-#for pair in $pairlist; do echo $pair; p=$(find 2* -name $pair) ; shiftc -R $p /nobackupp8/deshean/hma/sites/khumbu/rerun/ ; done
-#Crosstrack
-#pushd /nobackupp8/deshean/hma/sites/khumbu/rerun/crosstrack
-#pairlist=$(ls -d *00)
-#for pair in $pairlist ; do id1=$(echo $pair | awk -F'_' '{print $3}') ; id2=$(echo $pair | awk -F'_' '{print $4}') ; echo $pair ; shiftc -R $id1.r100* $id2.r100* /nobackupp8/deshean/hma/sites/khumbu/rerun/crosstrack/$pair/ ; done
-
-#Create list of IDs to reprocess
-
-#This creates dir of links, avoids find, can just find pairname directly
-#ids=$(cat good_list_dem.txt  | awk -F'_' '{print $3}')
-#for id in $ids; do pair=$(ls -d /nobackupp8/deshean/conus_dir/*${id}* | awk -F'/' '{print $NF}'); echo $pair >> pairlist; done
-#shiftc -L -r -d --include 'r100.tif' --include 'r100.xml' $(cat pairlist | sed 's#^#/nobackup/deshean/conus_dir/#')
-
-for i in $idlist
-do
-    i=$(find conus[1-5] -name "$id.r100.tif")
-    #i=conus2/WV01_20151014_1020010043334500_1020010044474A00
-    rsync -av --include='*/' --include='*r100*' --exclude='*' $i /nobackupp8/deshean/conus/scg_rerun/
 done
