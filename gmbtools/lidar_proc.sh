@@ -23,22 +23,24 @@ dem_geoid --reverse-adjustment ${in%.*}_unitmeters.tif
 #This tif should be fine for comparison with other datasets, could also reproject to something more desirable
 echo ${in%.*}_unitmeters-adj.tif
 
-i=${in%.*}_unitmeters-adj
+i=${in%.*}_unitmeters-adj.tif
 
-if [ ! -e ${i}_32610_1m.tif ] ; then
-    gdalwarp -tr 1 1 $gdal_opt -t_srs EPSG:32610 -r cubic -dstnodata -9999 $i ${i}_32610_1m.tif
+#Note: make sure that nodata value is properly set before running 
+
+if [ ! -e ${i%.*}_32610_1m.tif ] ; then
+    gdalwarp -tr 1 1 $gdal_opt -t_srs EPSG:32610 -r cubic -dstnodata -9999 $i ${i%.*}_32610_1m.tif
 fi
 
-if [ ! -e ${i}_32610_1m.tif.ovr ] ; then 
-    ~/src/demtools/gdaladdo_ro.sh ${i}_32610_1m.tif
+if [ ! -e ${i%.*}_32610_1m.tif.ovr ] ; then 
+    ~/src/demtools/gdaladdo_ro.sh ${i%.*}_32610_1m.tif
 fi
 
-if [ ! -e ${i}_32610_32m.tif ] ; then 
-    gdalwarp -overwrite -tr 32 32 -r cubic $gdal_opt ${i}_32610_1m.tif ${i}_32610_32m.tif
+if [ ! -e ${i%.*}_32610_32m.tif ] ; then 
+    gdalwarp -overwrite -tr 32 32 -r cubic $gdal_opt ${i%.*}_32610_1m.tif ${i%.*}_32610_32m.tif
 fi
 
-if [ ! -e ${i}_32610_32m_hs_az315.tif ] ; then 
-    hs.sh ${i}_32610_32m.tif
+if [ ! -e ${i%.*}_32610_32m_hs_az315.tif ] ; then 
+    hs.sh ${i%.*}_32610_32m.tif
 fi
 
 #ned=/Volumes/d/ned/NED_2003_1arcsec/ned1_2003_adj.vrt
