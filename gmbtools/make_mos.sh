@@ -1,5 +1,7 @@
 #! /bin/bash 
 
+set -e
+
 #qsub -I -q devel -lselect=1:model=bro,walltime=2:00:00
 #cd /nobackup/deshean/hma
 #make_mos.sh
@@ -11,8 +13,14 @@ ulimit -n 65536
 #res=32
 res=8
 count=true
-index=true
-tileindex=true
+stddev=true
+last=false
+first=false
+index=false
+tileindex=false
+
+summer=false
+trans=true
 
 ncpu=$(cat /proc/cpuinfo | egrep "core id|physical id" | tr -d "\n" | sed s/physical/\\nphysical/g | grep -v ^$ | sort | uniq | wc -l)
 threads=$((ncpu-1))
@@ -23,20 +31,39 @@ tol=0.001
 
 ts=`date +%Y%m%d`
 
+#Hardcoded site and projection
 #site=hma
 #proj='+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
-
 site=conus
 proj='+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
 
-out=mos/${site}_${ts}_mos/mos_${res}m/${site}_${ts}_mos_${res}m
-
 #Should add option to split annually
 echo "Identifying input DEMs"
-#list=$(ls */*/*00/dem*/*-DEM_${res}m.tif */*00/dem*/*-DEM_${res}m.tif)
-list=$(ls */stereo/*00/dem*/*-DEM_${res}m.tif */*00/dem*/*-DEM_${res}m.tif)
-#list=$(ls */*/*/dem*/*-DEM_8m_trans.tif | grep -v QB)
-list=$(ls *00/dem*/*-DEM_${res}m.tif)
+if $summer ; then
+    if $trans ; then
+        list=$(ls *00/dem*/20[012][0-9][01][06789][0-9][0-9]*-DEM_${res}m_trans.tif)
+        out=mos/${site}_${ts}_mos/summer/mos_${res}m_trans/${site}_${ts}_mos_${res}m_trans
+    else
+        list=$(ls *00/dem*/20[012][0-9][01][06789][0-9][0-9]*-DEM_${res}m.tif)
+        out=mos/${site}_${ts}_mos/summer/mos_${res}m/${site}_${ts}_mos_${res}m
+    fi
+else
+    #NOTE: Need to update sort key with increased path depths
+    #list=$(ls */*/*00/dem*/*-DEM_${res}m.tif */*00/dem*/*-DEM_${res}m.tif)
+    #list=$(ls */stereo/*00/dem*/*-DEM_${res}m.tif */*00/dem*/*-DEM_${res}m.tif)
+    #list=$(ls */*/*/dem*/*-DEM_8m_trans.tif | grep -v QB)
+    if $trans ; then
+        list=$(ls *00/dem*/*-DEM_${res}m_trans.tif)
+        out=mos/${site}_${ts}_mos/all/mos_${res}m_trans/${site}_${ts}_mos_${res}m_trans
+    else
+        list=$(ls *00/dem*/*-DEM_${res}m.tif)
+        out=mos/${site}_${ts}_mos/all/mos_${res}m/${site}_${ts}_mos_${res}m
+    fi
+fi
+
+#Sort by date
+list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 3)
+
 #parallel -j $threads "if [ ! -e {.}_aea.tif ] ; then gdalwarp -overwrite -r cubic -t_srs \"$proj\" -tr $res $res -dstnodata -9999 {} {.}_aea.tif; fi" ::: $list
 #list=$(echo $list | sed "s/DEM_${res}m.tif/DEM_${res}m_aea.tif/g")
 #list=$(ls */*/dem*/*-DEM_${res}m_aea.tif)
@@ -75,12 +102,49 @@ if (( "$res" == "32" )) ; then
             gdaladdo_ro.sh ${out}_count_${lowres}m.tif
         fi
     fi
+    if $stddev; then
+        if [ ! -e ${out}_stddev.vrt ] ; then
+            echo "Preparing stddev map"
+            $mos --stat stddev --threads $threads --tr $res --t_srs "$proj" --georef_tile_size=$tilesize -o $out $list
+        fi
+        if [ ! -e ${out}_stddev_${lowres}m.tif ] ; then
+            echo "Preparing lowres $lowres m stddev map"
+            gdalwarp -tr $lowres $lowres $gdal_opt ${out}_stddev.vrt ${out}_stddev_${lowres}m.tif
+            gdaladdo_ro.sh ${out}_stddev_${lowres}m.tif
+        fi
+    fi
+    if $last ; then
+        if [ ! -e ${out}_last.vrt ] ; then
+            echo "Preparing last timestamp mosaic"
+            $mos --stat last --threads $threads --tr $res --t_srs "$proj" --georef_tile_size=$tilesize -o $out $list
+        fi
+        if [ ! -e ${out}_last_${lowres}m.tif ] ; then
+            echo "Preparing lowres $lowres m lastmap"
+            gdalwarp -tr $lowres $lowres $gdal_opt ${out}_last.vrt ${out}_last_${lowres}m.tif
+            gdaladdo_ro.sh ${out}_last_${lowres}m.tif
+        fi
+    fi
+    if $first ; then
+        if [ ! -e ${out}_first.vrt ] ; then
+            echo "Preparing first timestamp mosaic"
+            $mos --stat first --threads $threads --tr $res --t_srs "$proj" --georef_tile_size=$tilesize -o $out $list
+        fi
+        if [ ! -e ${out}_first_${lowres}m.tif ] ; then
+            echo "Preparing lowres $lowres m firstmap"
+            gdalwarp -tr $lowres $lowres $gdal_opt ${out}_first.vrt ${out}_first_${lowres}m.tif
+            gdaladdo_ro.sh ${out}_first_${lowres}m.tif
+        fi
+    fi
     if $index ; then
         if [ ! -e ${out}_stripindex.shp ] ; then
+            echo "Generating strip index shp"
+            #This exports bounding boxes, but doesn't show actual footprint of valid pixels
+            #gdaltindex -t_srs "$proj" ${out}_stripindex.shp $list
             parallel -j $threads "if [ ! -e {.}_${lowres}m.tif ] ; then gdalwarp -overwrite -r cubic -t_srs \"$proj\" -tr $lowres $lowres -dstnodata -9999 {} {.}_${lowres}m.tif; fi" ::: $list
             raster2shp.py -merge_fn ${out}_stripindex.shp $(echo $list | sed "s/DEM_${res}m.tif/DEM_${res}m_${lowres}m.tif/g") 
-            echo "Removing intermediate files"
-            eval rm $(echo $list | sed "s/DEM_${res}m.tif/DEM_${res}m_${lowres}m.{shp,shx,dbf,prj,tif}/")
+            #This needs more careful testing, currently deletes source files!
+            #echo "Removing intermediate files"
+            #eval rm $(echo $list | sed "s/DEM_${res}m.tif/DEM_${res}m_${lowres}m.{shp,shx,dbf,prj,tif}/g")
             ogr2ogr -simplify $tol ${out}_stripindex_simp.shp ${out}_stripindex.shp
             rm ${out}_stripindex.{shp,dbf,prj,shx}
             if [ ! -e ${out}_stripindex_simp.kml ] ; then 
@@ -90,11 +154,13 @@ if (( "$res" == "32" )) ; then
     fi
     #This is a hack for now, should add this functionality to dem_mosaic_validtiles.py
     if $tileindex ; then 
+        echo "Generating tile index shp"
+        #gdaltindex ${out}_tileindex.shp $(gdalinfo $out.vrt | grep tif)
         raster2shp.py -merge_fn ${out}_tileindex.shp $(gdalinfo $out.vrt | grep tif)
         ogr2ogr -simplify $tol ${out}_tileindex_simp.shp ${out}_tileindex.shp
         echo "Removing intermediate files"
         rm ${out}_tileindex.{shp,dbf,prj,shx}
-        eval rm $(gdalinfo $out.vrt | grep tif | sed 's/tif/{shp,dbf,prj,shx}/')
+        eval rm $(gdalinfo $out.vrt | grep tif | sed 's/tif/{shp,dbf,prj,shx}/g')
         if [ ! -e ${out}_tileindex_simp.kml ] ; then 
             ogr2ogr -f KML ${out}_tileindex_simp.kml ${out}_tileindex_simp.shp
         fi
@@ -103,7 +169,7 @@ fi
 
 #Set permissions
 chmod -R 755 mos
-chmod 644 $out/*
+chmod 644 ${out}*
 
 #Create symlink pointing to latest mosaic dir
 latest=mos/latest
