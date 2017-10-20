@@ -5,6 +5,8 @@ Compute dh/dt and mass balance for input DEMs and glacier polygons
 
 """
 Todo:
+Curves for PRISM T an precip vs. mb
+Filling using dz/dt obs
 Add date fields to mb curve output
 Write z1, z2, dz, stats etc to GlacFeat object
 Export polygons with mb numbers as geojson, spatialite, shp?
@@ -65,8 +67,8 @@ class GlacFeat:
         else:
             self.feat_fn = str(self.glacnum)
 
-        self.glac_geom = geolib.geom_dup(feat.GetGeometryRef())
-        #self.glac_geom.AssignSpatialReference(glac_shp_srs)
+        self.glac_geom_orig = geolib.geom_dup(feat.GetGeometryRef())
+        self.glac_geom = geolib.geom_dup(self.glac_geom_orig)
 
         #Attributes written by mb_calc
         self.z1 = None
@@ -87,7 +89,13 @@ class GlacFeat:
         self.t2 = None
         self.dt = None
 
-    def geom_attributes(self):
+    def geom_attributes(self, srs=None):
+        if srs is not None:
+            #Should reproject here to equal area, before geom_attributes
+            #self.glac_geom.AssignSpatialReference(glac_shp_srs)
+            #self.glac_geom_local = geolib.geom2localortho(self.glac_geom)
+            geolib.geom_transform(self.glac_geom, srs)
+
         self.glac_geom_extent = geolib.geom_extent(self.glac_geom)
         self.glac_area = self.glac_geom.GetArea()
         self.cx, self.cy = self.glac_geom.Centroid().GetPoint_2D()
@@ -264,6 +272,8 @@ mb_plot = True
 min_glac_area_writeout = 1.0
 #Run in parallel, set to False for serial loop
 parallel = True 
+#Verbose for debugging
+verbose = False 
 #Number of parallel processes
 nproc = iolib.cpu_count() - 1
 #This stores collection of feature geometries, independent of shapefile
@@ -276,20 +286,20 @@ setup['site'] = site
 """
 
 if site == 'conus':
-    mosdir = 'conus_20170901_mos'
-    outdir = os.path.join(topdir,'conus_combined/mos/%s/mb' % mosdir)
-    #'+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
-    aea_srs = geolib.conus_aea_srs
-
     #Glacier shp
+    #glac_shp_fn = os.path.join(topdir,'data/rgi60/regions/rgi60_merge.shp')
     #ogr2ogr -t_srs '+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs ' 24k_selection_aea.shp 24k_selection_32610.shp
     #glac_shp_fn = '/nobackupp8/deshean/conus/shp/24k_selection_aea.shp'
     #This has already been filtered by area
-    glac_shp_fn = os.path.join(topdir,'conus/shp/24k_selection_aea_min0.1km2.shp')
+    #Note: SQL queries don't like the layer name with numbers and periods
+    #glac_shp_fn = os.path.join(topdir,'conus/shp/24k_selection_aea_min0.1km2.shp')
+    #glac_shp_fn = os.path.join(topdir,'data/rgi60/regions/rgi60_merge_CONUS.geojson')
+    #glac_shp_fn = os.path.join(topdir,'data/rgi60/regions/rgi60_merge_CONUS.shp')
+    glac_shp_fn = os.path.join(topdir,'data/rgi60/regions/rgi60_merge_CONUS_aea.shp')
     #This stores collection of feature geometries, independent of shapefile
     glacfeat_fn = os.path.splitext(glac_shp_fn)[0]+'_glacfeat_list.p'
 
-    #Raster difference map between NED and WV mosaic
+    #First DEM source
     z1_fn = os.path.join(topdir,'rpcdem/ned1_2003/ned1_2003_adj.vrt')
     #NED 2003 dates
     z1_date_shp_fn = os.path.join(topdir,'rpcdem/ned1_2003/meta0306_PAL_24k_10kmbuffer_clean_dissolve_aea.shp')
@@ -298,13 +308,28 @@ if site == 'conus':
     z1_date_shp_lyr = z1_date_shp_ds.GetLayer()
     z1_date_shp_srs = z1_date_shp_lyr.GetSpatialRef()
     z1_date_shp_lyr.ResetReading()
+    z1_sigma = 4.0
 
-    penetration_corr = False
+    srtm_penetration_corr = False
 
-    z2_fn = os.path.join(topdir,'conus/dem2/conus_8m_tile_coreg_round3_summer2014-2016/conus_8m_tile_coreg_round3_summer2014-2016.vrt')
-    z2_fn = os.path.join(topdir,'conus_combined/mos/%s/mos_8m/%s_8m.vrt' % (mosdir, mosdir))
+    #Second DEM source (WV mosaic)
+    mosdir = 'conus_combined/mos/conus_20171018_mos/all/mos_8m_trans'
+    #mosdir = 'conus_combined/mos/conus_20171017_mos/summer/mos_8m_trans'
+    #z2_fn = os.path.join(topdir,'conus/dem2/conus_8m_tile_coreg_round3_summer2014-2016/conus_8m_tile_coreg_round3_summer2014-2016.vrt')
+    #z2_fn = os.path.join(topdir,'conus_combined/mos/%s/mos_8m/%s_8m.vrt' % (mosdir, mosdir))
+    #z2_fn = os.path.join(topdir, mosdir+'/conus_20171018_mos_8m_trans.vrt')
+    z2_fn = os.path.join(topdir, mosdir+'/conus_20171017_mos_8m.vrt')
     z2_date = datetime(2015, 1, 1)
     z2_date = 2015.0
+    z2_sigma = 1.0
+
+    #Output directory
+    outdir = os.path.join(topdir,'%s/mb' % mosdir)
+
+    #Output projection
+    #'+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
+    aea_srs = geolib.conus_aea_srs
+
     #PRISM climate data, 800-m 
     prism_ppt_annual_fn = os.path.join(topdir,'conus/prism/normals/annual/ppt/PRISM_ppt_30yr_normal_800mM2_annual_bil.bil')
     prism_tmean_annual_fn = os.path.join(topdir,'conus/prism/normals/annual/tmean/PRISM_tmean_30yr_normal_800mM2_annual_bil.bil')
@@ -313,7 +338,7 @@ if site == 'conus':
     prism_tmean_summer_fn = os.path.join(topdir,'conus/prism/normals/monthly/PRISM_tmean_30yr_normal_800mM2_06-09_summer_mean.tif')
     prism_tmean_winter_fn = os.path.join(topdir,'conus/prism/normals/monthly/PRISM_tmean_30yr_normal_800mM2_10-05_winter_mean.tif')
 
-    #Noisy Creek, Silver
+    #Define priority glaciers 
     glacier_dict = {}
     glacier_dict[6012] = 'EmmonsGlacier'
     glacier_dict[6096] = 'Nisqually-WilsonGlacier'
@@ -334,19 +359,22 @@ if site == 'conus':
     glacier_dict[9130] = 'LyellGlacier'
 
 elif site == 'hma':
-    mosdir = 'hma_20170716_mos'
-    outdir = os.path.join(topdir,'hma/mos/%s/mb' % mosdir)
-    #'+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
-    aea_srs = geolib.hma_aea_srs
-    glac_shp_fn = os.path.join(topdir,'data/rgi50/regions/rgi50_hma_aea.shp')
+    #glac_shp_fn = os.path.join(topdir,'data/rgi50/regions/rgi50_hma_aea.shp')
+    #glac_shp_fn = os.path.join(topdir,'data/rgi60/regions/rgi60_merge_HMA.geojson')
+    glac_shp_fn = os.path.join(topdir,'data/rgi60/regions/rgi60_merge_HMA_aea.shp')
     glacfeat_fn = os.path.splitext(glac_shp_fn)[0]+'_glacfeat_list.p'
+
+    #First DEM source
     #SRTM
     z1_fn = os.path.join(topdir,'rpcdem/hma/srtm1/hma_srtm_gl1.vrt')
     #z1_date = timelib.dt2decyear(datetime(2000,2,11))
     z1_date = datetime(2000,2,11)
+    z1_sigma = 4.0
 
-    penetration_corr = True
+    srtm_penetration_corr = True
 
+    mosdir = 'hma_20170716_mos'
+    #Second DEM Source (WV mosaic)
     #z2_fn = '/nobackup/deshean/hma/hma1_2016dec22/hma_8m_tile/hma_8m.vrt'
     #z2_fn = os.path.join(topdir,'hma/hma1_2016dec22/hma_8m_tile/hma_8m.vrt')
     #z2_fn = os.path.join(topdir,'hma/hma1_2016dec22/hma_8m_tile_round2_20170220/hma_8m_round2.vrt')
@@ -354,12 +382,23 @@ elif site == 'hma':
     z2_fn = os.path.join(topdir,'hma/mos/%s/mos_8m/%s_8m.vrt' % (mosdir, mosdir))
     #z2_date = 2015.0
     z2_date = datetime(2015, 1, 1)
+    z2_sigma = 1.0
+
+    #Output directory
+    outdir = os.path.join(topdir,'hma/mos/%s/mb' % mosdir)
+
+    #Output projection
+    #'+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
+    aea_srs = geolib.hma_aea_srs
+
 elif site == 'other':
     outdir = os.path.join(topdir,'mb')
     aea_srs = geolib.conus_aea_srs
+    #Can specify custom subset of glacier polygons
     #glac_shp_fn = '/Users/dshean/data/conus_glacierpoly_24k/rainier_24k_1970-2015_mb_aea.shp'
     #glac_shp_fn = '/Users/dshean/data/conus_glacierpoly_24k/conus_glacierpoly_24k_aea.shp'
-    glac_shp_fn = '/Users/dshean/data/conus_glacierpoly_24k/conus_glacierpoly_24k_32610_scg_2008_aea.shp'
+    #glac_shp_fn = '/Users/dshean/data/conus_glacierpoly_24k/conus_glacierpoly_24k_32610_scg_2008_aea.shp'
+    glac_shp_fn = os.path.join(topdir,'data/rgi60/regions/rgi60_merge.shp')
     z1_fn = sys.argv[1]
     z1_date = timelib.mean_date(timelib.fn_getdatetime_list(z1_fn))
     z2_fn = sys.argv[2]
@@ -388,7 +427,7 @@ elif 'rgi' in glac_shp_fn:
     glacname_fieldname = "Name"
     #RGIId (String) = RGI50-01.00004
     glacnum_fieldname = "RGIId"
-    glacnum_fmt = '%0.5f'
+    glacnum_fmt = '%08.5f'
 else:
     sys.exit('Unrecognized glacier shp filename')
 
@@ -406,7 +445,7 @@ dz_int_geom = geolib.ds_geom_intersection([z1_ds, z2_ds], t_srs=glac_shp_srs)
 #Spatial filter
 glac_shp_lyr.SetSpatialFilter(dz_int_geom)
 feat_count = glac_shp_lyr.GetFeatureCount()
-print("Spatial filter glacier polygon count: %i" % feat_count)
+print("Glacier polygon count after spatial filter: %i" % feat_count)
 glac_shp_lyr.ResetReading()
 
 #Area filter
@@ -424,16 +463,7 @@ if not os.path.exists(outdir):
 cmd = ['lfs', 'setstripe', '-c', str(nproc), outdir]
 subprocess.call(cmd)
 
-#Create polygon for valid pixels in DEM mosaics
-#Intersect with each glacier polygon, only preserve those with 80% overlap
-#Go through shp, extract feat name/number and geom, create dict
-#Multiprocessing for valid
-
-#Update or create new shp with values appended
-#out_glac_shp_fn = os.path.join(outdir, os.path.splitext(glac_shp_fn)[0]+'_mb.shp')
-#field_defn = ogr.FieldDefn("mb_mwe", ogr.OFTReal)
-#glac_shp_lyr.CreateField(field_defn)
-
+#Create a list of glacfeat objects (contains geom) - safe for multiprocessing, while OGR layer is not
 if os.path.exists(glacfeat_fn):
     print("Loading %s" % glacfeat_fn)
     glacfeat_list = pickle.load(open(glacfeat_fn,"rb"))
@@ -443,19 +473,23 @@ else:
     for n, feat in enumerate(glac_shp_lyr):
         gf = GlacFeat(feat, glacname_fieldname, glacnum_fieldname)
         print("%i of %i: %s" % (n+1, feat_count, gf.feat_fn))
+        #Calculate area, extent, centroid
+        #NOTE: Input must be in projected coordinate system, ideally equal area
+        #Should check this and reproject
+        gf.geom_attributes(srs=aea_srs)
         glacfeat_list.append(gf)
     pickle.dump(glacfeat_list, open(glacfeat_fn,"wb"))
 
 glac_shp_lyr = None
 glac_shp_ds = None
 
-def mb_calc(gf, verbose=False):
+def mb_calc(gf, verbose=verbose):
     #print("\n%i of %i: %s\n" % (n+1, len(glacfeat_list), gf.feat_fn))
-    #Calculate area, extent, centroid
-    gf.geom_attributes()
 
     #This should already be handled by earlier attribute filter, but RGI area could be wrong
-    if gf.glac_area/1E6 < min_glac_area:
+    #24k shp has area in m^2, RGI in km^2
+    #if gf.glac_area/1E6 < min_glac_area:
+    if gf.glac_area < min_glac_area:
         if verbose:
             print("Glacier area below %0.1f km2 threshold" % min_glac_area)
         return None
@@ -479,8 +513,8 @@ def mb_calc(gf, verbose=False):
 
     glac_geom_mask = geolib.geom2mask(gf.glac_geom, ds_list[0])
     gf.z1 = np.ma.array(iolib.ds_getma(ds_list[0]), mask=glac_geom_mask)
-    #Apply penetration correction
-    if penetration_corr:
+    #Apply SRTM penetration correction
+    if srtm_penetration_corr:
         gf.z1 = srtm_corr(gf.z1)
     gf.z2 = np.ma.array(gf.z2, mask=glac_geom_mask)
     gf.dz = gf.z2 - gf.z1
@@ -495,8 +529,8 @@ def mb_calc(gf, verbose=False):
     filter_outliers = True 
     #Remove clearly bogus pixels
     if filter_outliers:
-        #bad_perc = (0.1, 99.9)
-        bad_perc = (1, 99)
+        bad_perc = (0.1, 99.9)
+        #bad_perc = (1, 99)
         rangelim = malib.calcperc(gf.dz, bad_perc)
         gf.dz = np.ma.masked_outside(gf.dz, *rangelim)
 
@@ -608,7 +642,20 @@ def mb_calc(gf, verbose=False):
     dmbdt_total_myr = gf.mb_mean*gf.glac_area
     mb_sum = np.sum(gf.mb)*gf.res[0]*gf.res[1]
 
-    outlist = [gf.glacnum, gf.cx, gf.cy, z2_elev_med, z2_elev_p16, z2_elev_p84, gf.mb_mean, (gf.glac_area/1E6), gf.t1, gf.t2, gf.dt]
+    rho_sigma = 0.03
+    dz_sigma = np.sqrt(z1_sigma**2 + z2_sigma**2)
+    dhdt_sigma = dz_sigma/gf.dt
+
+    #This is an uncertainty map
+    gf.mb_sigma = np.ma.abs(gf.mb) * np.sqrt((rho_sigma/rho_is)**2 + (dhdt_sigma/gf.dhdt)**2)
+    gf.mb_sigma_stats = malib.get_stats(gf.mb_sigma)
+    #This is average uncertainty
+    gf.mb_sigma_mean = gf.mb_sigma_stats[3]
+
+    area_sigma_perc = 0.09 
+
+    outlist = [gf.glacnum, gf.cx, gf.cy, z2_elev_med, z2_elev_p16, z2_elev_p84, z2_slope_med, z2_aspect_med, \
+            gf.mb_mean, gf.mb_sigma_mean, (gf.glac_area/1E6), gf.t1, gf.t2, gf.dt]
 
     if site == 'conus':
         prism_ppt_annual = np.ma.array(iolib.ds_getma(ds_list[2]), mask=glac_geom_mask)/1000.
@@ -702,11 +749,12 @@ def mb_calc(gf, verbose=False):
         z_bin_edges = hist_plot(gf, outdir)
         map_plot(gf, z_bin_edges, outdir)
 
-    return outlist
+    return outlist, gf
 
 # For testing
 #glacfeat_list_in = glacfeat_list[0:20]
 glacfeat_list_in = glacfeat_list
+glacfeat_list_out = []
 
 if parallel:
     print("Running in parallel")
@@ -751,8 +799,12 @@ else:
         print('%i of %i: %s' % (n, len(glacfeat_list_in), gf.feat_fn))
         out.append(mb_calc(gf))
 
-#Remove any None entries
-out = np.array([i for i in out if i is not None], dtype=float)
+mb_list = []
+for i in out:
+    if i is not None:
+        mb_list.append(i[0])
+        glacfeat_list_out.append(i[1])
+out = np.array(mb_list, dtype=float)
 
 #Sort by area
 out = out[out[:,3].argsort()[::-1]]
@@ -766,13 +818,16 @@ out_fmt = [glacnum_fmt,] + ['%0.2f'] * (out.shape[1] - 1)
 
 np.savetxt(out_fn, out, fmt=out_fmt, delimiter=',', header=out_header, comments='')
 
-#Write out new shp with features containing stats
+#Now join with geopandas
 
-#Join field is: 
-#'RGI50-'+tostring("glacnum")
+"""
+#out_rgiid = ['RGI60-%08.5f' % i for i in out[:,0]]
 
-#One shp preserves input features, regardless of source date
-#Another shp splits glacier poly based on NED source date
+#Write out the populated glacfeat objects (contain raster grids, stats, etc)
+#Should compress with gzip module
+#glacfeat_fn_out = os.path.splitext(glacfeat_fn)[0]+'_out.p'
+#pickle.dump(glacfeat_list_out, open(glacfeat_fn_out,"wb"))
 
 #Transfer maps, figs, etc for largest glaciers
 #scpput $(ls $(ls -Sr *dz.tif | tail -n 20 | awk -F'_dz' '{print $1}' | sed 's/$/*png/')) /tmp/hma_png
+"""
