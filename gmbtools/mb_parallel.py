@@ -75,6 +75,10 @@ class GlacFeat:
         self.z2 = None
         self.z2_stats = None
         self.z2_ela = None
+        self.z2_aspect = None
+        self.z2_aspect_stats = None
+        self.z2_slope = None
+        self.z2_slope_stats = None
         self.res = None
         self.dhdt = None
         self.mb = None
@@ -519,6 +523,15 @@ def mb_calc(gf, verbose=False):
     z2_elev_p16 = gf.z2_stats[11]
     z2_elev_p84 = gf.z2_stats[12]
 
+    #Caluclate stats for aspect and slope using z2
+    #Requires GDAL 2.1+
+    gf.z2_aspect = np.ma.array(geolib.gdaldem_mem_ds(ds_list[1], processing='aspect', returnma=True), mask=glac_geom_mask)
+    gf.z2_aspect_stats = malib.get_stats(gf.z2_aspect)
+    z2_aspect_med = gf.z2_aspect_stats[5]
+    gf.z2_slope = np.ma.array(geolib.gdaldem_mem_ds(ds_list[1], processing='slope', returnma=True), mask=glac_geom_mask)
+    gf.z2_slope_stats = malib.get_stats(gf.z2_slope)
+    z2_slope_med = gf.z2_slope_stats[5]
+
     #These can be timestamp arrays or datetime objects
     gf.t1 = z1_date
     gf.t2 = z2_date
@@ -528,8 +541,9 @@ def mb_calc(gf, verbose=False):
         gf.dt = gf.dt.total_seconds()/timelib.spy
     #m/yr
     gf.dhdt = gf.dz/gf.dt
-    #dhdt_stats = malib.get_stats(dhdt)
-    #dhdt_mean = dhdt_stats[3]
+    gf.dhdt_stats = malib.get_stats(gf.dhdt)
+    dhdt_mean = gf.dhdt_stats[3]
+    dhdt_med = gf.dhdt_stats[5]
 
     #Output mean values for timestamp arrays
     if site == 'conus':
@@ -651,6 +665,12 @@ def mb_calc(gf, verbose=False):
         gf.out_z2_fn = os.path.join(outdir, gf.feat_fn+'_z2.tif')
         iolib.writeGTiff(gf.z2, gf.out_z2_fn, ds_list[0])
 
+        temp_fn = os.path.join(outdir, gf.feat_fn+'_z2_aspect.tif')
+        iolib.writeGTiff(gf.z2_aspect, temp_fn, ds_list[0])
+
+        temp_fn = os.path.join(outdir, gf.feat_fn+'_z2_slope.tif')
+        iolib.writeGTiff(gf.z2_slope, temp_fn, ds_list[0])
+
         if site == 'conus':
             out_z1_date_fn = os.path.join(outdir, gf.feat_fn+'_ned_date.tif')
             iolib.writeGTiff(z1_date, out_z1_date_fn, ds_list[0])
@@ -737,14 +757,14 @@ out = np.array([i for i in out if i is not None], dtype=float)
 #Sort by area
 out = out[out[:,3].argsort()[::-1]]
 
-out_header = 'glacnum,x,y,z_med,z_p16,z_p84,mb_mwea,area_km2,t1,t2,dt'
+out_header = '%s,x,y,z_med,z_p16,z_p84,z_slope,z_aspect,mb_mwea,mb_sigma_mwea,area_km2,t1,t2,dt' % glacnum_fieldname
 if site == 'conus':
     out_header += ',ppt_a,tmean_a'
     out_header += ',ppt_s,ppt_w,tmean_s,tmean_w'
 
 out_fmt = [glacnum_fmt,] + ['%0.2f'] * (out.shape[1] - 1)
 
-np.savetxt(out_fn, out, fmt=out_fmt, delimiter=',', header=out_header)
+np.savetxt(out_fn, out, fmt=out_fmt, delimiter=',', header=out_header, comments='')
 
 #Write out new shp with features containing stats
 
