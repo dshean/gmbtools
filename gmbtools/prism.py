@@ -37,3 +37,7 @@ tmean_winter = malib.DEMStack(monthly_tmean_fn[winter_idx], stack_fn=monthly_tme
 #Use 800 m normals to scale 4 km resolution to each glacier
 #Compute PDD
 #Function to adjust DEM surface
+
+#Plot for rainier
+#dem=/nobackupp8/deshean/conus_combined/sites/rainier/rerun/dem_coreg/stack_good/rainier_stack_all-tile-0.tif
+#warptool.py -outdir ${dem%.*}_prism -te $dem -tr source -t_srs $dem annual/*/*annual_bil.bil monthly/*cum.tif monthly/*mean.tif
