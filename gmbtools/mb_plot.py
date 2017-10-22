@@ -4,10 +4,6 @@
 Generate plots for regional glacier mass balance
 """
 
-#Clean up filenames with bad characters
-#for i in *tif; do mv $i $(echo $i | sed -e 's/[^A-Za-z0-9._-]/_/g'); done
-#cat hma_mb_20170222_0021.csv | awk -F',' '{($1=$1/100000); printf "RGI50-%0.5f, %0.2f, %0.2f, %0.2f, %0.2f\n", $1, $2, $3, $4, $7}' > hma_mb_20170222_0021_fmt.csv
-
 import os
 import sys
 from datetime import datetime
@@ -178,11 +174,11 @@ ts = datetime.now().strftime('%Y%m%d_%H%M')
 
 if site == 'conus':
     aea_srs = geolib.conus_aea_srs
-    title = "CONUS Long-term Glacier Mass Balance (~1950s-1980s to ~2015)"
+    title = "CONUS Long-term Glacier Mass Balance (~1950s-1980s to 2015)"
     sf = 16
 elif site == 'hma':
     aea_srs = geolib.hma_aea_srs
-    title = "HMA ~15-year Glacier Mass Balance (2000 to ~2015)"
+    title = "HMA ~15-year Glacier Mass Balance (2000 to 2015)"
     sf = 2 
 
 #Compute lat, lon
