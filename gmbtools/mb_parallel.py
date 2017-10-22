@@ -5,6 +5,7 @@ Compute dh/dt and mass balance for input DEMs and glacier polygons
 
 """
 Todo:
+Fix z1_date and z2_date writeout - populate arrays
 Curves for PRISM T an precip vs. mb
 Filling using dz/dt obs
 Add date fields to mb curve output
@@ -72,9 +73,11 @@ class GlacFeat:
 
         #Attributes written by mb_calc
         self.z1 = None
+        self.z1_hs = None
         self.z1_stats = None
         self.z1_ela = None
         self.z2 = None
+        self.z2_hs = None
         self.z2_stats = None
         self.z2_ela = None
         self.z2_aspect = None
@@ -205,15 +208,16 @@ def hist_plot(gf, outdir, bin_width=10.0):
     plt.savefig(fig_fn, dpi=300)
     return z_bin_edges
 
-def map_plot(gf, z_bin_edges, outdir):
+def map_plot(gf, z_bin_edges, outdir, hs=True):
     #print("Generating map plot")
     f,axa = plt.subplots(1,3, figsize=(10,7.5))
     f.suptitle(gf.feat_fn)
     alpha = 1.0
-    hs = True
     if hs:
-        z1_hs = geolib.gdaldem_wrapper(gf.out_z1_fn, product='hs', returnma=True, verbose=False)
-        z2_hs = geolib.gdaldem_wrapper(gf.out_z2_fn, product='hs', returnma=True, verbose=False)
+        #z1_hs = geolib.gdaldem_wrapper(gf.out_z1_fn, product='hs', returnma=True, verbose=False)
+        #z2_hs = geolib.gdaldem_wrapper(gf.out_z2_fn, product='hs', returnma=True, verbose=False)
+        z1_hs = gf.z1_hs
+        z2_hs = gf.z2_hs
         hs_clim = malib.calcperc(z2_hs, (2,98))
         z1_hs_im = axa[0].imshow(z1_hs, cmap='gray', vmin=hs_clim[0], vmax=hs_clim[1])
         z2_hs_im = axa[1].imshow(z2_hs, cmap='gray', vmin=hs_clim[0], vmax=hs_clim[1])
@@ -224,8 +228,8 @@ def map_plot(gf, z_bin_edges, outdir):
     axa[1].contour(gf.z2, [gf.z2_ela,], linewidths=0.5, linestyles=':', colors='w')
     #t1_title = int(np.round(gf.t1))
     #t2_title = int(np.round(gf.t2))
-    t1_title = int(gf.t1)
-    t2_title = int(gf.t2)
+    t1_title = '%0.2f' % gf.t1
+    t2_title = '%0.2f' % gf.t2
     #t1_title = gf.t1.strftime('%Y-%m-%d')
     #t2_title = gf.t2.strftime('%Y-%m-%d')
     axa[0].set_title(t1_title)
@@ -248,6 +252,17 @@ def map_plot(gf, z_bin_edges, outdir):
     #print("Saving map plot")
     fig_fn = os.path.join(outdir, gf.feat_fn+'_mb_map.png')
     plt.savefig(fig_fn, dpi=300)
+
+def get_date_a(ds, date_shp_lyr, glac_geom_mask, datefield):
+    date_r_ds = iolib.mem_drv.CreateCopy('', ds)
+    #Shapefile order should be sorted by time, but might want to think about sorting here
+    #Can automatically search for datefield
+    gdal.RasterizeLayer(date_r_ds, [1], date_shp_lyr, options=["ATTRIBUTE=%s" % datefield])
+    date_a = np.ma.array(iolib.ds_getma(date_r_ds), mask=glac_geom_mask)
+    #Note: NED dates are in integer years, assume source imagery was flown in late summer for mountains
+    if datefield == 'S_DATE_CLN':
+        date_a += 0.75
+    return date_a
     
 topdir='/nobackup/deshean'
 site='conus'
@@ -266,10 +281,10 @@ min_glac_area = 0.1 #km^2
 min_valid_area_perc = 0.80
 #Write out DEMs and dz map
 writeout = True 
-#Generate figures
-mb_plot = True 
 #Only write out for larger glaciers
 min_glac_area_writeout = 1.0
+#Generate figures
+mb_plot = True 
 #Run in parallel, set to False for serial loop
 parallel = True 
 #Verbose for debugging
@@ -285,6 +300,11 @@ setup = {}
 setup['site'] = site
 """
 
+global z1_date
+global z2_date
+z1_date = None
+z2_date = None 
+
 if site == 'conus':
     #Glacier shp
     #glac_shp_fn = os.path.join(topdir,'data/rgi60/regions/rgi60_merge.shp')
@@ -299,7 +319,6 @@ if site == 'conus':
     #This stores collection of feature geometries, independent of shapefile
     glacfeat_fn = os.path.splitext(glac_shp_fn)[0]+'_glacfeat_list.p'
 
-    #First DEM source
     z1_fn = os.path.join(topdir,'rpcdem/ned1_2003/ned1_2003_adj.vrt')
     #NED 2003 dates
     z1_date_shp_fn = os.path.join(topdir,'rpcdem/ned1_2003/meta0306_PAL_24k_10kmbuffer_clean_dissolve_aea.shp')
@@ -308,27 +327,57 @@ if site == 'conus':
     z1_date_shp_lyr = z1_date_shp_ds.GetLayer()
     z1_date_shp_srs = z1_date_shp_lyr.GetSpatialRef()
     z1_date_shp_lyr.ResetReading()
-    z1_sigma = 4.0
-
-    srtm_penetration_corr = False
+    z1_datefield = "S_DATE_CLN" 
+    #From Gesch et al (2014), LE90 is 4.0, std is 2.4 m
+    z1_sigma = 2.4
+    
+    """
+    mosdir = '/nobackup/deshean/conus_combined/mos/mos_2007-2010'
+    z1_fn = os.path.join(mosdir, 'mos_2007-2010_8m.vrt')
+    z1_date_shp_fn = os.path.join(mosdir, 'mos_2007-2010_stripindex_simp.shp')
+    z1_date_shp_ds = ogr.Open(z1_date_shp_fn)
+    z1_date_shp_lyr = z1_date_shp_ds.GetLayer()
+    z1_date_shp_srs = z1_date_shp_lyr.GetSpatialRef()
+    z1_date_shp_lyr.ResetReading()
+    z1_datefield = "decyear"
+    z1_sigma = 1.0
+    """
+    
+    """
+    mosdir = '/nobackup/deshean/conus_combined/mos/mos_2007-2010'
+    z2_fn = os.path.join(mosdir, 'mos_2007-2010_8m.vrt')
+    z2_date_shp_fn = os.path.join(mosdir, 'mos_2007-2010_stripindex_simp.shp')
+    z2_date_shp_ds = ogr.Open(z2_date_shp_fn)
+    z2_date_shp_lyr = z2_date_shp_ds.GetLayer()
+    z2_date_shp_srs = z2_date_shp_lyr.GetSpatialRef()
+    z2_date_shp_lyr.ResetReading()
+    z2_datefield = "decyear"
+    z2_sigma = 1.0
+    """
 
     #Second DEM source (WV mosaic)
-    mosdir = 'conus_combined/mos/conus_20171018_mos/all/mos_8m_trans'
-    #mosdir = 'conus_combined/mos/conus_20171017_mos/summer/mos_8m_trans'
-    #z2_fn = os.path.join(topdir,'conus/dem2/conus_8m_tile_coreg_round3_summer2014-2016/conus_8m_tile_coreg_round3_summer2014-2016.vrt')
-    #z2_fn = os.path.join(topdir,'conus_combined/mos/%s/mos_8m/%s_8m.vrt' % (mosdir, mosdir))
-    #z2_fn = os.path.join(topdir, mosdir+'/conus_20171018_mos_8m_trans.vrt')
-    z2_fn = os.path.join(topdir, mosdir+'/conus_20171017_mos_8m.vrt')
-    z2_date = datetime(2015, 1, 1)
-    z2_date = 2015.0
+    mosdir = '/nobackup/deshean/conus_combined/mos/conus_20171021_mos'
+    #z2_fn = os.path.join(mosdir, 'conus_mos_8m_summmer.vrt')
+    z2_fn = os.path.join(mosdir, 'conus_mos_8m_all.vrt')
+    #This should be Aug-Oct, so assume center timestamp of mid-Sept
+    #z2_date = datetime(2015, 9, 15)
+    z2_date = 2015.704
     z2_sigma = 1.0
 
     #Output directory
-    outdir = os.path.join(topdir,'%s/mb' % mosdir)
+    #outdir = os.path.join(topdir,'%s/mb' % mosdir)
+    #outdir = '/nobackup/deshean/conus_combined/mos/conus_20171021_mos/mb/NED_to_2007-2010'
+    #outdir = os.path.join(mosdir, 'mb/2007-2010_to_WV')
+    outdir = os.path.join(mosdir, 'mb/NED_to_WV')
 
     #Output projection
     #'+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
     aea_srs = geolib.conus_aea_srs
+
+    #Only write out for larger glaciers
+    min_glac_area_writeout = 1.0
+
+    srtm_penetration_corr = False
 
     #PRISM climate data, 800-m 
     prism_ppt_annual_fn = os.path.join(topdir,'conus/prism/normals/annual/ppt/PRISM_ppt_30yr_normal_800mM2_annual_bil.bil')
@@ -368,7 +417,8 @@ elif site == 'hma':
     #SRTM
     z1_fn = os.path.join(topdir,'rpcdem/hma/srtm1/hma_srtm_gl1.vrt')
     #z1_date = timelib.dt2decyear(datetime(2000,2,11))
-    z1_date = datetime(2000,2,11)
+    #z1_date = datetime(2000,2,11)
+    z1_date = 2000.112
     z1_sigma = 4.0
 
     srtm_penetration_corr = True
@@ -380,8 +430,8 @@ elif site == 'hma':
     #z2_fn = os.path.join(topdir,'hma/hma1_2016dec22/hma_8m_tile_round2_20170220/hma_8m_round2.vrt')
     #z2_fn = os.path.join(topdir,'hma/hma_8m_mos_20170410/hma_8m.vrt')
     z2_fn = os.path.join(topdir,'hma/mos/%s/mos_8m/%s_8m.vrt' % (mosdir, mosdir))
-    #z2_date = 2015.0
-    z2_date = datetime(2015, 1, 1)
+    #z2_date = datetime(2015, 1, 1)
+    z2_date = 2015.0
     z2_sigma = 1.0
 
     #Output directory
@@ -390,6 +440,9 @@ elif site == 'hma':
     #Output projection
     #'+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
     aea_srs = geolib.hma_aea_srs
+
+    #Only write out for larger glaciers
+    min_glac_area_writeout = 10.0
 
 elif site == 'other':
     outdir = os.path.join(topdir,'mb')
@@ -483,7 +536,7 @@ else:
 glac_shp_lyr = None
 glac_shp_ds = None
 
-def mb_calc(gf, verbose=verbose):
+def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
     #print("\n%i of %i: %s\n" % (n+1, len(glacfeat_list), gf.feat_fn))
 
     #This should already be handled by earlier attribute filter, but RGI area could be wrong
@@ -542,12 +595,6 @@ def mb_calc(gf, verbose=verbose):
             print("Not enough valid pixels. %0.1f%% percent of glacier polygon area" % (100*valid_area_perc))
         return None
 
-    #Rasterize NED source dates
-    if site == 'conus':
-        z1_date_r_ds = iolib.mem_drv.CreateCopy('', ds_list[0])
-        gdal.RasterizeLayer(z1_date_r_ds, [1], z1_date_shp_lyr, options=["ATTRIBUTE=S_DATE_CLN"])
-        z1_date = np.ma.array(iolib.ds_getma(z1_date_r_ds), mask=glac_geom_mask)
-
     #Filter dz - throw out abs differences >150 m
 
     #Compute dz, volume change, mass balance and stats
@@ -566,23 +613,20 @@ def mb_calc(gf, verbose=verbose):
     gf.z2_slope_stats = malib.get_stats(gf.z2_slope)
     z2_slope_med = gf.z2_slope_stats[5]
 
-    #These can be timestamp arrays or datetime objects
-    gf.t1 = z1_date
-    gf.t2 = z2_date
-    #This is decimal years
-    gf.dt = gf.t2 - gf.t1
-    if isinstance(gf.dt, timedelta):
-        gf.dt = gf.dt.total_seconds()/timelib.spy
-    #m/yr
-    gf.dhdt = gf.dz/gf.dt
-    gf.dhdt_stats = malib.get_stats(gf.dhdt)
-    dhdt_mean = gf.dhdt_stats[3]
-    dhdt_med = gf.dhdt_stats[5]
+    #Rasterize source dates
+    if z1_date is None:
+        z1_date = get_date_a(ds_list[0], z1_date_shp_lyr, glac_geom_mask, z1_datefield) 
+        gf.t1 = z1_date.mean()
+    else:
+        gf.t1 = z1_date
 
-    #Output mean values for timestamp arrays
-    if site == 'conus':
-        gf.t1 = gf.t1.mean()
-        gf.dt = gf.dt.mean()
+    if z2_date is None:
+        z2_date = get_date_a(ds_list[0], z2_date_shp_lyr, glac_geom_mask, z2_datefield) 
+        #Attempt to use YYYYMMDD string
+        #z2_dta = np.datetime64(z2_date.astype("S8").tolist())
+        gf.t2 = z2_date.mean()
+    else:
+        gf.t2 = z2_date
 
     if isinstance(gf.t1, datetime):
         gf.t1 = timelib.dt2decyear(gf.t1)
@@ -590,10 +634,30 @@ def mb_calc(gf, verbose=verbose):
     if isinstance(gf.t2, datetime):
         gf.t2 = timelib.dt2decyear(gf.t2)
 
+    gf.t1 = float(gf.t1)
+    gf.t2 = float(gf.t2)
+
+    #Calculate dt grids
+    #gf.dt = z2_date - z1_date
+    #gf.dt = gf.dt.mean()
+    #This should be decimal years
+    gf.dt = gf.t2 - gf.t1
+    #if isinstance(gf.dt, timedelta):
+    #    gf.dt = gf.dt.total_seconds()/timelib.spy
+    #Calculate dh/dt, in m/yr
+    gf.dhdt = gf.dz/gf.dt
+    gf.dhdt_stats = malib.get_stats(gf.dhdt)
+    dhdt_mean = gf.dhdt_stats[3]
+    dhdt_med = gf.dhdt_stats[5]
+
     rho_i = 0.91
     rho_s = 0.50
     rho_f = 0.60
+
+    #This is recommendation by Huss et al (2013)
     rho_is = 0.85
+    rho_sigma = 0.06
+
     #Can estimate ELA values computed from hypsometry and typical AAR
     #For now, assume ELA is mean
     gf.z1_ela = None
@@ -612,6 +676,7 @@ def mb_calc(gf, verbose=verbose):
         min_ela = gf.z1_ela
         max_ela = gf.z2_ela
 
+    #Calculate mass balance map from dhdt
     gf.mb = gf.dhdt * rho_is
 
     """
@@ -639,23 +704,31 @@ def mb_calc(gf, verbose=verbose):
 
     gf.mb_stats = malib.get_stats(gf.mb)
     gf.mb_mean = gf.mb_stats[3]
-    dmbdt_total_myr = gf.mb_mean*gf.glac_area
-    mb_sum = np.sum(gf.mb)*gf.res[0]*gf.res[1]
 
-    rho_sigma = 0.03
+    #Calculate uncertainty of total elevation change
+    #TODO: Better spatial distribution characterization
+    #Add slope-dependent component here
     dz_sigma = np.sqrt(z1_sigma**2 + z2_sigma**2)
+    #Uncrtainty of dh/dt
     dhdt_sigma = dz_sigma/gf.dt
 
-    #This is an uncertainty map
+    #This is mb uncertainty map
     gf.mb_sigma = np.ma.abs(gf.mb) * np.sqrt((rho_sigma/rho_is)**2 + (dhdt_sigma/gf.dhdt)**2)
     gf.mb_sigma_stats = malib.get_stats(gf.mb_sigma)
-    #This is average uncertainty
-    gf.mb_sigma_mean = gf.mb_sigma_stats[3]
+    #This is average mb uncertainty
+    gf.mb_mean_sigma = gf.mb_sigma_stats[3]
 
+    #Now calculate mb for entire polygon
     area_sigma_perc = 0.09 
+    gf.mb_mean_totalarea = gf.mb_mean * gf.glac_area
+    #Already have area uncertainty as percentage, just use directly
+    gf.mb_mean_totalarea_sigma = np.ma.abs(gf.mb_mean_totalarea) * np.sqrt((gf.mb_mean_sigma/gf.mb_mean)**2 + area_sigma_perc**2)
+
+    mb_sum = np.sum(gf.mb)*gf.res[0]*gf.res[1]
 
     outlist = [gf.glacnum, gf.cx, gf.cy, z2_elev_med, z2_elev_p16, z2_elev_p84, z2_slope_med, z2_aspect_med, \
-            gf.mb_mean, gf.mb_sigma_mean, (gf.glac_area/1E6), gf.t1, gf.t2, gf.dt]
+            gf.mb_mean, gf.mb_mean_sigma, gf.glac_area, gf.mb_mean_totalarea, gf.mb_mean_totalarea_sigma, \
+            gf.t1, gf.t2, gf.dt]
 
     if site == 'conus':
         prism_ppt_annual = np.ma.array(iolib.ds_getma(ds_list[2]), mask=glac_geom_mask)/1000.
@@ -690,9 +763,9 @@ def mb_calc(gf, verbose=verbose):
         outlist.extend([prism_ppt_summer_mean, prism_ppt_winter_mean, prism_tmean_summer_mean, prism_tmean_winter_mean])
 
     if verbose:
-        print('Mean mb: %0.2f mwe/yr' % gf.mb_mean)
+        print('Mean mb: %0.2f +/- %0.2f mwe/yr' % (gf.mb_mean, gf.mb_mean_sigma))
         print('Sum/Area mb: %0.2f mwe/yr' % (mb_sum/gf.glac_area))
-        print('Mean mb * Area: %0.2f mwe/yr' % dmbdt_total_myr)
+        print('Mean mb * Area: %0.2f +/- %0.2f mwe/yr' % (gf.mb_mean_totalarea, gf.mb_mean_totalarea_sigma))
         print('Sum mb: %0.2f mwe/yr' % mb_sum)
         #print('-------------------------------')
 
@@ -706,11 +779,11 @@ def mb_calc(gf, verbose=verbose):
         out_dz_fn = os.path.join(outdir, gf.feat_fn+'_dz.tif')
         iolib.writeGTiff(gf.dz, out_dz_fn, ds_list[0])
 
-        gf.out_z1_fn = os.path.join(outdir, gf.feat_fn+'_z1.tif')
-        iolib.writeGTiff(gf.z1, gf.out_z1_fn, ds_list[0])
+        out_z1_fn = os.path.join(outdir, gf.feat_fn+'_z1.tif')
+        iolib.writeGTiff(gf.z1, out_z1_fn, ds_list[0])
 
-        gf.out_z2_fn = os.path.join(outdir, gf.feat_fn+'_z2.tif')
-        iolib.writeGTiff(gf.z2, gf.out_z2_fn, ds_list[0])
+        out_z2_fn = os.path.join(outdir, gf.feat_fn+'_z2.tif')
+        iolib.writeGTiff(gf.z2, out_z2_fn, ds_list[0])
 
         temp_fn = os.path.join(outdir, gf.feat_fn+'_z2_aspect.tif')
         iolib.writeGTiff(gf.z2_aspect, temp_fn, ds_list[0])
@@ -718,10 +791,11 @@ def mb_calc(gf, verbose=verbose):
         temp_fn = os.path.join(outdir, gf.feat_fn+'_z2_slope.tif')
         iolib.writeGTiff(gf.z2_slope, temp_fn, ds_list[0])
 
-        if site == 'conus':
-            out_z1_date_fn = os.path.join(outdir, gf.feat_fn+'_ned_date.tif')
-            iolib.writeGTiff(z1_date, out_z1_date_fn, ds_list[0])
+        #Need to fix this - write out constant date arrays regardless of source
+        #out_z1_date_fn = os.path.join(outdir, gf.feat_fn+'_ned_date.tif')
+        #iolib.writeGTiff(z1_date, out_z1_date_fn, ds_list[0])
 
+        if site == 'conus':
             out_prism_ppt_annual_fn = os.path.join(outdir, gf.feat_fn+'_precip_annual.tif')
             iolib.writeGTiff(prism_ppt_annual, out_prism_ppt_annual_fn, ds_list[0])
             out_prism_tmean_annual_fn = os.path.join(outdir, gf.feat_fn+'_tmean_annual.tif')
@@ -739,14 +813,12 @@ def mb_calc(gf, verbose=verbose):
 
     #Do AED for all
     #Compute mb using scaled AED vs. polygon
-    #Extract slope and aspect numbers for polygon
     #Check for valid pixel count vs. feature area, fill if appropriate
 
-    #Error analysis assuming date is wrong by +/- 1-2 years
-
     if mb_plot and (gf.glac_area/1E6 > min_glac_area_writeout):
-        #Now just pass gf to these functions
         z_bin_edges = hist_plot(gf, outdir)
+        gf.z1_hs = geolib.gdaldem_mem_ds(ds_list[0], processing='hillshade', returnma=True)
+        gf.z2_hs = geolib.gdaldem_mem_ds(ds_list[1], processing='hillshade', returnma=True)
         map_plot(gf, z_bin_edges, outdir)
 
     return outlist, gf
@@ -809,12 +881,12 @@ out = np.array(mb_list, dtype=float)
 #Sort by area
 out = out[out[:,3].argsort()[::-1]]
 
-out_header = '%s,x,y,z_med,z_p16,z_p84,z_slope,z_aspect,mb_mwea,mb_sigma_mwea,area_km2,t1,t2,dt' % glacnum_fieldname
+out_header = '%s,x,y,z_med,z_p16,z_p84,z_slope,z_aspect,mb_mwea,mb_mwea_sigma,area_m2,mb_m3wea,mb_m3wea_sigma,t1,t2,dt' % glacnum_fieldname
 if site == 'conus':
     out_header += ',ppt_a,tmean_a'
     out_header += ',ppt_s,ppt_w,tmean_s,tmean_w'
 
-out_fmt = [glacnum_fmt,] + ['%0.2f'] * (out.shape[1] - 1)
+out_fmt = [glacnum_fmt,] + ['%0.3f'] * (out.shape[1] - 1)
 
 np.savetxt(out_fn, out, fmt=out_fmt, delimiter=',', header=out_header, comments='')
 
