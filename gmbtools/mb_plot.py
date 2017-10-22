@@ -172,7 +172,6 @@ a = recfunctions.append_fields(a, 'northness', np.cos(np.radians(a['z_aspect']))
 
 #This script was tuned for km2
 a['area_m2'] /= 1E6
->>>>>>> mb_plot: update for area_m2
 
 ts = datetime.now().strftime('%Y%m%d_%H%M')
 
@@ -247,8 +246,8 @@ if False:
 
 if True:
     f, ax = plt.subplots()
-    #ax = scplot(a['ppt_a'], a['tmean_a'], a['mb_mwea'], a['area_km2'], sf=sf, ax=ax, clim=(vmin, vmax))
-    ax = scplot_fields(a, 'northness', 'z_slope', 'mb_mwea', 'area_km2', sf=sf, ax=ax, clim=(vmin, vmax))
+    #ax = scplot(a['ppt_a'], a['tmean_a'], a['mb_mwea'], a['area_m2'], sf=sf, ax=ax, clim=(vmin, vmax))
+    ax = scplot_fields(a, 'northness', 'z_slope', 'mb_mwea', 'area_m2', sf=sf, ax=ax, clim=(vmin, vmax))
     ax.set_title(title)
     #ax.set_xlabel('Mean Aspect (deg)')
     ax.set_xlabel('Northness (cos of mean aspect)')
