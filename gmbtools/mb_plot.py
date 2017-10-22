@@ -146,7 +146,7 @@ def mapplot(a, field, srs, sf=16, ax=None):
         vmax = a[field].max()
         lw = 0.0
     print sf
-    sc = m.scatter(x, y, c=a[field], cmap=cmap, s=a['area_km2']*sf, \
+    sc = m.scatter(x, y, c=a[field], cmap=cmap, s=a['area_m2']*sf, \
             edgecolor='k', lw=lw, vmin=vmin, vmax=vmax)
     #ax.set(adjustable='box-forced', aspect='equal')
     #ax.set_facecolor('0.5')
@@ -166,9 +166,13 @@ elif 'hma' in csv_fn:
 #Load into structured array
 a = np.genfromtxt(csv_fn, delimiter=',', dtype=None, names=True)
 #Sort by area
-a = np.sort(a, order='area_km2')[::-1]
+a = np.sort(a, order='area_m2')[::-1]
 #Comput northness
 a = recfunctions.append_fields(a, 'northness', np.cos(np.radians(a['z_aspect'])), dtypes=None, usemask=False)
+
+#This script was tuned for km2
+a['area_m2'] /= 1E6
+>>>>>>> mb_plot: update for area_m2
 
 ts = datetime.now().strftime('%Y%m%d_%H%M')
 
@@ -210,8 +214,8 @@ if False:
 
 if True:
     f, ax = plt.subplots()
-    #ax = scplot(lat, a['z_med'], a['mb_mwea'], a['area_km2'], sf=sf, ax=ax, clim=(vmin, vmax))
-    ax = scplot_fields(a, 'lat', 'z_med', 'mb_mwea', 'area_km2', sf=sf, ax=ax, clim=(vmin, vmax), legloc='lower left')
+    #ax = scplot(lat, a['z_med'], a['mb_mwea'], a['area_m2'], sf=sf, ax=ax, clim=(vmin, vmax))
+    ax = scplot_fields(a, 'lat', 'z_med', 'mb_mwea', 'area_m2', sf=sf, ax=ax, clim=(vmin, vmax), legloc='lower left')
     ax.set_title(title)
     ax.set_xlabel('Latitude')
     ax.set_ylabel('Elevation (m WGS84)')
@@ -220,8 +224,8 @@ if True:
 
 if True:
     f, ax = plt.subplots()
-    #ax = scplot(lon, a['z_med'], a['mb_mwea'], a['area_km2'], sf=sf, ax=ax, clim=(vmin, vmax))
-    ax = scplot_fields(a, 'lon', 'z_med', 'mb_mwea', 'area_km2', sf=sf, ax=ax, clim=(vmin, vmax))
+    #ax = scplot(lon, a['z_med'], a['mb_mwea'], a['area_m2'], sf=sf, ax=ax, clim=(vmin, vmax))
+    ax = scplot_fields(a, 'lon', 'z_med', 'mb_mwea', 'area_m2', sf=sf, ax=ax, clim=(vmin, vmax))
     ax.set_title(title)
     ax.set_xlabel('Longitude')
     ax.set_ylabel('Elevation (m WGS84)')
@@ -232,8 +236,8 @@ if True:
 if False:
     f = plt.figure()
     ax = f.add_subplot(111, projection='3d')
-    #ax = scplot3D(lon, lat, a['z_med'], a['mb_mwea'], a['area_km2']*4, ax=ax, clim=(vmin, vmax))
-    ax = scplot3D(a['x'], a['y'], a['z_med'], a['mb_mwea'], a['area_km2'], sf=sf, ax=ax, clim=(vmin, vmax))
+    #ax = scplot3D(lon, lat, a['z_med'], a['mb_mwea'], a['area_m2']*4, ax=ax, clim=(vmin, vmax))
+    ax = scplot3D(a['x'], a['y'], a['z_med'], a['mb_mwea'], a['area_m2'], sf=sf, ax=ax, clim=(vmin, vmax))
     ax.set_title(title)
     ax.set_xlabel('x (m)')
     ax.set_ylabel('y (m)')
@@ -257,8 +261,8 @@ if True:
 if 'ppt_a' in a.dtype.names:
     if True:
         f, ax = plt.subplots()
-        #ax = scplot(a['ppt_a'], a['tmean_a'], a['mb_mwea'], a['area_km2'], sf=sf, ax=ax, clim=(vmin, vmax))
-        ax = scplot_fields(a, 'ppt_a', 'tmean_a', 'mb_mwea', 'area_km2', sf=sf, ax=ax, clim=(vmin, vmax))
+        #ax = scplot(a['ppt_a'], a['tmean_a'], a['mb_mwea'], a['area_m2'], sf=sf, ax=ax, clim=(vmin, vmax))
+        ax = scplot_fields(a, 'ppt_a', 'tmean_a', 'mb_mwea', 'area_m2', sf=sf, ax=ax, clim=(vmin, vmax))
         ax.set_title(title)
         ax.set_xlabel('Mean Annual Precip (m we)')
         ax.set_ylabel('Mean Annual Temp (C)')
@@ -269,8 +273,8 @@ if 'ppt_a' in a.dtype.names:
 
     if True:
         f, ax = plt.subplots()
-        #ax = scplot(a['ppt_w'], a['tmean_w'], a['mb_mwea'], a['area_km2'], sf=sf, ax=ax, clim=(vmin, vmax))
-        ax = scplot_fields(a, 'ppt_w', 'tmean_a', 'mb_mwea', 'area_km2', sf=sf, ax=ax, clim=(vmin, vmax))
+        #ax = scplot(a['ppt_w'], a['tmean_w'], a['mb_mwea'], a['area_m2'], sf=sf, ax=ax, clim=(vmin, vmax))
+        ax = scplot_fields(a, 'ppt_w', 'tmean_a', 'mb_mwea', 'area_m2', sf=sf, ax=ax, clim=(vmin, vmax))
         ax.set_title(title)
         ax.set_xlabel('Mean Winter Precip (m we)')
         ax.set_ylabel('Mean Annual Temp (C)')
@@ -281,8 +285,8 @@ if 'ppt_a' in a.dtype.names:
 
     if True:
         f, ax = plt.subplots()
-        #ax = scplot(a['ppt_w'], a['tmean_w'], a['mb_mwea'], a['area_km2'], sf=sf, ax=ax, clim=(vmin, vmax))
-        ax = scplot_fields(a, 'ppt_w', 'tmean_w', 'mb_mwea', 'area_km2', sf=sf, ax=ax, clim=(vmin, vmax))
+        #ax = scplot(a['ppt_w'], a['tmean_w'], a['mb_mwea'], a['area_m2'], sf=sf, ax=ax, clim=(vmin, vmax))
+        ax = scplot_fields(a, 'ppt_w', 'tmean_w', 'mb_mwea', 'area_m2', sf=sf, ax=ax, clim=(vmin, vmax))
         ax.set_title(title)
         ax.set_xlabel('Mean Winter Precip (m we)')
         ax.set_ylabel('Mean Winter Temp (C)')
@@ -293,8 +297,8 @@ if 'ppt_a' in a.dtype.names:
 
     if True:
         f, ax = plt.subplots()
-        #ax = scplot(a['ppt_w'], a['tmean_s'], a['mb_mwea'], a['area_km2'], sf=sf, ax=ax, clim=(vmin, vmax))
-        ax = scplot_fields(a, 'ppt_w', 'tmean_s', 'mb_mwea', 'area_km2', sf=sf, ax=ax, clim=(vmin, vmax))
+        #ax = scplot(a['ppt_w'], a['tmean_s'], a['mb_mwea'], a['area_m2'], sf=sf, ax=ax, clim=(vmin, vmax))
+        ax = scplot_fields(a, 'ppt_w', 'tmean_s', 'mb_mwea', 'area_m2', sf=sf, ax=ax, clim=(vmin, vmax))
         ax.set_title(title)
         ax.set_xlabel('Mean Winter Precip (m we)')
         ax.set_ylabel('Mean Summer Temp (C)')
