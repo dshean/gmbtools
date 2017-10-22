@@ -6,12 +6,22 @@ set -e
 #cd /nobackup/deshean/hma
 #make_mos.sh
 
+#Want to make cascading mosaic
+#gdalbuildvrt mos_8m_all mos_8m_all_trans mos_8m_summer_trans
+#Note on ordering within vrt
+#If there is some amount of spatial overlapping between files, the order of files appearing in the list of source matter: files that are listed at the end are the ones from which the content will be fetched. Note that nodata will be taken into account to potentially fetch data from less prioritary datasets
+
 #Set open file limit
 #Default is 2048
 ulimit -n 65536
 
-#res=32
+latest=false
+summer=false
+trans=false
+
 res=8
+#res=32
+
 count=true
 stddev=true
 last=false
@@ -19,8 +29,11 @@ first=false
 index=false
 tileindex=false
 
-summer=false
-trans=true
+#Hardcoded site and projection for now
+#site=hma
+#proj='+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
+site=conus
+proj='+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
 
 ncpu=$(cat /proc/cpuinfo | egrep "core id|physical id" | tr -d "\n" | sed s/physical/\\nphysical/g | grep -v ^$ | sort | uniq | wc -l)
 threads=$((ncpu-1))
@@ -31,38 +44,57 @@ tol=0.001
 
 ts=`date +%Y%m%d`
 
-#Hardcoded site and projection
-#site=hma
-#proj='+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
-site=conus
-proj='+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
-
 #Should add option to split annually
 echo "Identifying input DEMs"
-if $summer ; then
-    if $trans ; then
-        list=$(ls *00/dem*/20[012][0-9][01][06789][0-9][0-9]*-DEM_${res}m_trans.tif)
-        out=mos/${site}_${ts}_mos/summer/mos_${res}m_trans/${site}_${ts}_mos_${res}m_trans
-    else
-        list=$(ls *00/dem*/20[012][0-9][01][06789][0-9][0-9]*-DEM_${res}m.tif)
-        out=mos/${site}_${ts}_mos/summer/mos_${res}m/${site}_${ts}_mos_${res}m
-    fi
+
+ext="-DEM_${res}m"
+mos_ext="${site}_mos_${res}m"
+
+if $latest ; then
+    #Note: CONUS is only current through June 2016, missing 
+    re='201[5-9]'
+    mos_ext+='_latest'
 else
-    #NOTE: Need to update sort key with increased path depths
-    #list=$(ls */*/*00/dem*/*-DEM_${res}m.tif */*00/dem*/*-DEM_${res}m.tif)
-    #list=$(ls */stereo/*00/dem*/*-DEM_${res}m.tif */*00/dem*/*-DEM_${res}m.tif)
-    #list=$(ls */*/*/dem*/*-DEM_8m_trans.tif | grep -v QB)
-    if $trans ; then
-        list=$(ls *00/dem*/*-DEM_${res}m_trans.tif)
-        out=mos/${site}_${ts}_mos/all/mos_${res}m_trans/${site}_${ts}_mos_${res}m_trans
-    else
-        list=$(ls *00/dem*/*-DEM_${res}m.tif)
-        out=mos/${site}_${ts}_mos/all/mos_${res}m/${site}_${ts}_mos_${res}m
+    re='201[2-9]'
+    #Want to exclude 2008/2009 data
+    #re='20[0-9]'
+fi
+    
+if $summer ; then
+    #August through October
+    re+='[01][089][0-9][0-9]'
+    if ! $latest ; then
+        #June through October
+        re='[01][06789][0-9][0-9]'
     fi
+    mos_ext+='_summer'
 fi
 
+if $trans ; then
+    ext+='_trans'
+    mos_ext+='_trans'
+fi
+
+#list=$(ls */*/*00/dem*/*-DEM_${res}m.tif */*00/dem*/*-DEM_${res}m.tif)
+#list=$(ls */stereo/*00/dem*/*-DEM_${res}m.tif */*00/dem*/*-DEM_${res}m.tif)
+#list=$(ls */*/*/dem*/*-DEM_8m_trans.tif | grep -v QB)
+
+echo $re
+echo $ext
+echo $mos_ext
+
+list=$(ls *00/dem*/${re}*${ext}.tif)
+out=mos/${site}_${ts}_mos/${mos_ext}/${mos_ext}
+
 #Sort by date
+#NOTE: Need to update sort key with increased path depths
 list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 3)
+
+echo
+echo $out
+echo
+echo $list
+echo
 
 #parallel -j $threads "if [ ! -e {.}_aea.tif ] ; then gdalwarp -overwrite -r cubic -t_srs \"$proj\" -tr $res $res -dstnodata -9999 {} {.}_aea.tif; fi" ::: $list
 #list=$(echo $list | sed "s/DEM_${res}m.tif/DEM_${res}m_aea.tif/g")
@@ -78,6 +110,18 @@ echo $(echo $list | wc -w) input DEMs
 
 if [ ! -e $out.vrt ] ; then
     $mos --threads $threads --tr $res --t_srs "$proj" --georef_tile_size=$tilesize -o $out $list
+fi
+if $last; then
+    if [ ! -e ${out}_last.vrt ] ; then
+        echo "Preparing lastmap"
+        $mos --stat last --threads $threads --tr $res --t_srs "$proj" --georef_tile_size=$tilesize -o $out $list
+    fi
+fi
+if $first; then
+    if [ ! -e ${out}_first.vrt ] ; then
+        echo "Preparing firstmap"
+        $mos --stat first --threads $threads --tr $res --t_srs "$proj" --georef_tile_size=$tilesize -o $out $list
+    fi
 fi
 
 if (( "$res" == "32" )) ; then
