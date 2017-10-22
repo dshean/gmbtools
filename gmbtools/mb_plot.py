@@ -39,8 +39,8 @@ def add_legend(ax, sf=16, loc='upper right'):
     Create legend for scaled scatterplot markers
     """
     ax.autoscale(False)
-    #leg_s = np.array([0.1, 0.5, 1.0, 5.0, 10.0])
-    leg_s = np.array([0.1, 1.0, 10.0, 100.0])
+    leg_s = np.array([0.1, 0.5, 1.0, 5.0, 10.0])
+    #leg_s = np.array([0.1, 1.0, 10.0, 100.0])
     leg_x = np.full(leg_s.size, -999999999)
     leg_y = np.full(leg_s.size, -999999999)
     #leg_sc = ax.scatter(leg_x, leg_y, c='0.8', s=leg_s)
@@ -54,14 +54,14 @@ def add_lbl(ax, a):
     for pt,lbl in glacier_dict.iteritems():
         ax.annotate(lbl,xy=pt)
 
-def scplot_fields(a, fx, fy, fc, fs, sf=16, ax=None, clim=None):
-    ax = scplot(a[fx], a[fy], a[fc], a[fs], sf, ax, clim)
+def scplot_fields(a, fx, fy, fc, fs, sf=16, ax=None, clim=None, legloc='lower right'):
+    ax = scplot(a[fx], a[fy], a[fc], a[fs], sf, ax, clim, legloc)
     for glacnum,lbl in glacier_dict.iteritems():
         b = a[a['glacnum'] == float(glacnum)]
         ax.annotate(lbl, xy=(b[fx], b[fy]), fontsize=6)
     return ax
 
-def scplot(x, y, c, s, sf=16, ax=None, clim=None):
+def scplot(x, y, c, s, sf=16, ax=None, clim=None, legloc='lower right'):
     """
     Create scatter plot with scaled circles
     """
@@ -74,9 +74,7 @@ def scplot(x, y, c, s, sf=16, ax=None, clim=None):
     ax.set_facecolor('0.8')
     sc = ax.scatter(x, y, c=c, s=s*sf, edgecolor='k', lw='0.2', cmap='RdBu', vmin=vmin, vmax=vmax)
     cbar = pltlib.add_cbar(ax, sc, label='Mass balance (m we/yr)')
-    #leg = add_legend(ax, sf=sf, loc='lower left')
-    #leg = add_legend(ax, sf=sf, loc='upper right')
-    leg = add_legend(ax, sf=sf, loc='lower right')
+    leg = add_legend(ax, sf=sf, loc=legloc)
     ax.minorticks_on()
     #ax.tick_params(left=True, right=True, bottom=True, top=True)
     return ax
@@ -169,6 +167,8 @@ elif 'hma' in csv_fn:
 a = np.genfromtxt(csv_fn, delimiter=',', dtype=None, names=True)
 #Sort by area
 a = np.sort(a, order='area_km2')[::-1]
+#Comput northness
+a = recfunctions.append_fields(a, 'northness', np.cos(np.radians(a['z_aspect'])), dtypes=None, usemask=False)
 
 ts = datetime.now().strftime('%Y%m%d_%H%M')
 
@@ -211,7 +211,7 @@ if False:
 if True:
     f, ax = plt.subplots()
     #ax = scplot(lat, a['z_med'], a['mb_mwea'], a['area_km2'], sf=sf, ax=ax, clim=(vmin, vmax))
-    ax = scplot_fields(a, 'lat', 'z_med', 'mb_mwea', 'area_km2', sf=sf, ax=ax, clim=(vmin, vmax))
+    ax = scplot_fields(a, 'lat', 'z_med', 'mb_mwea', 'area_km2', sf=sf, ax=ax, clim=(vmin, vmax), legloc='lower left')
     ax.set_title(title)
     ax.set_xlabel('Latitude')
     ax.set_ylabel('Elevation (m WGS84)')
@@ -240,6 +240,19 @@ if False:
     ax.set_zlabel('Elevation (m WGS84)')
     #fig_fn = '%s_mb_elev_lat_%s.png' % (site, ts)
     #plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
+
+if True:
+    f, ax = plt.subplots()
+    #ax = scplot(a['ppt_a'], a['tmean_a'], a['mb_mwea'], a['area_km2'], sf=sf, ax=ax, clim=(vmin, vmax))
+    ax = scplot_fields(a, 'northness', 'z_slope', 'mb_mwea', 'area_km2', sf=sf, ax=ax, clim=(vmin, vmax))
+    ax.set_title(title)
+    #ax.set_xlabel('Mean Aspect (deg)')
+    ax.set_xlabel('Northness (cos of mean aspect)')
+    ax.set_ylabel('Mean Slope (deg)')
+    #ax.set_ylim(-6,6)
+    ax.axhline(0, ls=':', color='k', lw=0.5)
+    fig_fn = '%s_mb_slope_aspect_%s.png' % (site, ts)
+    plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
 
 if 'ppt_a' in a.dtype.names:
     if True:
