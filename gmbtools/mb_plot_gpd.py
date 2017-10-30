@@ -7,7 +7,9 @@ Uses geopandas to join, compute stats for differen regions and plot
 
 import os, sys
 import pandas as pd
+import matplotlib
 import matplotlib.pyplot as plt
+from imview.lib import pltlib
 
 import cartopy.crs as ccrs 
 import cartopy.feature as cfeature
@@ -105,17 +107,38 @@ state_df.plot(ax=ax, **style_kwd)
 #ax.add_feature(states, edgecolor='k')
 
 print("Plotting glacier polygons")
-clim = (-1.0, 1.0)
+mb_clim = (-1.0, 1.0)
 style_kwd = {'edgecolor':'k', 'linewidth':0.5}
-glac_df_mb.plot(ax=ax, column='mb_mwea', cmap='RdBu', vmin=clim[0], vmax=clim[1], **style_kwd)
-
-#Plot scaled circles for each region at centroid x and y
-#ax.scatter()
+#glac_df_mb.plot(ax=ax, column='mb_mwea', cmap='RdBu', vmin=mb_clim[0], vmax=mb_clim[1], **style_kwd)
 
 glac_df_extent = glac_df_mb.total_bounds
 glac_df_extent_cartopy = cartopy_extent(glac_df_extent)
 #Also currently broken
 #ax.set_extent(glac_df_extent_cartopy, crs=crs)
+
+f3, (t1_ax, mb_ax) = plt.subplots(1,2,figsize=(12,8), sharex=True, sharey=True)
+style_kwd = {'facecolor':'0.9','edgecolor':'k', 'linewidth':0.5}
+t1_clim = (glac_df_mb['t1'].min(), glac_df_mb['t1'].max()) 
+for ax in (t1_ax, mb_ax):
+    ax.set_aspect('equal')
+    state_df.plot(ax=ax, **style_kwd)
+    pltlib.hide_ticks(ax)
+t1_sc = glac_df_mb.plot(ax=t1_ax, column='t1', cmap='inferno', vmin=t1_clim[0], vmax=t1_clim[1], **style_kwd)
+mb_sc = glac_df_mb.plot(ax=mb_ax, column='mb_mwea', cmap='RdBu', vmin=mb_clim[0], vmax=mb_clim[1], **style_kwd)
+#This is a hack
+#https://stackoverflow.com/questions/36008648/colorbar-on-geopandas
+t1_sm = plt.cm.ScalarMappable(cmap='inferno', norm=matplotlib.colors.Normalize(vmin=t1_clim[0], vmax=t1_clim[1]))
+t1_sm._A = []
+pltlib.add_cbar(t1_ax, t1_sm, label='Source Date (yr)')
+mb_sm = plt.cm.ScalarMappable(cmap='RdBu', norm=matplotlib.colors.Normalize(vmin=mb_clim[0], vmax=mb_clim[1]))
+mb_sm._A = []
+pltlib.add_cbar(mb_ax, mb_sm, label='Mass Balance (m we/yr)')
+t1_ax.set_xlim(-856800, 910700)
+t1_ax.set_ylim(-789000, 839400)
+
+#Now define regions and save figures
+
+sys.exit()
 
 f2, ax2 = plt.subplots(figsize=(8,8))
 ax2.set_aspect('equal')
@@ -124,15 +147,14 @@ state_df.plot(ax=ax2, **style_kwd)
 #ax2.imshow(hs, cmap='gray', origin='upper', extent=hs_extent_cartopy)
 
 scaling_f = 5
-clim=(-0.4, 0.4)
+mb_clim=(-0.4, 0.4)
 x = glac_df_mb_region_mean['x']
 y = glac_df_mb_region_mean['y']
 s = scaling_f*glac_df_mb_region_sum['area_m2']/1E6
 c = glac_df_mb_region_mean['mb_mwea']
 #c = glac_df_mb_region_sum['mb_m3wea']/glac_df_mb_region_sum['area_m2']
-sc = ax2.scatter(x, y, s, c, vmin=clim[0], vmax=clim[1], cmap='RdBu', edgecolor='k', linewidth=0.5)
+sc = ax2.scatter(x, y, s, c, vmin=mb_clim[0], vmax=mb_clim[1], cmap='RdBu', edgecolor='k', linewidth=0.5)
 
-from imview.lib import pltlib
 pltlib.add_cbar(ax2, sc, label='Mass Balance (m we/yr)')
 style_kwd = {'facecolor':'none', 'edgecolor':'k', 'linewidth':0.5}
 glac_df_mb.plot(ax=ax2, **style_kwd)
