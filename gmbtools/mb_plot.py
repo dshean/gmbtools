@@ -97,7 +97,7 @@ def scplot3D(x, y, z, c, s, sf=4, ax=None, clim=None):
     #ax.tick_params(left=True, right=True, bottom=True, top=True)
     return ax
 
-def mapplot(a, field, srs, sf=16, ax=None):
+def mapplot(a, field, srs, sf=16, ax=None, clim=None):
     if ax is None:
         f, ax = plt.subplots()
     #Get this from glacier shp or DEM mosaic
@@ -137,7 +137,10 @@ def mapplot(a, field, srs, sf=16, ax=None):
     if field == 'mb_mwea':
         cmap = 'RdBu'
         label = 'Mass balance (m we/yr)'
-        vmin,vmax = get_equal_vmin_vmax(a[field])
+        if clim is None:
+            vmin,vmax = get_equal_vmin_vmax(a[field])
+        else:
+            vmin, vmax = clim
         lw = 0.1
     elif field == 't1':
         cmap = 'inferno'
@@ -173,11 +176,14 @@ a = recfunctions.append_fields(a, 'northness', np.cos(np.radians(a['z_aspect']))
 #This script was tuned for km2
 a['area_m2'] /= 1E6
 
-ts = datetime.now().strftime('%Y%m%d_%H%M')
+#ts = datetime.now().strftime('%Y%m%d_%H%M')
+ts = os.path.split(os.path.splitext(csv_fn)[0])[-1]
 
 if site == 'conus':
     aea_srs = geolib.conus_aea_srs
-    title = "CONUS Long-term Glacier Mass Balance (~1950s-1980s to 2015)"
+    #title = "CONUS Glacier Mass Balance (1950s-1980s to 2015)"
+    #title = "CONUS Glacier Mass Balance (1950s-1980s to 2007-2009)"
+    title = "CONUS Glacier Mass Balance (2007-2009 to 2015)"
     sf = 16
 elif site == 'hma':
     aea_srs = geolib.hma_aea_srs
@@ -194,11 +200,12 @@ a = recfunctions.append_fields(a, 'lat', lat, dtypes=None, usemask=False)
 #x_utm, y_utm, dummy = geolib.cT_helper(a['x'],a['y'],0,aea_srs,utm_srs)
 
 vmin, vmax = get_equal_vmin_vmax(a['mb_mwea'])
+vmin, vmax = (-0.7, 0.7)
 
 if True:
     #f, ax = plt.subplots(figsize=(10,8))
     f, ax = plt.subplots()
-    ax = mapplot(a, field='mb_mwea', srs=aea_srs, sf=sf, ax=ax)
+    ax = mapplot(a, field='mb_mwea', srs=aea_srs, sf=sf, ax=ax, clim=(vmin, vmax))
     fig_fn = '%s_mb_map_%s.png' % (site, ts)
     ax.set_title(title)
     plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
