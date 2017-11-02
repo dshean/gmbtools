@@ -3,23 +3,31 @@
 #Define projection
 #CONUS
 #epsg=32611
-#proj='+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
+proj='+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
 #HMA
 #epsg=32644
-proj='+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
+#proj='+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
 
 gdal_opt="-co COMPRESS=LZW -co TILED=YES -co BIGTIFF=IF_SAFER"
 
 #Modify lat/lon bounds and generate with the get_srtm_tilelist.py script
-urllist=srtm_urllist.txt
-get_srtm_tilelist.py >> $urllist 
+urllist=hma_nasadem_tilelist_img_comb.txt
+srtm_tilelist.py >> $urllist 
 
 #For USGS or s3 sources 
 #wget -nc -i $urllist
 #For NASADEM, through NASA Earthdata
 wget --user dshean --ask-password -nc -i $urllist
 
-parallel 'unzip {}' ::: *zip
+fn_list=''
+for i in *zip
+do
+    if [ ! -e ${i%.*} ] ; then 
+        fn_list+=" $i"
+    fi
+done
+
+parallel 'unzip {}' ::: $fn_list
 
 fn_list=$(ls *hgt)
 #Generate hdr and prj sidecar files

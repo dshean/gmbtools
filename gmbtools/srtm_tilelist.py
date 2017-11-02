@@ -5,44 +5,54 @@ Download SRTM tiles for given lat/lon bounds
 Pipe this to a file, then wget
 """
 
-#HMA
-#lon = (66, 106)
-#lat = (25, 47)
-#ew = "E"
-#CONUS
-lon = (105, 124)
-lat = (36, 49)
-ew = "W"
+import sys
+
+#Hardcoded site
+#site = "hma"
+site = "conus"
+
+if site == "hma":
+    lon = (65, 106)
+    lat = (24, 47)
+    ew = "E"
+    #This is NASADEM provisional
+    topurl = "https://e4ftl01.cr.usgs.gov/provisional/MEaSUREs/NASADEM/Eurasia"
+elif site == "conus":
+    lon = (105, 125)
+    lat = (36, 49)
+    ew = "W"
+    topurl = "https://e4ftl01.cr.usgs.gov/provisional/MEaSUREs/NASADEM/NorthAmerica"
+else:
+    sys.exit("Need to manually define bounds")
+
+#This is SRTM-GL1
+#topurl = "https://cloud.sdsc.edu/v1/AUTH_opentopography/Raster/SRTM_GL1/SRTM_GL1_srtm"
+#topurl = "http://e4ftl01.cr.usgs.gov/SRTM/SRTMGL1.003/2000.02.11" 
 
 tile_list = []
-for i in range(lon[0], lon[1]):
-    for j in range(lat[0], lat[1]):
+for i in range(lon[0], lon[1]+1):
+    for j in range(lat[0], lat[1]+1):
         #tile_list.append('N%02i%s%03i' % (j, ew, i))
         tile_list.append('N%02i%s%03i' % (j, ew, i))
 
-#This is SRTM-GL1
-#topurl = "https://cloud.sdsc.edu/v1/AUTH_opentopography/Raster/SRTM_GL1/SRTM_GL1_srtm/"
-#topurl = "http://e4ftl01.cr.usgs.gov/SRTM/SRTMGL1.003/2000.02.11/" 
-
-#This is NASADEM provisional
-topurl = "https://e4ftl01.cr.usgs.gov/provisional/MEaSUREs/NASADEM/NorthAmerica/"
-#topurl = "https://e4ftl01.cr.usgs.gov/provisional/MEaSUREs/NASADEM/Eurasia/"
-
 #This is non void-filled float
-product = 'hgt_srtmOnly_R4'
+productdir = 'hgt_srtmOnly_R4'
+#For NorthAmerica
+ext = 'srtmOnly.hgt'
+#For Eurasia
+ext = 'hgt'
+#This is void-filled Int16
+productdir = 'hgt_merge_I2'
 #n00e072.hgt.zip
-#product = 'img_8bit'
+productdir = 'img_comb'
+ext = 'img'
 #n00e072_040_290_ss2_a_1_1.img.zip
-
-topurl += product
 
 for tile in tile_list:
     #print("%s/%s.hgt" % (topurl, tile))
     #print("%s/%s.SRTMGL1.hgt.zip" % (topurl, tile))
-    #For Eurasia
-    #print("%s/%s.hgt.zip" % (topurl, tile.lower()))
-    #For NorthAmerica
-    print("%s/%s.srtmOnly.hgt.zip" % (topurl, tile.lower()))
+    print("%s/%s/%s.%s.zip" % (topurl, productdir, tile.lower(), ext))
+    #print("%s/%s.srtmOnly.hgt.zip" % (topurl, tile.lower()))
 
 """
 import os
