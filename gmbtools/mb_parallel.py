@@ -103,7 +103,7 @@ class GlacFeat:
         self.glac_area = self.glac_geom.GetArea()
         self.cx, self.cy = self.glac_geom.Centroid().GetPoint_2D()
 
-def srtm_corr(z1):
+def srtm_corr(z):
     #Should separate into different regions from Kaab et al (2012)
     #Should separate into firn/snow, clean ice, and debris-covered ice
     #See Gardelle et al (2013) for updated numbers
@@ -113,8 +113,7 @@ def srtm_corr(z1):
 
     #For now, use Kaab et al (2012) region-wide mean of 2.1 +/- 0.4
     offset = 2.1
-
-    return z1 + offset
+    return z + offset
 
 def z_vs_dz(z,dz):
     plt.scatter(z.compressed(), dz.compressed())
@@ -304,6 +303,8 @@ global z1_date
 global z2_date
 z1_date = None
 z2_date = None 
+z1_srtm_penetration_corr = False 
+z2_srtm_penetration_corr = False 
 
 if site == 'conus':
     #Glacier shp
@@ -319,8 +320,9 @@ if site == 'conus':
     #This stores collection of feature geometries, independent of shapefile
     glacfeat_fn = os.path.splitext(glac_shp_fn)[0]+'_glacfeat_list.p'
 
+    """
+    #NED 2003 1-arcsec 
     z1_fn = os.path.join(topdir,'rpcdem/ned1_2003/ned1_2003_adj.vrt')
-    #NED 2003 dates
     z1_date_shp_fn = os.path.join(topdir,'rpcdem/ned1_2003/meta0306_PAL_24k_10kmbuffer_clean_dissolve_aea.shp')
     #ogr2ogr -t_srs '+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs ' meta0306_PAL_24k_10kmbuffer_clean_dissolve_aea.shp meta0306_PAL_24k_10kmbuffer_clean_dissolve_32611.shp
     z1_date_shp_ds = ogr.Open(z1_date_shp_fn)
@@ -330,8 +332,26 @@ if site == 'conus':
     z1_datefield = "S_DATE_CLN" 
     #From Gesch et al (2014), LE90 is 4.0, std is 2.4 m
     z1_sigma = 2.4
+    """
+    
+    #NASADEM SRTM
+    mosdir = '/nobackup/deshean/rpcdem/conus/srtmOnly'
+    z1_fn = os.path.join(mosdir, 'conus_nasadem_srtmOnly_R4_hgt.vrt')
+    z1_date = 2000.112
+    z1_sigma = 4.0
+    z1_srtm_penetration_corr = True 
+
+    """
+    #NASADEM SRTM
+    mosdir = '/nobackup/deshean/rpcdem/conus/srtmOnly'
+    z2_fn = os.path.join(mosdir, 'conus_nasadem_srtmOnly_R4_hgt.vrt')
+    z2_date = 2000.112
+    z2_sigma = 4.0
+    z2_srtm_penetration_corr = True 
+    """
     
     """
+    #2007-2009 LiDAR and WV
     mosdir = '/nobackup/deshean/conus_combined/mos/mos_2007-2010'
     z1_fn = os.path.join(mosdir, 'mos_2007-2010_8m.vrt')
     z1_date_shp_fn = os.path.join(mosdir, 'mos_2007-2010_stripindex_simp.shp')
@@ -344,6 +364,7 @@ if site == 'conus':
     """
     
     """
+    #2007-2009 LiDAR and WV
     mosdir = '/nobackup/deshean/conus_combined/mos/mos_2007-2010'
     z2_fn = os.path.join(mosdir, 'mos_2007-2010_8m.vrt')
     z2_date_shp_fn = os.path.join(mosdir, 'mos_2007-2010_stripindex_simp.shp')
@@ -355,7 +376,7 @@ if site == 'conus':
     z2_sigma = 1.0
     """
 
-    #Second DEM source (WV mosaic)
+    #Summer 2015 WV 
     mosdir = '/nobackup/deshean/conus_combined/mos/conus_20171021_mos'
     #z2_fn = os.path.join(mosdir, 'conus_mos_8m_summmer.vrt')
     z2_fn = os.path.join(mosdir, 'conus_mos_8m_all.vrt')
@@ -368,7 +389,8 @@ if site == 'conus':
     #outdir = os.path.join(topdir,'%s/mb' % mosdir)
     #outdir = '/nobackup/deshean/conus_combined/mos/conus_20171021_mos/mb/NED_to_2007-2010'
     #outdir = os.path.join(mosdir, 'mb/2007-2010_to_WV')
-    outdir = os.path.join(mosdir, 'mb/NED_to_WV')
+    #outdir = os.path.join('/nobackup/deshean/conus_combined/mos/conus_20171021_mos', 'mb/NED_to_SRTM')
+    outdir = os.path.join('/nobackup/deshean/conus_combined/mos/conus_20171021_mos', 'mb/SRTM_to_WV')
 
     #Output projection
     #'+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
@@ -376,8 +398,6 @@ if site == 'conus':
 
     #Only write out for larger glaciers
     min_glac_area_writeout = 1.0
-
-    srtm_penetration_corr = False
 
     #PRISM climate data, 800-m 
     prism_ppt_annual_fn = os.path.join(topdir,'conus/prism/normals/annual/ppt/PRISM_ppt_30yr_normal_800mM2_annual_bil.bil')
@@ -420,8 +440,7 @@ elif site == 'hma':
     #z1_date = datetime(2000,2,11)
     z1_date = 2000.112
     z1_sigma = 4.0
-
-    srtm_penetration_corr = True
+    z1_srtm_penetration_corr = True
 
     mosdir = 'hma_20170716_mos'
     #Second DEM Source (WV mosaic)
@@ -567,8 +586,10 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
     glac_geom_mask = geolib.geom2mask(gf.glac_geom, ds_list[0])
     gf.z1 = np.ma.array(iolib.ds_getma(ds_list[0]), mask=glac_geom_mask)
     #Apply SRTM penetration correction
-    if srtm_penetration_corr:
+    if z1_srtm_penetration_corr:
         gf.z1 = srtm_corr(gf.z1)
+    if z2_srtm_penetration_corr:
+        gf.z2 = srtm_corr(gf.z2)
     gf.z2 = np.ma.array(gf.z2, mask=glac_geom_mask)
     gf.dz = gf.z2 - gf.z1
     if gf.dz.count() == 0:
