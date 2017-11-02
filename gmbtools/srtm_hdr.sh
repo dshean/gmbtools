@@ -34,6 +34,10 @@ elif [ "$ext" == "img" ] ; then
     nbits=8
     dtype=byte
     ndv=0
+elif [ "$ext" == "err" ] ; then
+    nbits=16
+    dtype=unsignedint
+    ndv=0
 fi
 
 echo -n > $hdr

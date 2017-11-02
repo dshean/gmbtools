@@ -10,14 +10,23 @@ proj='+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=W
 
 gdal_opt="-co COMPRESS=LZW -co TILED=YES -co BIGTIFF=IF_SAFER"
 
+#ext='hgt'
+#ext='img'
+ext='err'
+
 #Modify lat/lon bounds and generate with the get_srtm_tilelist.py script
-urllist=hma_nasadem_tilelist_img_comb.txt
+urllist=hma_nasadem_tilelist_${ext}.txt
 srtm_tilelist.py >> $urllist 
 
 #For USGS or s3 sources 
 #wget -nc -i $urllist
 #For NASADEM, through NASA Earthdata
-wget --user dshean --ask-password -nc -i $urllist
+#Serial wget from file
+#wget --user dshean --ask-password -nc -i $urllist
+#Need to hardcode password here
+cat $urllist | parallel --delay 0.5 -j 8 --progress 'wget --user dshean --password Temporary0 -nc {}'
+
+fn_list=$(ls *${ext}.zip)
 
 fn_list=''
 for i in *zip
@@ -29,16 +38,20 @@ done
 
 parallel 'unzip {}' ::: $fn_list
 
-fn_list=$(ls *hgt)
+fn_list=$(ls *.${ext})
 #Generate hdr and prj sidecar files
 parallel 'srtm_hdr.sh {}' ::: $fn_list
 
 #Build mosaic in original WGS84 coordinates
-gdalbuildvrt nasadem_hgt_srtmOnly_R4.vrt $fn_list
-gdalwarp -overwrite $gdal_opt -r cubic -t_srs "$proj" -tr 90 90 nasadem_hgt_srtmOnly_R4.vrt nasadem_hgt_srtmOnly_R4_90m.tif
-hs.sh nasadem_hgt_srtmOnly_R4_90m.tif
-gdaladdo_ro.sh nasadem_hgt_srtmOnly_R4_90m.tif
-gdaladdo_ro.sh nasadem_hgt_srtmOnly_R4_90m_hs_az315.tif
+gdalbuildvrt nasadem_${ext}.vrt $fn_list
+gdaladdo_ro.sh nasadem_${ext}.vrt
+
+exit
+
+gdalwarp -overwrite $gdal_opt -r cubic -t_srs "$proj" -tr 90 90 nasadem_${ext}.vrt nasadem_${ext}_90m.tif
+hs.sh nasadem_${ext}_90m.tif
+gdaladdo_ro.sh nasadem_${ext}_90m.tif
+gdaladdo_ro.sh nasadem_${ext}_90m_hs_az315.tif
 
 #fn_list=$(ls *raw)
 

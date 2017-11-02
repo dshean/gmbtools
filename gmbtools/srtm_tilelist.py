@@ -18,8 +18,8 @@ if site == "hma":
     #This is NASADEM provisional
     topurl = "https://e4ftl01.cr.usgs.gov/provisional/MEaSUREs/NASADEM/Eurasia"
 elif site == "conus":
-    lon = (105, 125)
-    lat = (36, 49)
+    lon = (104, 125)
+    lat = (31, 49)
     ew = "W"
     topurl = "https://e4ftl01.cr.usgs.gov/provisional/MEaSUREs/NASADEM/NorthAmerica"
 else:
@@ -40,13 +40,13 @@ productdir = 'hgt_srtmOnly_R4'
 #For NorthAmerica
 ext = 'srtmOnly.hgt'
 #For Eurasia
-ext = 'hgt'
+#ext = 'hgt'
 #This is void-filled Int16
-productdir = 'hgt_merge_I2'
-#n00e072.hgt.zip
-productdir = 'img_comb'
-ext = 'img'
-#n00e072_040_290_ss2_a_1_1.img.zip
+#productdir = 'hgt_merge_I2'
+#productdir = 'img_comb'
+#ext = 'img'
+productdir = 'err_I2'
+ext = 'err'
 
 for tile in tile_list:
     #print("%s/%s.hgt" % (topurl, tile))
