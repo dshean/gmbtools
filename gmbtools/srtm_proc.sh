@@ -4,9 +4,11 @@
 #CONUS
 #epsg=32611
 proj='+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
+site='conus'
 #HMA
 #epsg=32644
 #proj='+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
+#site='hma'
 
 gdal_opt="-co COMPRESS=LZW -co TILED=YES -co BIGTIFF=IF_SAFER"
 
@@ -15,7 +17,7 @@ gdal_opt="-co COMPRESS=LZW -co TILED=YES -co BIGTIFF=IF_SAFER"
 ext='err'
 
 #Modify lat/lon bounds and generate with the get_srtm_tilelist.py script
-urllist=hma_nasadem_tilelist_${ext}.txt
+urllist=${site}_nasadem_tilelist_${ext}.txt
 srtm_tilelist.py >> $urllist 
 
 #For USGS or s3 sources 
@@ -24,7 +26,7 @@ srtm_tilelist.py >> $urllist
 #Serial wget from file
 #wget --user dshean --ask-password -nc -i $urllist
 #Need to hardcode password here
-cat $urllist | parallel --delay 0.5 -j 8 --progress 'wget --user dshean --password Temporary0 -nc {}'
+cat $urllist | parallel --delay 0.5 -j 8 --progress 'wget --user dshean --password Temporary0 -nc -q {}'
 
 fn_list=$(ls *${ext}.zip)
 
@@ -43,8 +45,10 @@ fn_list=$(ls *.${ext})
 parallel 'srtm_hdr.sh {}' ::: $fn_list
 
 #Build mosaic in original WGS84 coordinates
-gdalbuildvrt nasadem_${ext}.vrt $fn_list
-gdaladdo_ro.sh nasadem_${ext}.vrt
+gdalbuildvrt ${site}_nasadem_${ext}.vrt $fn_list
+gdaladdo_ro.sh ${site}_nasadem_${ext}.vrt
+
+#Should mask elevation values where err >= 32769
 
 exit
 

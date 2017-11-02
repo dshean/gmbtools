@@ -38,6 +38,7 @@ elif [ "$ext" == "err" ] ; then
     nbits=16
     dtype=unsignedint
     ndv=0
+    #NOTE, should also add 32769 here
 fi
 
 echo -n > $hdr
