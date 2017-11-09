@@ -181,13 +181,15 @@ ts = os.path.split(os.path.splitext(csv_fn)[0])[-1]
 
 if site == 'conus':
     aea_srs = geolib.conus_aea_srs
-    #title = "CONUS Glacier Mass Balance (1950s-1980s to 2015)"
+    title = "CONUS Glacier Mass Balance (1950s-1980s to 2015)"
     #title = "CONUS Glacier Mass Balance (1950s-1980s to 2007-2009)"
-    title = "CONUS Glacier Mass Balance (2007-2009 to 2015)"
+    #title = "CONUS Glacier Mass Balance (2007-2009 to 2015)"
+    #title = "CONUS Glacier Mass Balance (2000 to 2015)"
+    #title = "CONUS Glacier Mass Balance (1950s-1980s to 2000)"
     sf = 16
 elif site == 'hma':
     aea_srs = geolib.hma_aea_srs
-    title = "HMA ~15-year Glacier Mass Balance (2000 to 2015)"
+    title = "HMA Glacier Mass Balance (2000 to 2015)"
     sf = 2 
 
 #Compute lat, lon
