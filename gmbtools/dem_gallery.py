@@ -65,14 +65,16 @@ for i,dem_fn in enumerate(dem_fn_list):
     print(dem_fn)
     dem_ds = iolib.fn_getds(dem_fn)
     dem = iolib.ds_getma(dem_ds)
-    #dem_hs_fn = os.path.splitext(dem_fn)[0]+'_hs_az315.tif'
-    #dem_hs = iolib.fn_getma(dem_hs_fn)
-    dem_hs = geolib.gdaldem_mem_ds(dem_ds, 'hillshade', returnma=True)
+    dem_hs_fn = os.path.splitext(dem_fn)[0]+'_hs_az315.tif'
+    if os.path.exists(dem_hs_fn):
+        dem_hs = iolib.fn_getma(dem_hs_fn)
+    else: 
+        dem_hs = geolib.gdaldem_mem_ds(dem_ds, 'hillshade', returnma=True)
     dt = timelib.fn_getdatetime(dem_fn)
     if dt is not None:
         title = dt.strftime('%Y-%m-%d')
-        t = ax.set_title(title, fontdict={'fontsize':8})
-        #t.set_position([0.5, 0.95])
+        t = ax.set_title(title, fontdict={'fontsize':6})
+        t.set_position([0.5, 0.95])
     hs_im = ax.imshow(dem_hs, vmin=hs_clim[0], vmax=hs_clim[1], cmap='gray')
     dem_im = ax.imshow(dem, vmin=dem_clim[0], vmax=dem_clim[1], cmap='cpt_rainbow', alpha=0.5)
     ax.set_facecolor('k') 
