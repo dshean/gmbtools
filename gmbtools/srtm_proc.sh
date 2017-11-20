@@ -3,32 +3,45 @@
 #Define projection
 #CONUS
 #epsg=32611
-proj='+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
-site='conus'
+#proj='+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
+#site='conus'
 #HMA
 #epsg=32644
-#proj='+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
-#site='hma'
+proj='+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
+site='hma'
 
 gdal_opt="-co COMPRESS=LZW -co TILED=YES -co BIGTIFF=IF_SAFER"
 
-#ext='hgt'
+ext='hgt'
 #ext='img'
-ext='err'
+#ext='err'
 
 #Modify lat/lon bounds and generate with the get_srtm_tilelist.py script
 urllist=${site}_nasadem_tilelist_${ext}.txt
+echo -n > $urllist
 srtm_tilelist.py >> $urllist 
 
+url_zip_list=$(cat $urllist | awk -F'/' '{print $NF}')
+fn_list=$(ls *${ext}.zip)
+
+echo -n > ${urllist%.*}_missing.txt
+for i in $url_zip_list
+do
+    if ! echo $fn_list | grep -q $i ; then
+        grep $i $urllist >> ${urllist%.*}_missing.txt
+    fi
+done
+
 #For USGS or s3 sources 
+uname=dshean
 #wget -nc -i $urllist
 #For NASADEM, through NASA Earthdata
 #Serial wget from file
-#wget --user dshean --ask-password -nc -i $urllist
-#Need to hardcode password here
-cat $urllist | parallel --delay 0.5 -j 8 --progress 'wget --user dshean --password Temporary0 -nc -q {}'
-
-fn_list=$(ls *${ext}.zip)
+#wget --user $uname --ask-password -nc -i $urllist
+#Need to hardcode password when using GNU parallel 
+pw=Temporary0
+#pw=''
+cat ${urllist%.*}_missing.txt | parallel --delay 1 -j 16 --progress "wget --user $uname --password $pw -nc -q {}"
 
 fn_list=''
 for i in *zip
@@ -47,6 +60,8 @@ parallel 'srtm_hdr.sh {}' ::: $fn_list
 #Build mosaic in original WGS84 coordinates
 gdalbuildvrt ${site}_nasadem_${ext}.vrt $fn_list
 gdaladdo_ro.sh ${site}_nasadem_${ext}.vrt
+gdal_translate $gdal_opt ${site}_nasadem_${ext}.vrt ${site}_nasadem_${ext}.tif
+gdalwarp -overwrite $gdal_opt -r cubic -t_srs "$proj" -tr 30 30 nasadem_${ext}.vrt nasadem_${ext}_30m.tif
 
 #Should mask elevation values where err >= 32769
 

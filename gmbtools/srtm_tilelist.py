@@ -8,8 +8,8 @@ Pipe this to a file, then wget
 import sys
 
 #Hardcoded site
-#site = "hma"
-site = "conus"
+site = "hma"
+#site = "conus"
 
 if site == "hma":
     lon = (65, 106)
@@ -38,15 +38,17 @@ for i in range(lon[0], lon[1]+1):
 #This is non void-filled float
 productdir = 'hgt_srtmOnly_R4'
 #For NorthAmerica
-ext = 'srtmOnly.hgt'
+#ext = 'srtmOnly.hgt'
 #For Eurasia
-#ext = 'hgt'
+ext = 'hgt'
 #This is void-filled Int16
 #productdir = 'hgt_merge_I2'
+
 #productdir = 'img_comb'
 #ext = 'img'
-productdir = 'err_I2'
-ext = 'err'
+
+#productdir = 'err_I2'
+#ext = 'err'
 
 for tile in tile_list:
     #print("%s/%s.hgt" % (topurl, tile))
