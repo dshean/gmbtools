@@ -9,7 +9,7 @@ dem=$1
 #ref_src=/nobackup/deshean/rpcdem/ned13/ned13_tiles_glac24k_115kmbuff.vrt 
 ref_src=/nobackup/deshean/rpcdem/hma/srtm1/hma_srtm_gl1.vrt
 #ref_src=/nobackup/deshean/hma/mos/latest/mos_8m/*mos_8m.vrt
-#ref_src=/nobackup/deshean/hma/mos/latest/mos_32m/*mos_32m.vrt
+mos_32m=/nobackup/deshean/hma/mos/latest/mos_32m/*mos_32m.vrt
 
 max_dz=200
 
@@ -29,6 +29,8 @@ dem=${dem%.*}_dzfilt_0.00-${max_dz}.00.tif
 #filter.py $dem -filt med -param 5 
 #dem=${dem%.*}_medfilt_5px.tif
 
+dem_mosaic --priority-blending-length 3 -o ${dem%.*}_blend3px_mos_32m $dem $mos_32m $ref
+
 #Should check maximum dimensions of remaining holes, determine size of filter necessary
 gauss_fn=''
 for s in 5 11 21
@@ -46,7 +48,8 @@ done
 #Fails for large values, won't fill near edges
 #dem_mosaic --hole-fill-length 9999 -o ${dem%.*} $dem
 
-#gdal_fillnodata.py
+#Generate filled version, sometimes better than our nested approach, esp when ref is wrong
+gdal_fillnodata.py $dem ${dem%.*}_fill.tif
 #dem_downsample_fill.py
 #inpaint_dem.py
 
