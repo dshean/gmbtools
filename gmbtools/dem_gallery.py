@@ -21,7 +21,7 @@ add_cbar = False
 #dem_ref_fn = 'rainier_allgood_mos-tile-0_warp.tif'
 dem_fn_list = sys.argv[1:]
 
-dems = np.ma.array([iolib.fn_getma(fn) for fn in dem_fn_list])
+dems = np.ma.array([iolib.fn_getma_sub(fn) for fn in dem_fn_list])
 dem_clim = malib.calcperc(dems, (2,98))
 
 w=10.0
@@ -64,11 +64,11 @@ for i,dem_fn in enumerate(dem_fn_list):
     ax = grid[i]
     print(dem_fn)
     dem_ds = iolib.fn_getds(dem_fn)
-    dem = iolib.ds_getma(dem_ds)
+    dem = iolib.ds_getma_sub(dem_ds)
     dem_hs_fn = os.path.splitext(dem_fn)[0]+'_hs_az315.tif'
     if os.path.exists(dem_hs_fn):
-        dem_hs = iolib.fn_getma(dem_hs_fn)
-    else: 
+        dem_hs = iolib.fn_getma_sub(dem_hs_fn)
+    else:
         dem_hs = geolib.gdaldem_mem_ds(dem_ds, 'hillshade', returnma=True)
     dt = timelib.fn_getdatetime(dem_fn)
     if dt is not None:
