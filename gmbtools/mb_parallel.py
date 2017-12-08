@@ -54,6 +54,7 @@ class GlacFeat:
             self.glacname = self.glacname.decode('unicode_escape').encode('ascii','ignore')
             self.glacname = self.glacname.replace(" ", "")
             self.glacname = self.glacname.replace("_", "")
+            self.glacname = self.glacname.replace("/", "")
 
         self.glacnum = feat.GetField(glacnum_fieldname)
         fn = feat.GetDefnRef().GetName()
