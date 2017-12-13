@@ -39,8 +39,10 @@ def add_legend(ax, sf=16, loc='upper right'):
     Create legend for scaled scatterplot markers
     """
     ax.autoscale(False)
-    leg_s = np.array([0.1, 0.5, 1.0, 5.0, 10.0])
-    #leg_s = np.array([0.1, 1.0, 10.0, 100.0])
+    #CONUS
+    #leg_s = np.array([0.1, 0.5, 1.0, 5.0, 10.0])
+    #HMA
+    leg_s = np.array([0.1, 1.0, 10.0, 100.0])
     leg_x = np.full(leg_s.size, -999999999)
     leg_y = np.full(leg_s.size, -999999999)
     #leg_sc = ax.scatter(leg_x, leg_y, c='0.8', s=leg_s)
@@ -48,7 +50,9 @@ def add_legend(ax, sf=16, loc='upper right'):
     for i, s in enumerate(leg_s):
         lbl = r'$%0.1f\/km^2$' % s
         ax.scatter(leg_x[i], leg_y[i], s=s*sf, c='gray', label=lbl)
-    return ax.legend(title='Glacier Area', scatterpoints=1, loc=loc, prop={'size':8})
+    legend = ax.legend(title='Glacier Area', scatterpoints=1, loc=loc, prop={'size':7})
+    legend.get_title().set_fontsize('8')
+    return legend
 
 def add_lbl(ax, a):
     for pt,lbl in glacier_dict.iteritems():
@@ -189,6 +193,8 @@ if site == 'conus':
     sf = 16
 elif site == 'hma':
     aea_srs = geolib.hma_aea_srs
+    #title = "HMA Glacier Mass Balance (1970s to 2015)"
+    #title = "HMA Glacier Mass Balance (1970s to 2000)"
     title = "HMA Glacier Mass Balance (2000 to 2015)"
     sf = 2 
 
@@ -202,7 +208,8 @@ a = recfunctions.append_fields(a, 'lat', lat, dtypes=None, usemask=False)
 #x_utm, y_utm, dummy = geolib.cT_helper(a['x'],a['y'],0,aea_srs,utm_srs)
 
 vmin, vmax = get_equal_vmin_vmax(a['mb_mwea'])
-vmin, vmax = (-0.7, 0.7)
+#vmin, vmax = (-0.7, 0.7)
+vmin, vmax = (-1.0, 1.0)
 
 if True:
     #f, ax = plt.subplots(figsize=(10,8))
@@ -210,7 +217,7 @@ if True:
     ax = mapplot(a, field='mb_mwea', srs=aea_srs, sf=sf, ax=ax, clim=(vmin, vmax))
     fig_fn = '%s_mb_map_%s.png' % (site, ts)
     ax.set_title(title)
-    plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
+    plt.savefig(fig_fn, dpi=300, bbox_inches='tight', pad_inches=0)
 
 if False:
     #f, ax = plt.subplots(figsize=(10,8))
@@ -218,7 +225,7 @@ if False:
     ax = mapplot(a, field='t1', srs=aea_srs, sf=sf, ax=ax)
     fig_fn = '%s_nedyear_map_%s.png' % (site, ts)
     plt.title("NED Source Date")
-    plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
+    plt.savefig(fig_fn, dpi=300, bbox_inches='tight', pad_inches=0)
 
 if True:
     f, ax = plt.subplots()
@@ -228,7 +235,7 @@ if True:
     ax.set_xlabel('Latitude')
     ax.set_ylabel('Elevation (m WGS84)')
     fig_fn = '%s_mb_elev_lat_%s.png' % (site, ts)
-    plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
+    plt.savefig(fig_fn, dpi=300, bbox_inches='tight', pad_inches=0)
 
 if True:
     f, ax = plt.subplots()
@@ -238,7 +245,7 @@ if True:
     ax.set_xlabel('Longitude')
     ax.set_ylabel('Elevation (m WGS84)')
     fig_fn = '%s_mb_elev_lon_%s.png' % (site, ts)
-    plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
+    plt.savefig(fig_fn, dpi=300, bbox_inches='tight', pad_inches=0)
 
 #3D plot - pretty slow
 if False:
@@ -251,7 +258,7 @@ if False:
     ax.set_ylabel('y (m)')
     ax.set_zlabel('Elevation (m WGS84)')
     #fig_fn = '%s_mb_elev_lat_%s.png' % (site, ts)
-    #plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
+    #plt.savefig(fig_fn, dpi=300, bbox_inches='tight', pad_inches=0)
 
 if True:
     f, ax = plt.subplots()
@@ -264,7 +271,7 @@ if True:
     #ax.set_ylim(-6,6)
     ax.axhline(0, ls=':', color='k', lw=0.5)
     fig_fn = '%s_mb_slope_aspect_%s.png' % (site, ts)
-    plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
+    plt.savefig(fig_fn, dpi=300, bbox_inches='tight', pad_inches=0)
 
 if 'ppt_a' in a.dtype.names:
     if True:
@@ -277,7 +284,7 @@ if 'ppt_a' in a.dtype.names:
         ax.set_ylim(-6,6)
         ax.axhline(0, ls=':', color='k', lw=0.5)
         fig_fn = '%s_mb_ppt_a_tmean_a_%s.png' % (site, ts)
-        plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
+        plt.savefig(fig_fn, dpi=300, bbox_inches='tight', pad_inches=0)
 
     if True:
         f, ax = plt.subplots()
@@ -289,7 +296,7 @@ if 'ppt_a' in a.dtype.names:
         ax.set_ylim(-6, 6)
         ax.axhline(0, ls=':', color='k', lw=0.5)
         fig_fn = '%s_mb_ppt_w_tmean_a_%s.png' % (site, ts)
-        plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
+        plt.savefig(fig_fn, dpi=300, bbox_inches='tight', pad_inches=0)
 
     if True:
         f, ax = plt.subplots()
@@ -301,7 +308,7 @@ if 'ppt_a' in a.dtype.names:
         ax.set_ylim(-9,3)
         ax.axhline(0, ls=':', color='k', lw=0.5)
         fig_fn = '%s_mb_ppt_w_tmean_w_%s.png' % (site, ts)
-        plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
+        plt.savefig(fig_fn, dpi=300, bbox_inches='tight', pad_inches=0)
 
     if True:
         f, ax = plt.subplots()
@@ -313,6 +320,6 @@ if 'ppt_a' in a.dtype.names:
         ax.set_ylim(1,13)
         ax.axhline(0, ls=':', color='k', lw=0.5)
         fig_fn = '%s_mb_ppt_w_tmean_s_%s.png' % (site, ts)
-        plt.savefig(fig_fn, dpi=300, bbox_inches='tight')
+        plt.savefig(fig_fn, dpi=300, bbox_inches='tight', pad_inches=0)
 
 plt.show()
