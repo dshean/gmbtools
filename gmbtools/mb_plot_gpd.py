@@ -5,6 +5,14 @@ Combine glacier polygons with geodetic mass balance output
 Uses geopandas to join, compute stats for differen regions and plot
 """
 
+#Todo
+#Replace disoolve with groupby
+#Rivers
+#Use 'Name' and HYBAS_ID for index
+#Output shp, clean up field names <10 char
+#Fix issue with geojson and projection
+#Sum area for all glaciers in each region, not just those with mb numbers
+
 import os, sys
 import pandas as pd
 import numpy as np
@@ -16,27 +24,18 @@ from osgeo import gdal
 from pygeotools.lib import iolib, geolib
 
 import geopandas as gpd
-
-def cartopy_extent(extent):
-    return [extent[0], extent[2], extent[1], extent[3]]
-
-def append_centroid_xy(df):
-    xlist = []
-    ylist = []
-    for index, row in df.centroid.iteritems():
-        xlist.append(row.x)
-        ylist.append(row.y)
-    df['centroid_x'] = xlist
-    df['centroid_y'] = ylist
+import cartopy.crs as ccrs 
 
 site = 'hma'
 #site = 'conus'
 
-area_filter=True
+area_filter=False
 #min_area_m2 = 1E5
 min_area_m2 = 1E6
 
 mb_clim = (-1.0, 1.0)
+
+crs = ccrs.AlbersEqualArea(central_longitude=-115, central_latitude=43, standard_parallels=(36, 49))
 
 extent = None
 if site == 'hma':
@@ -55,6 +54,7 @@ if site == 'hma':
     region_shp_fn = '/Users/dshean/Documents/UW/HMA/Kaab_regions/regions_from_kaab2015_merged.shp'
     #Already have name in glac_shp_df
     region_col = 'Name'
+    #This is geopandas crs format
     glac_crs = {u'datum':u'WGS84',u'lat_0':36,u'lat_1':25,u'lat_2':47,u'lon_0':85,u'no_defs':True,u'proj':u'aea',u'units':u'm',u'x_0':0,u'y_0':0}
     extent = [-1610900, -1142400, 1767400, 1145700]
 elif site == 'conus':
@@ -69,6 +69,94 @@ elif site == 'conus':
     extent = [-856800, -789000, 910700, 839400]
 else:
     sys.exit("Site not currently supported")
+
+def cartopy_extent(extent):
+    return [extent[0], extent[2], extent[1], extent[3]]
+
+def append_centroid_xy(df):
+    xlist = []
+    ylist = []
+    for index, row in df.centroid.iteritems():
+        xlist.append(row.x)
+        ylist.append(row.y)
+    df['centroid_x'] = xlist
+    df['centroid_y'] = ylist
+
+def make_map(mb_dissolve_df=None, glac_df_mb=None, region_df=None, col_name=None, border_df=None, \
+        basin_df=None, crs=crs, extent=None, hs=None, hs_extent=None, mb_clim=None):
+
+    fig, ax = plt.subplots(figsize=(10,8))
+    ax.set_aspect('equal')
+
+    #This is cartopy-enabled axes
+    #ax = plt.axes(projection=crs)
+
+    #Currently unsupported for AEA
+    #gl = ax.gridlines(draw_labels=True, linewidth=0.5, color='gray', alpha=0.5, linestyle='--')
+
+    if hs is not None:
+        print("Plotting image")
+        hs_style = {'cmap':'gray', 'origin':'upper', 'extent':cartopy_extent(hs_extent), 'transform':crs}
+        ax.imshow(hs, **hs_style)
+
+    if border_df is not None:
+        print("Plotting borders")
+        border_style = {'facecolor':'0.95','edgecolor':'k', 'linewidth':0.7}
+        border_df.plot(ax=ax, **border_style)
+
+    if region_df is not None:
+        #This is original region_col
+        #region_style = {'column':col_name, 'cmap':'cpt_rainbow', 'edgecolor':'k', 'linewidth':0.5, 'alpha':0.2}
+        #region_style = {'column':'Name', 'cmap':'gray', 'edgecolor':'k', 'linewidth':0.5, 'alpha':0.3}
+        region_style = {'cmap':'cpt_rainbow', 'edgecolor':'k', 'linewidth':0.5, 'alpha':0.05}
+        region_df.plot(ax=ax, **region_style)
+
+    if basin_df is not None:
+        basin_style = {'facecolor':'none','edgecolor':'k', 'linewidth':0.3, 'alpha':0.4}
+        basin_df.plot(ax=ax, **basin_style)
+
+    if mb_dissolve_df is not None:
+        #Plot single values for region or basin
+        scaling_f = 0.2 
+        x = mb_dissolve_df['centroid_x']
+        y = mb_dissolve_df['centroid_y']
+        #s = scaling_f*mb_dissolve_df[('area_m2_sum')]/1E6
+        #s = scaling_f*mb_dissolve_df[('Area_sum')]
+        s = scaling_f*mb_dissolve_df[('Area_all', '')]
+        #c = mb_dissolve_df[('mb_mwea_mean')]
+        c = mb_dissolve_df['mb_mwea', 'mean']
+        sc_style = {'cmap':'RdBu', 'edgecolor':'k', 'linewidth':0.5}
+        sc = ax.scatter(x, y, s, c, vmin=mb_clim[0], vmax=mb_clim[1], **sc_style) 
+        #Add labels
+        for k, v in mb_dissolve_df.iterrows():
+            #lbl = '%0.2f +/- %0.2f' % (v[('mb_mwea_mean')], v[('mb_mwea_sigma_mean')])
+            lbl = '%0.2f +/- %0.2f' % (v['mb_mwea', 'mean'], v['mb_mwea_sigma','mean'])
+            ax.annotate(lbl, xy=(v['centroid_x'],v['centroid_y']), xytext=(1,0), textcoords='offset points', family='sans-serif', fontsize=8, color='k')
+
+    if glac_df_mb is not None:
+        print("Plotting glacier polygons")
+        glac_style = {'edgecolor':'k', 'linewidth':0.5}
+        glac_sc = glac_df_mb.plot(ax=ax, column='mb_mwea', cmap='RdBu', vmin=mb_clim[0], vmax=mb_clim[1], **glac_style)
+
+    #This is minx, miny, maxx, maxy
+    if extent is None:
+        if glac_df_mb is not None:
+            extent = glac_df_mb.total_bounds
+        else:
+            extent = mb_dissolve_df.total_bounds
+    #For cartopy axes
+    #ax.set_extent(cartopy_extent(extent), crs=crs)
+    ax.set_xlim(extent[0], extent[2])
+    ax.set_ylim(extent[1], extent[3])
+
+    #Adding colorbar doesn't work with the cartopy axes
+    pltlib.add_cbar(ax, sc, label='Mass Balance (m we/yr)')
+    pltlib.add_scalebar(ax, res=1)
+    pltlib.hide_ticks(ax)
+
+    plt.tight_layout()
+
+    return fig
 
 #Input csv from mb_parallel.py
 mb_csv_fn = sys.argv[1]
@@ -143,6 +231,8 @@ else:
     glac_df_mb = glac_df.merge(mb_df, on=mergefield)
     glac_df_mb.to_file(merge_fn, driver=driver)
 
+print("%i records loaded" % (glac_df_mb.shape[0]))
+
 if area_filter:
     print("Filtering by glacier polygon area (min %0.2f km^2)" % (min_area_m2/1E6))
     orig_count = glac_df_mb.shape[0]
@@ -151,51 +241,61 @@ if area_filter:
 
 #glac_df_mb_o = glac_df_mb[[mergefield,'mb_mwea']]
 
+#Define aggregation function for the dissolve
+aggfunc = {'area_m2':[np.mean, np.sum], 'mb_mwea':[np.mean, np.std, np.sum], \
+        'mb_mwea_sigma':np.mean, 'Area':np.sum}
+
 if region_shp_fn is not None:
+    glac_df_region_sum = glac_df.groupby(region_col).sum()
+    glac_df_mb_region = glac_df_mb.groupby(region_col).agg(aggfunc)
+    glac_df_mb_region['Area_all'] = glac_df_region_sum['Area']
+    #glac_df_mb_region = gpd.DataFrame(glac_df_mb_region)
+    append_centroid_xy(region_df)
+    region_df.rename(index=str, columns={"Name": "region"}, inplace=True)
+    glac_df_mb_region = glac_df_mb_region.merge(region_df[['region', 'centroid_x', 'centroid_y']], left_index=True, right_on='region')
+
+"""
     glac_df_mb_region_fn = os.path.splitext(merge_fn)[0]+'_region_dissolve.geojson'
     if os.path.exists(glac_df_mb_region_fn):
         print("Loading region dissolve")
         glac_df_mb_region = gpd.read_file(glac_df_mb_region_fn)
     else:
         print("Dissolve by region")
-        aggfunc = {'area_m2':[np.mean, np.sum], 'mb_mwea':[np.mean, np.std, np.sum], 'mb_mwea_sigma':np.mean}
-        #glac_df_mb_region = glac_df_mb.dissolve(by=region_col+'_right', aggfunc=aggfunc)
         glac_df_mb_region = glac_df_mb.dissolve(by=region_col, aggfunc=aggfunc)
         append_centroid_xy(glac_df_mb_region)
-        #glac_df_mb_region_sum = glac_df_mb_region.dissolve(by=region_col, aggfunc='sum').sort_values('area_km2')
+        #glac_df_mb_region_sum = glac_df_mb_region.sort_values('Area')
         #glac_df_mb_region_mean.reindex(glac_df_mb_region_sum.index)
         #No need for tuple column names
         glac_df_mb_region.columns = ['_'.join(x) if isinstance(x, tuple) else x \
                 for x in glac_df_mb_region.columns]
         glac_df_mb_region.to_file(glac_df_mb_region_fn, driver=driver)
+"""
 
 if basin_shp_fn is not None:
+    glac_df_basin_sum = glac_df.groupby(basin_col).sum()
+    glac_df_mb_basin = glac_df_mb.groupby(basin_col).agg(aggfunc)
+    glac_df_mb_basin['Area_all'] = glac_df_basin_sum['Area']
+    append_centroid_xy(basin_df)
+    basin_df.rename(index=str, columns={"HYBAS_ID": "basin"}, inplace=True)
+    glac_df_mb_basin = glac_df_mb_basin.merge(basin_df[['basin', 'centroid_x', 'centroid_y']], left_index=True, right_on='basin')
+
+    """
     glac_df_mb_basin_fn = os.path.splitext(merge_fn)[0]+'_basin_dissolve.geojson'
     if os.path.exists(glac_df_mb_basin_fn):
         print("Loading basin dissolve")
         glac_df_mb_basin = gpd.read_file(glac_df_mb_basin_fn)
     else:
         print("Dissolve by basin")
-        aggfunc = {'area_m2':[np.mean, np.sum], 'mb_mwea':[np.mean, np.std, np.sum], 'mb_mwea_sigma':np.mean}
         glac_df_mb_basin = glac_df_mb.dissolve(by=basin_col, aggfunc=aggfunc)
         append_centroid_xy(glac_df_mb_basin)
         glac_df_mb_basin.columns = ['_'.join(x) if isinstance(x, tuple) else x \
                 for x in glac_df_mb_basin.columns]
         glac_df_mb_basin.to_file(glac_df_mb_basin_fn, driver=driver)
-
-if True:
-    import cartopy.crs as ccrs 
-    #cartopy.crs.AlbersEqualArea(central_longitude=0.0, central_latitude=0.0, false_easting=0.0, false_northing=0.0, standard_parallels=(20.0, 50.0), globe=None)
-    crs = ccrs.AlbersEqualArea(central_longitude=-115, central_latitude=43, standard_parallels=(36, 49))
-    fig = plt.figure()
-    ax = plt.axes(projection=crs)
-    #Currently unsupported for AEA
-    #gl = ax.gridlines(draw_labels=True, linewidth=0.5, color='gray', alpha=0.5, linestyle='--')
-
-#fig, ax = plt.subplots()
-#ax.set_aspect('equal')
+    """
 
 if False:
+    fig, ax = plt.subplots()
+    ax.set_aspect('equal')
     print("Loading shaded relief map")
     hs_ds = gdal.Open(hs_fn)
     hs = iolib.ds_getma(hs_ds)
@@ -203,6 +303,8 @@ if False:
     hs_extent_cartopy = cartopy_extent(hs_extent)
     print("Plotting image")
     ax.imshow(hs, cmap='gray', origin='upper', extent=hs_extent_cartopy, transform=crs, alpha=0.6)
+else:
+    hs = None
 
 """
 #This is currently broken
@@ -216,28 +318,19 @@ if border_shp_fn is not None:
     #Load local copy of border polygons
     border_df = gpd.read_file(border_shp_fn)
     border_df = border_df.to_crs(glac_df.crs)
-    print("Plotting borders")
-    border_style = {'facecolor':'0.9','edgecolor':'k', 'linewidth':0.5}
-    border_df.plot(ax=ax, **border_style)
 
+if region_shp_fn is not None:
+    region_fig = make_map(glac_df_mb_region, glac_df_mb=glac_df_mb, region_df=region_df, border_df=border_df, \
+            mb_clim=mb_clim, crs=crs, extent=extent)
+    region_fig_fn = os.path.splitext(glac_shp_join_fn)[0]+'_region_fig.png'
+    region_fig.savefig(region_fig_fn, dpi=300, bbox_inches='tight', pad_inches=0) 
 if basin_shp_fn is not None:
-    basin_style = {'facecolor':'none','edgecolor':'b', 'linewidth':0.5, 'alpha':0.5}
-    basin_df.plot(ax=ax, **basin_style)
+    basin_fig = make_map(glac_df_mb_basin, glac_df_mb=glac_df_mb, basin_df=basin_df, border_df=border_df, \
+            mb_clim=mb_clim, crs=crs, extent=extent)
+    basin_fig_fn = os.path.splitext(glac_shp_join_fn)[0]+'_basin_fig.png'
+    basin_fig.savefig(basin_fig_fn, dpi=300, bbox_inches='tight', pad_inches=0) 
 
-print("Plotting glacier polygons")
-glac_style = {'edgecolor':'k', 'linewidth':0.5}
-#glac_df_mb.plot(ax=ax, column='mb_mwea', cmap='RdBu', vmin=mb_clim[0], vmax=mb_clim[1], **glac_style)
-
-#This is minx, miny, maxx, maxy
-if extent is None:
-    glac_df_extent = glac_df_mb.total_bounds
-    extent = glac_df_extent
-
-glac_df_extent_cartopy = cartopy_extent(extent)
-mb_sc = glac_df_mb.plot(ax=ax, column='mb_mwea', cmap='RdBu', vmin=mb_clim[0], vmax=mb_clim[1], **glac_style)
-
-ax.set_extent(glac_df_extent_cartopy, crs=crs)
-pltlib.add_scalebar(ax, res=1)
+plt.show()
 
 """
 f3, (t1_ax, mb_ax) = plt.subplots(1,2,figsize=(12,8), sharex=True, sharey=True)
@@ -259,36 +352,3 @@ pltlib.add_cbar(mb_ax, mb_sm, label='Mass Balance (m we/yr)')
 #t1_ax.set_xlim(extent[0], extent[2])
 #t1_ax.set_ylim(extent[1], extent[3])
 """
-
-if region_shp_fn is not None:
-    f2, ax2 = plt.subplots(figsize=(8,8))
-    ax2.set_aspect('equal')
-    border_df.plot(ax=ax2, **border_style)
-    #ax2.imshow(hs, cmap='gray', origin='upper', extent=hs_extent_cartopy)
-
-    #This is original region_col
-    region_style = {'column':'Name', 'cmap':'cpt_rainbow', 'edgecolor':'k', 'linewidth':0.5, 'alpha':0.2}
-    #region_style = {'column':'Name', 'cmap':'gray', 'edgecolor':'k', 'linewidth':0.5, 'alpha':0.3}
-    region_df.plot(ax=ax2, **region_style)
-
-    scaling_f = 1
-    #Update these with centroids
-    x = glac_df_mb_region['centroid_x']
-    y = glac_df_mb_region['centroid_y']
-    s = scaling_f*glac_df_mb_region[('area_m2_sum')]/1E6
-    c = glac_df_mb_region[('mb_mwea_mean')]
-    sc = ax2.scatter(x, y, s, c, vmin=mb_clim[0], vmax=mb_clim[1], cmap='RdBu', edgecolor='k', linewidth=0.5)
-
-    pltlib.add_cbar(ax2, sc, label='Mass Balance (m we/yr)')
-    style_kwd = {'facecolor':'none', 'edgecolor':'k', 'linewidth':0.5}
-    #glac_df_mb.plot(ax=ax2, **style_kwd)
-    pltlib.add_scalebar(ax2, res=1)
-    ax2.set_xlim(extent[0], extent[2])
-    ax2.set_ylim(extent[1], extent[3])
-    pltlib.hide_ticks(ax2)
-
-    for k, v in glac_df_mb_region.iterrows():
-        lbl = '%0.2f +/- %0.2f' % (v[('mb_mwea_mean')], v[('mb_mwea_sigma_mean')])
-        ax2.annotate(lbl, xy=(v['centroid_x'],v['centroid_y']), xytext=(1,0), textcoords='offset points', family='sans-serif', fontsize=8, color='k')
-
-plt.show()
