@@ -6,7 +6,7 @@ Uses geopandas to join, compute stats for differen regions and plot
 """
 
 #Todo
-#Replace disoolve with groupby
+#Fix issue with int32 conversion after join
 #Rivers
 #Use 'Name' and HYBAS_ID for index
 #Output shp, clean up field names <10 char
