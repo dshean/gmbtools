@@ -30,10 +30,10 @@ index=false
 tileindex=false
 
 #Hardcoded site and projection for now
-#site=hma
-#proj='+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
-site=conus
-proj='+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
+site=hma
+proj='+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
+#site=conus
+#proj='+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
 
 ncpu=$(cat /proc/cpuinfo | egrep "core id|physical id" | tr -d "\n" | sed s/physical/\\nphysical/g | grep -v ^$ | sort | uniq | wc -l)
 threads=$((ncpu-1))
@@ -55,7 +55,10 @@ if $latest ; then
     re='201[5-9]'
     mos_ext+='_latest'
 else
+    #CONUS
     re='201[2-9]'
+    #HMA
+    re='201[0-9]'
     #Want to exclude 2008/2009 data
     #re='20[0-9]'
 fi
@@ -79,16 +82,23 @@ fi
 #list=$(ls */stereo/*00/dem*/*-DEM_${res}m.tif */*00/dem*/*-DEM_${res}m.tif)
 #list=$(ls */*/*/dem*/*-DEM_8m_trans.tif | grep -v QB)
 
+ext="-DEM_${res}m_dem_align"
+mos_ext="${site}_mos_${res}m_dem_align"
+
 echo $re
 echo $ext
 echo $mos_ext
 
-list=$(ls *00/dem*/${re}*${ext}.tif)
+#HMA Nuth and Kaab, round 2
+list=$(ls *track/dem_coreg/*00/dem*/*-DEM_8m_dem_align/*_align_dem_align/*_align.tif)
+
+#list=$(ls *00/dem*/${re}*${ext}.tif)
 out=mos/${site}_${ts}_mos/${mos_ext}/${mos_ext}
 
 #Sort by date
 #NOTE: Need to update sort key with increased path depths
-list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 3)
+#list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 3)
+list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 5)
 
 echo
 echo $out
