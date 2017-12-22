@@ -265,8 +265,14 @@ def get_date_a(ds, date_shp_lyr, glac_geom_mask, datefield):
     return date_a
     
 topdir='/nobackup/deshean'
-site='conus'
-#site='hma'
+#site='conus'
+site='hma'
+
+"""
+#Consider storing setup variables in dictionary that can be passed to Process
+setup = {}
+setup['site'] = site
+"""
 
 #This was for focused mb at specific sites
 #topdir='/Volumes/SHEAN_1TB_SSD/site_poly_highcount_rect3_rerun/rainier'
@@ -286,19 +292,13 @@ min_glac_area_writeout = 1.0
 #Generate figures
 mb_plot = True 
 #Run in parallel, set to False for serial loop
-parallel = True 
+parallel = False 
 #Verbose for debugging
 verbose = False 
 #Number of parallel processes
 nproc = iolib.cpu_count() - 1
-#This stores collection of feature geometries, independent of shapefile
-glacfeat_fn = "glacfeat_list.p"
-
-"""
-#Store setup variables in dictionary that can be passed to Process
-setup = {}
-setup['site'] = site
-"""
+#Shortcut to use existing glacfeat_list.p if found
+use_existing_glacfeat = True 
 
 global z1_date
 global z2_date
@@ -434,28 +434,50 @@ elif site == 'hma':
     glac_shp_fn = os.path.join(topdir,'data/rgi60/regions/rgi60_merge_HMA_aea.shp')
     glacfeat_fn = os.path.splitext(glac_shp_fn)[0]+'_glacfeat_list.p'
 
+    """
     #First DEM source
+    #Hexagon
+    z1_fn = os.path.join(topdir,'hma/hexagon/dem/19730101_hexagon_dem_mos.vrt')
+    z1_date = 1973.0
+    z1_sigma = 4.0
+    z1_srtm_penetration_corr = False 
+    """
+
+    """
     #SRTM
-    z1_fn = os.path.join(topdir,'rpcdem/hma/srtm1/hma_srtm_gl1.vrt')
+    #z2_fn = os.path.join(topdir,'rpcdem/hma/nasadem/srtmOnly/20000211_hma_nasadem_hgt_lt5m_err.vrt')
+    z2_fn = os.path.join(topdir,'rpcdem/hma/srtm1/hma_srtm_gl1.vrt')
+    #z2_date = timelib.dt2decyear(datetime(2000,2,11))
+    z2_date = 2000.112
+    z2_sigma = 4.0
+    z2_srtm_penetration_corr = True
+    """
+
+    #SRTM
+    #z1_fn = os.path.join(topdir,'rpcdem/hma/nasadem/srtmOnly/20000211_hma_nasadem_hgt_lt5m_err.vrt')
+    z1_fn = os.path.join(topdir,'rpcdem/hma/nasadem/srtmOnly/20000211_hma_nasadem_hgt.vrt')
+    #z1_fn = os.path.join(topdir,'rpcdem/hma/srtm1/hma_srtm_gl1.vrt')
     #z1_date = timelib.dt2decyear(datetime(2000,2,11))
-    #z1_date = datetime(2000,2,11)
     z1_date = 2000.112
     z1_sigma = 4.0
     z1_srtm_penetration_corr = True
 
-    mosdir = 'hma_20170716_mos'
     #Second DEM Source (WV mosaic)
     #z2_fn = '/nobackup/deshean/hma/hma1_2016dec22/hma_8m_tile/hma_8m.vrt'
     #z2_fn = os.path.join(topdir,'hma/hma1_2016dec22/hma_8m_tile/hma_8m.vrt')
     #z2_fn = os.path.join(topdir,'hma/hma1_2016dec22/hma_8m_tile_round2_20170220/hma_8m_round2.vrt')
     #z2_fn = os.path.join(topdir,'hma/hma_8m_mos_20170410/hma_8m.vrt')
-    z2_fn = os.path.join(topdir,'hma/mos/%s/mos_8m/%s_8m.vrt' % (mosdir, mosdir))
+    #mosdir = 'hma_20170716_mos'
+    #z2_fn = os.path.join(topdir,'hma/mos/%s/mos_8m/%s_8m.vrt' % (mosdir, mosdir))
+    mosdir = 'hma_20171211_mos'
+    z2_fn = os.path.join(topdir,'hma/mos/%s/hma_mos_8m_dem_align/hma_mos_8m_dem_align.vrt' % mosdir)
     #z2_date = datetime(2015, 1, 1)
     z2_date = 2015.0
     z2_sigma = 1.0
 
     #Output directory
     outdir = os.path.join(topdir,'hma/mos/%s/mb' % mosdir)
+    #outdir = os.path.join(topdir,'hma/mos/%s/mb_Hexagon_SRTM' % mosdir)
 
     #Output projection
     #'+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
@@ -537,7 +559,7 @@ cmd = ['lfs', 'setstripe', '-c', str(nproc), outdir]
 subprocess.call(cmd)
 
 #Create a list of glacfeat objects (contains geom) - safe for multiprocessing, while OGR layer is not
-if os.path.exists(glacfeat_fn):
+if os.path.exists(glacfeat_fn) and use_existing_glacfeat:
     print("Loading %s" % glacfeat_fn)
     glacfeat_list = pickle.load(open(glacfeat_fn,"rb"))
 else:
@@ -575,7 +597,8 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
         #Add prism datasets
         prism_fn_list = [prism_ppt_annual_fn, prism_tmean_annual_fn]
         prism_fn_list.extend([prism_ppt_summer_fn, prism_ppt_winter_fn, prism_tmean_summer_fn, prism_tmean_winter_fn])
-        ds_list.extend(warplib.memwarp_multi_fn(prism_fn_list, res=ds_list[0], extent=gf.glac_geom_extent, t_srs=aea_srs, verbose=verbose))
+        ds_list.extend(warplib.memwarp_multi_fn(prism_fn_list, res=ds_list[0], \
+                extent=gf.glac_geom_extent, t_srs=aea_srs, verbose=verbose))
 
     #Check to see if z2 is empty, as z1 should be continuous
     gf.z2 = iolib.ds_getma(ds_list[1])
@@ -885,8 +908,6 @@ if parallel:
         ndone = len(glacfeat_list_in) - results._number_left
         print('%i of %i done' % (ndone, len(glacfeat_list_in)))
         time.sleep(2)
-        #sys.stderr.write('%i of %i done' % (i, len(glacfeat_list))) 
-    out = results.get()
 else:
     print("Running serially")
     for n, gf in enumerate(glacfeat_list_in):
