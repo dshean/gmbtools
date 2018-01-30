@@ -205,13 +205,13 @@ def hist_plot(gf, outdir, bin_width=10.0):
     plt.subplots_adjust(top=0.95)
     #print("Saving aed plot")
     fig_fn = os.path.join(outdir, gf.feat_fn+'_mb_aed.png')
-    plt.savefig(fig_fn, dpi=300)
+    plt.savefig(fig_fn, bbox_inches='tight', dpi=300)
     return z_bin_edges
 
 def map_plot(gf, z_bin_edges, outdir, hs=True):
     #print("Generating map plot")
     f,axa = plt.subplots(1,3, figsize=(10,7.5))
-    f.suptitle(gf.feat_fn)
+    #f.suptitle(gf.feat_fn)
     alpha = 1.0
     if hs:
         #z1_hs = geolib.gdaldem_wrapper(gf.out_z1_fn, product='hs', returnma=True, verbose=False)
@@ -248,10 +248,10 @@ def map_plot(gf, z_bin_edges, outdir, hs=True):
     pltlib.add_cbar(axa[2], dz_im, label='dh/dt (m/yr)')
     plt.tight_layout()
     #Make room for suptitle
-    plt.subplots_adjust(top=0.90)
+    #plt.subplots_adjust(top=0.90)
     #print("Saving map plot")
     fig_fn = os.path.join(outdir, gf.feat_fn+'_mb_map.png')
-    plt.savefig(fig_fn, dpi=300)
+    plt.savefig(fig_fn, bbox_inches='tight', dpi=300)
 
 def get_date_a(ds, date_shp_lyr, glac_geom_mask, datefield):
     date_r_ds = iolib.mem_drv.CreateCopy('', ds)
@@ -265,8 +265,8 @@ def get_date_a(ds, date_shp_lyr, glac_geom_mask, datefield):
     return date_a
     
 topdir='/nobackup/deshean'
-#site='conus'
-site='hma'
+site='conus'
+#site='hma'
 
 """
 #Consider storing setup variables in dictionary that can be passed to Process
@@ -287,18 +287,16 @@ min_glac_area = 0.1 #km^2
 min_valid_area_perc = 0.80
 #Write out DEMs and dz map
 writeout = True 
-#Only write out for larger glaciers
-min_glac_area_writeout = 1.0
 #Generate figures
 mb_plot = True 
 #Run in parallel, set to False for serial loop
-parallel = False 
+parallel = True 
 #Verbose for debugging
 verbose = False 
 #Number of parallel processes
 nproc = iolib.cpu_count() - 1
 #Shortcut to use existing glacfeat_list.p if found
-use_existing_glacfeat = True 
+use_existing_glacfeat = False 
 
 global z1_date
 global z2_date
@@ -318,10 +316,10 @@ if site == 'conus':
     #glac_shp_fn = os.path.join(topdir,'data/rgi60/regions/rgi60_merge_CONUS.geojson')
     #glac_shp_fn = os.path.join(topdir,'data/rgi60/regions/rgi60_merge_CONUS.shp')
     glac_shp_fn = os.path.join(topdir,'data/rgi60/regions/rgi60_merge_CONUS_aea.shp')
+    glac_shp_fn = os.path.join(topdir,'conus_combined/shp/NOCA_glaciers/NOCA_glaciers_rgi60.shp')
     #This stores collection of feature geometries, independent of shapefile
     glacfeat_fn = os.path.splitext(glac_shp_fn)[0]+'_glacfeat_list.p'
 
-    """
     #NED 2003 1-arcsec 
     z1_fn = os.path.join(topdir,'rpcdem/ned1_2003/ned1_2003_adj.vrt')
     z1_date_shp_fn = os.path.join(topdir,'rpcdem/ned1_2003/meta0306_PAL_24k_10kmbuffer_clean_dissolve_aea.shp')
@@ -333,14 +331,15 @@ if site == 'conus':
     z1_datefield = "S_DATE_CLN" 
     #From Gesch et al (2014), LE90 is 4.0, std is 2.4 m
     z1_sigma = 2.4
+   
     """
-    
     #NASADEM SRTM
     mosdir = '/nobackup/deshean/rpcdem/conus/srtmOnly'
     z1_fn = os.path.join(mosdir, 'conus_nasadem_srtmOnly_R4_hgt.vrt')
     z1_date = 2000.112
     z1_sigma = 4.0
     z1_srtm_penetration_corr = True 
+    """
 
     """
     #NASADEM SRTM
@@ -389,9 +388,10 @@ if site == 'conus':
     #Output directory
     #outdir = os.path.join(topdir,'%s/mb' % mosdir)
     #outdir = '/nobackup/deshean/conus_combined/mos/conus_20171021_mos/mb/NED_to_2007-2010'
+    outdir = os.path.join(mosdir, 'mb/NOCA')
     #outdir = os.path.join(mosdir, 'mb/2007-2010_to_WV')
     #outdir = os.path.join('/nobackup/deshean/conus_combined/mos/conus_20171021_mos', 'mb/NED_to_SRTM')
-    outdir = os.path.join('/nobackup/deshean/conus_combined/mos/conus_20171021_mos', 'mb/SRTM_to_WV')
+    #outdir = os.path.join('/nobackup/deshean/conus_combined/mos/conus_20171021_mos', 'mb/SRTM_to_WV')
 
     #Output projection
     #'+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
@@ -908,10 +908,11 @@ if parallel:
         ndone = len(glacfeat_list_in) - results._number_left
         print('%i of %i done' % (ndone, len(glacfeat_list_in)))
         time.sleep(2)
+    out = results.get()
 else:
     print("Running serially")
     for n, gf in enumerate(glacfeat_list_in):
-        print('%i of %i: %s' % (n, len(glacfeat_list_in), gf.feat_fn))
+        print('%i of %i: %s' % (n+1, len(glacfeat_list_in), gf.feat_fn))
         out.append(mb_calc(gf))
 
 mb_list = []
@@ -931,6 +932,7 @@ if site == 'conus':
 
 out_fmt = [glacnum_fmt,] + ['%0.3f'] * (out.shape[1] - 1)
 
+print("Saving output csv: %s" % out_fn)
 np.savetxt(out_fn, out, fmt=out_fmt, delimiter=',', header=out_header, comments='')
 
 #Now join with geopandas
