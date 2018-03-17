@@ -17,10 +17,12 @@ from imview.lib import pltlib
 
 add_cbar = False
 
-#dem_fn_list = glob.glob('*32m.tif')
-#dem_ref_fn = 'rainier_allgood_mos-tile-0_warp.tif'
+#Input DEM filenames
 dem_fn_list = sys.argv[1:]
+#dem_fn_list = glob.glob('*32m.tif')
 
+#Compute global percentile stretch
+#Inefficient to load everything up front, but simplest solution
 dems = np.ma.array([iolib.fn_getma_sub(fn) for fn in dem_fn_list])
 dem_clim = malib.calcperc(dems, (2,98))
 
