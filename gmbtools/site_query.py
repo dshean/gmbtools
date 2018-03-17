@@ -30,14 +30,14 @@ if len(sys.argv) != 3:
 make_stacks = True 
 res = 8
 #Specify products to use (needed for substituion later on)
-ext='DEM_%im_trans.tif' % res
-#ext='DEM_%im.tif' % res
+#ext='DEM_%im_trans.tif' % res
+ext='DEM_%im.tif' % res
 #buffer = 1000
 buffer = None
 min_area = 1000000
 
-#topdir='/nobackupp8/deshean/conus_combined'
-topdir='/nobackupp8/deshean/conus_combined/sites/rainier/rerun/dem_coreg'
+topdir='/nobackupp8/deshean/conus_combined'
+#topdir='/nobackupp8/deshean/conus_combined/sites/rainier/rerun/dem_coreg'
 #topdir='/nobackupp8/deshean/hma'
 topdir=os.getcwd()
 #outdir = 'sites_landslides'
@@ -73,6 +73,8 @@ dem_shp_lyr = dem_shp_ds.GetLayer()
 dem_shp_srs = dem_shp_lyr.GetSpatialRef()
 #Field number for DEM name
 dem_name_field = 0 
+#Field number of DEM path, relative to topdir
+dem_path_field = 1 
 
 #Override output projection 
 #Albers Equal Area
@@ -143,6 +145,7 @@ for n,site_feat in enumerate(site_shp_lyr):
     dem_shp_lyr.ResetReading()
     for m,dem_feat in enumerate(dem_shp_lyr):
         dem_name = dem_feat.GetFieldAsString(dem_name_field)
+        dem_path = dem_feat.GetFieldAsString(dem_path_field)
         #Date
         dem_geom = dem_feat.GetGeometryRef()
         dem_geom.AssignSpatialReference(dem_shp_srs)
@@ -153,7 +156,8 @@ for n,site_feat in enumerate(site_shp_lyr):
         if igeom:
             if not igeom.IsEmpty():
                 if igeom.Area() > min_area:
-                    dem_fn_list.append(dem_name)
+                    #dem_fn_list.append(dem_name)
+                    dem_fn_list.append(dem_path)
                 #Write out interseciton geom to new file
 
     if dem_fn_list:
@@ -190,7 +194,7 @@ for n,site_feat in enumerate(site_shp_lyr):
             dem_dt_list = np.array([timelib.fn_getdatetime(i) for i in dem_fn_list])
       
             #Make annual and seasonal products
-            if True:
+            if False:
                 #These are OrderedDict
                 summer_dict = timelib.dt_filter_rel_annual_idx(dem_dt_list, min_rel_dt=(8,1), max_rel_dt=(10,31))
                 spring_dict = timelib.dt_filter_rel_annual_idx(dem_dt_list, min_rel_dt=(4,1), max_rel_dt=(6,15))
@@ -251,7 +255,7 @@ for n,site_feat in enumerate(site_shp_lyr):
                 dz_cmd_list.append(cmd)
 
             #Make stack of all year/season products 
-            if True:
+            if False:
                 stack_cmd = ['make_stack.py', '--trend', '-te', site_extent_str, '-outdir', os.path.join(stackdir, 'stack_seasonal_all')]
                 stack_fn_list = mos_fn_dict.values()
                 stack_fn_list.sort()
@@ -259,7 +263,7 @@ for n,site_feat in enumerate(site_shp_lyr):
                 dz_cmd_list.append(stack_cmd)
 
             #Make stack of all year/summer products
-            if True:
+            if False:
                 stack_cmd = ['make_stack.py', '--trend', '-te', site_extent_str, '-outdir', os.path.join(stackdir, 'stack_seasonal_summer')]
                 stack_fn_list = [mos_fn_dict[k] for k in mos_fn_dict.keys() if 'summer' in k]
                 if stack_fn_list:
