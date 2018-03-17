@@ -119,32 +119,22 @@ def srtm_corr(z):
 def z_vs_dz(z,dz):
     plt.scatter(z.compressed(), dz.compressed())
 
-def get_bins(dem, bin_width=100.0):
-    #Define min and max elevation
-    minz, maxz= list(malib.calcperc(dem, perc=(0.01, 99.99)))
-    minz = np.floor(minz/bin_width) * bin_width
-    maxz = np.ceil(maxz/bin_width) * bin_width
-    #Compute bin edges and centers
-    bin_edges = np.arange(minz, maxz + bin_width, bin_width)
-    bin_centers = bin_edges[:-1] + np.diff(bin_edges)/2.0
-    return bin_edges, bin_centers
-
 #RGI uses 50 m bins
 def hist_plot(gf, outdir, bin_width=10.0):
     #print("Generating histograms")
-    z_bin_edges, z_bin_centers = get_bins(gf.z1, bin_width)
+    #Create bins for full range of input data and specified bin width
+    z_bin_edges, z_bin_centers = malib.get_bins(gf.z1, bin_width)
     z1_bin_counts, z1_bin_edges = np.histogram(gf.z1, bins=z_bin_edges)
     z1_bin_areas = z1_bin_counts * gf.res[0] * gf.res[1] / 1E6
     #RGI standard is integer thousandths of glaciers total area
     #Should check to make sure sum of bin areas equals total area
     z1_bin_areas_perc = 100. * z1_bin_areas / np.sum(z1_bin_areas)
+
     z2_bin_counts, z2_bin_edges = np.histogram(gf.z2, bins=z_bin_edges)
     z2_bin_areas = z2_bin_counts * gf.res[0] * gf.res[1] / 1E6
     z2_bin_areas_perc = 100. * z2_bin_areas / np.sum(z2_bin_areas)
 
-    #dz_bin_edges, dz_bin_centers = get_bins(dz, 1.)
-    #dz_bin_counts, dz_bin_edges = np.histogram(dz, bins=dz_bin_edges)
-    #dz_bin_areas = dz_bin_counts * res * res / 1E6
+    #Create arrays to store output
     mb_bin_med = np.ma.masked_all_like(z1_bin_areas)
     mb_bin_mad = np.ma.masked_all_like(z1_bin_areas)
     dz_bin_med = np.ma.masked_all_like(z1_bin_areas)
@@ -164,10 +154,6 @@ def hist_plot(gf, outdir, bin_width=10.0):
             dz_bin_med[bin_n] = dz_bin_samp.mean()
             dz_bin_mad[bin_n] = dz_bin_samp.std()
 
-    #Should also export original dh/dt numbers, not mb
-    #outbins_header = 'bin_center_elev, bin_count, dhdt_bin_med, dhdt_bin_mad, mb_bin_med, mb_bin_mad'
-    #outbins = np.ma.dstack([z_bin_centers, z1_bin_counts, dz_bin_med, dz_bin_mad, mb_bin_med, mb_bin_mad]).astype('float32')[0]
-    #fmt='%0.2f'
     outbins_header = 'bin_center_elev_m, z1_bin_count_valid, z1_bin_area_valid_km2, z1_bin_area_perc, z2_bin_count_valid, z2_bin_area_valid_km2, z2_bin_area_perc, dhdt_bin_med_ma, dhdt_bin_mad_ma, mb_bin_med_mwe, mb_bin_mad_mwe'
     fmt='%0.1f, %i, %0.3f, %0.2f, %i, %0.3f, %0.2f, %0.2f, %0.2f, %0.2f, %0.2f' 
     outbins = np.ma.dstack([z_bin_centers, z1_bin_counts, z1_bin_areas, z1_bin_areas_perc, z2_bin_counts, z2_bin_areas, z2_bin_areas_perc, dz_bin_med, dz_bin_mad, mb_bin_med, mb_bin_mad]).astype('float32')[0]
