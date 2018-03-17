@@ -1,25 +1,44 @@
 #! /bin/bash
 
 #ssh lfe
+#/nobackup/deshean/src/gmbtools/gmbtools/site_rerun_lfetransfer.sh /nobackup/deshean/hma/sites2/$site/rerun
+#/nobackup/deshean/src/gmbtools/gmbtools/site_rerun_lfetransfer.sh /nobackup/deshean/conus_combined/sites
 
 #On lfe - Khumbu rerun, 9/12/17
 #nbdir=/nobackupp8/deshean/hma/sites/khumbu/rerun
 nbdir=$1
 
-cd ~/hma
-#Alongtrack
-if [ -d $nbdir/alongtrack ] ; then
-    pushd $nbdir/alongtrack
-    pairlist=$(ls -d *00)
-    pushd
-    for pair in $pairlist; do echo $pair; p=$(find 2* -name $pair) ; shiftc -R $p $nbdir/alongtrack ; done
-fi
-#Crosstrack
-if [ -d $nbdir/crosstrack ] ; then
-    pushd $nbdir/crosstrack
-    pairlist=$(ls -d *00)
-    pushd ~/hma/mono/r100_mono
-    for pair in $pairlist ; do id1=$(echo $pair | awk -F'_' '{print $3}') ; id2=$(echo $pair | awk -F'_' '{print $4}') ; echo $pair ; shiftc -R $id1.r100* $id2.r100* $nbdir/crosstrack/$pair/ ; done
+if false ; 
+    cd ~/hma
+    #Alongtrack
+    if [ -d $nbdir/alongtrack ] ; then
+        pushd $nbdir/alongtrack
+        pairlist=$(ls -d *00)
+        pushd
+        for pair in $pairlist; do echo $pair; p=$(find 2* -name $pair) ; shiftc -R $p $nbdir/alongtrack ; done
+    fi
+    #Crosstrack
+    if [ -d $nbdir/crosstrack ] ; then
+        pushd $nbdir/crosstrack
+        pairlist=$(ls -d *00)
+        pushd ~/hma/mono/r100_mono
+        for pair in $pairlist ; do id1=$(echo $pair | awk -F'_' '{print $3}') ; id2=$(echo $pair | awk -F'_' '{print $4}') ; echo $pair ; shiftc -R $id1.r100* $id2.r100* $nbdir/crosstrack/$pair/ ; done
+    fi
+else
+    #This is untested, conus still has r100.{tif,xml} on nobackup
+    cd ~/conus
+    for site in $(ls -d *)
+    do
+        pushd $nbdir/$site/rerun
+        pairlist=$(ls -d *00)
+        pushd
+        for pair in $pairlist
+        do 
+            echo $pair
+            p=$(find conus* -name $pair)
+            shiftc -L -R --include '.ntf' --include '.tif' --include '.xml' $p $nbdir/sites/$site
+        done
+    done
 fi
 
 #Create list of IDs to reprocess
