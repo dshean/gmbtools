@@ -6,10 +6,14 @@
 #dem=rainier_stack_all-tile-0.tif
 
 dem=$1
-#ref_src=/nobackup/deshean/rpcdem/ned13/ned13_tiles_glac24k_115kmbuff.vrt 
-ref_src=/nobackup/deshean/rpcdem/hma/srtm1/hma_srtm_gl1.vrt
+
+#ref_src=/nobackup/deshean/rpcdem/hma/srtm1/hma_srtm_gl1.vrt
 #ref_src=/nobackup/deshean/hma/mos/latest/mos_8m/*mos_8m.vrt
-mos_32m=/nobackup/deshean/hma/mos/latest/mos_32m/*mos_32m.vrt
+#mos_32m=/nobackup/deshean/hma/mos/latest/mos_32m/*mos_32m.vrt
+
+ref_src=/nobackup/deshean/rpcdem/ned13/ned13_tiles_glac24k_115kmbuff.vrt 
+ref_8m=/nobackup/deshean/conus_combined/mos/conus_20171021_mos/conus_mos_8m_all.vrt
+ref_32m=/nobackup/deshean/conus_combined/mos/latest/conus_mos_32m/conus_mos_32m.vrt
 
 max_dz=200
 
@@ -20,14 +24,18 @@ if [ ! -e $ref ] ; then
     warptool.py -outdir $(dirname $dem) -te $dem -tr $dem -t_srs $dem $ref_src
 fi
 
-#Remove outliers based elev diff
-#Note, NED is a DSM, so will be ~20-50 m offsets for forested areas
-if [ ! -e ${dem%.*}_dzfilt_0.00-${max_dz}.00.tif ] ; then 
-    filter.py $dem -filt dz -param $ref 0 $max_dz 
+dz_filt=false
+if $dz_filt ; then 
+    #Remove outliers based elev diff
+    #Note, NED is a DSM, so will be ~20-50 m offsets for forested areas
+    if [ ! -e ${dem%.*}_dzfilt_0.00-${max_dz}.00.tif ] ; then 
+        filter.py $dem -filt dz -param $ref 0 $max_dz 
+    fi
+
+    dem=${dem%.*}_dzfilt_0.00-${max_dz}.00.tif
+    #filter.py $dem -filt med -param 5 
+    #dem=${dem%.*}_medfilt_5px.tif
 fi
-dem=${dem%.*}_dzfilt_0.00-${max_dz}.00.tif
-#filter.py $dem -filt med -param 5 
-#dem=${dem%.*}_medfilt_5px.tif
 
 dem_mosaic --priority-blending-length 3 -o ${dem%.*}_blend3px_mos_32m $dem $mos_32m $ref
 
