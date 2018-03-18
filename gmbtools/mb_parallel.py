@@ -39,6 +39,10 @@ from pygeotools.lib import timelib
 
 from imview.lib import pltlib
 
+#Avoid printing out divide by 0 errors
+#np.seterr(divide='ignore', invalid='ignore')
+np.seterr(all='ignore')
+
 """
 Class to store relevant feature attributes and derived values
 Safe for multiprocessing
@@ -93,6 +97,18 @@ class GlacFeat:
         self.t2 = None
         self.dt = None
 
+        self.H = None
+        self.vx = None
+        self.vy = None
+        self.vm = None
+        self.divU = None
+        self.divQ = None
+        self.debris_class = None
+        self.debris_thick = None
+        self.perc_clean = np.nan 
+        self.perc_debris = np.nan 
+        self.perc_pond = np.nan 
+
     def geom_attributes(self, srs=None):
         if srs is not None:
             #Should reproject here to equal area, before geom_attributes
@@ -123,6 +139,11 @@ def z_vs_dz(z,dz):
 def hist_plot(gf, outdir, bin_width=10.0):
     #print("Generating histograms")
     #Create bins for full range of input data and specified bin width
+
+    #NOTE: these counts/areas are for valid pixels only
+    #Not necessarily a true representation of actual glacier hypsometry
+    #Need a void-filled DEM for this
+
     z_bin_edges, z_bin_centers = malib.get_bins(gf.z1, bin_width)
     z1_bin_counts, z1_bin_edges = np.histogram(gf.z1, bins=z_bin_edges)
     z1_bin_areas = z1_bin_counts * gf.res[0] * gf.res[1] / 1E6
@@ -137,32 +158,66 @@ def hist_plot(gf, outdir, bin_width=10.0):
     #Create arrays to store output
     mb_bin_med = np.ma.masked_all_like(z1_bin_areas)
     mb_bin_mad = np.ma.masked_all_like(z1_bin_areas)
+    mb_bin_mean = np.ma.masked_all_like(z1_bin_areas)
+    mb_bin_std = np.ma.masked_all_like(z1_bin_areas)
     dz_bin_med = np.ma.masked_all_like(z1_bin_areas)
     dz_bin_mad = np.ma.masked_all_like(z1_bin_areas)
+    dz_bin_mean = np.ma.masked_all_like(z1_bin_areas)
+    dz_bin_std = np.ma.masked_all_like(z1_bin_areas)
+    if gf.debris_class is not None:
+        perc_clean = np.ma.masked_all_like(z1_bin_areas)
+        perc_debris = np.ma.masked_all_like(z1_bin_areas)
+        perc_pond = np.ma.masked_all_like(z1_bin_areas)
+        debris_thick_med = np.ma.masked_all_like(z1_bin_areas)
+        debris_thick_mad = np.ma.masked_all_like(z1_bin_areas)
+
+    #Loop through each bin and extract stats
     idx = np.digitize(gf.z1, z_bin_edges)
     for bin_n in range(z_bin_centers.size):
         mb_bin_samp = gf.mb[(idx == bin_n+1)]
         if mb_bin_samp.count() > 0:
             mb_bin_med[bin_n] = malib.fast_median(mb_bin_samp)
             mb_bin_mad[bin_n] = malib.mad(mb_bin_samp)
-            mb_bin_med[bin_n] = mb_bin_samp.mean()
-            mb_bin_mad[bin_n] = mb_bin_samp.std()
+            mb_bin_mean[bin_n] = mb_bin_samp.mean()
+            mb_bin_std[bin_n] = mb_bin_samp.std()
         dz_bin_samp = gf.dhdt[(idx == bin_n+1)]
         if dz_bin_samp.count() > 0:
             dz_bin_med[bin_n] = malib.fast_median(dz_bin_samp)
             dz_bin_mad[bin_n] = malib.mad(dz_bin_samp)
-            dz_bin_med[bin_n] = dz_bin_samp.mean()
-            dz_bin_mad[bin_n] = dz_bin_samp.std()
+            dz_bin_mean[bin_n] = dz_bin_samp.mean()
+            dz_bin_std[bin_n] = dz_bin_samp.std()
+        if gf.debris_class is not None:
+            debris_class_bin_samp = gf.debris_class[(idx == bin_n+1)]
+            if debris_class_bin_samp.count() > 0:
+                perc_clean[bin_n] = 100. * (debris_class_bin_samp == 1).sum()/debris_class_bin_samp.count()
+                perc_debris[bin_n] = 100. * (debris_class_bin_samp == 2).sum()/debris_class_bin_samp.count()
+                perc_pond[bin_n] = 100. * (debris_class_bin_samp == 3).sum()/debris_class_bin_samp.count()
 
-    outbins_header = 'bin_center_elev_m, z1_bin_count_valid, z1_bin_area_valid_km2, z1_bin_area_perc, z2_bin_count_valid, z2_bin_area_valid_km2, z2_bin_area_perc, dhdt_bin_med_ma, dhdt_bin_mad_ma, mb_bin_med_mwe, mb_bin_mad_mwe'
-    fmt='%0.1f, %i, %0.3f, %0.2f, %i, %0.3f, %0.2f, %0.2f, %0.2f, %0.2f, %0.2f' 
-    outbins = np.ma.dstack([z_bin_centers, z1_bin_counts, z1_bin_areas, z1_bin_areas_perc, z2_bin_counts, z2_bin_areas, z2_bin_areas_perc, dz_bin_med, dz_bin_mad, mb_bin_med, mb_bin_mad]).astype('float32')[0]
+            debris_thick_bin_samp = gf.debris_thick[(idx == bin_n+1)]
+            debris_thick_med[bin_n] = malib.fast_median(debris_thick_bin_samp)
+            debris_thick_mad[bin_n] = malib.mad(debris_thick_bin_samp)
+
+    outbins_header = 'bin_center_elev_m, z1_bin_count_valid, z1_bin_area_valid_km2, z1_bin_area_perc, z2_bin_count_valid, z2_bin_area_valid_km2, z2_bin_area_perc, dhdt_bin_med_ma, dhdt_bin_mad_ma, dhdt_bin_mean_ma, dhdt_bin_std_ma, mb_bin_med_mwea, mb_bin_mad_mwea, mb_bin_mean_mwea, mb_bin_std_mwea'
+    fmt = '%0.1f, %i, %0.3f, %0.2f, %i, %0.3f, %0.2f, %0.2f, %0.2f, %0.2f, %0.2f, %0.2f, %0.2f, %0.2f, %0.2f' 
+    outbins = [z_bin_centers, z1_bin_counts, z1_bin_areas, z1_bin_areas_perc, z2_bin_counts, z2_bin_areas, z2_bin_areas_perc, dz_bin_med, dz_bin_mad, dz_bin_mean, dz_bin_std, mb_bin_med, mb_bin_mad, mb_bin_mean, mb_bin_std]
+
+    if gf.debris_class is not None:
+        outbins_header += ', debris_thick_med_m, debris_thick_mad_m, perc_debris, perc_pond, perc_clean'
+        fmt += ', %0.2f, %0.2f, %0.2f, %0.2f, %0.2f'
+        debris_thick_med[debris_thick_med == -(np.inf)] = 0.00
+        debris_thick_mad[debris_thick_mad == -(np.inf)] = 0.00
+        outbins.extend([debris_thick_med, debris_thick_mad, perc_debris, perc_pond, perc_clean])
+
+    #print(len(outbins), len(fmt.split(',')), len(outbins_header.split(',')))
+    outbins = np.ma.array(outbins).T.astype('float32')
     np.ma.set_fill_value(outbins, -9999.0)
     outbins_fn = os.path.join(outdir, gf.feat_fn+'_mb_bins.csv')
+    #print(outbins.shape)
     np.savetxt(outbins_fn, outbins, fmt=fmt, delimiter=',', header=outbins_header)
 
     #print("Generating aed plot")
-    f,axa = plt.subplots(1,2, figsize=(6, 6))
+    #f,axa = plt.subplots(1,2, figsize=(6, 6))
+    f,axa = plt.subplots(1,3, figsize=(10, 7.5))
     f.suptitle(gf.feat_fn)
     axa[0].plot(z1_bin_areas, z_bin_centers, label='%0.2f' % gf.t1)
     axa[0].plot(z2_bin_areas, z_bin_centers, label='%0.2f' % gf.t2)
@@ -171,27 +226,40 @@ def hist_plot(gf, outdir, bin_width=10.0):
     axa[0].legend(prop={'size':8}, loc='upper right')
     axa[0].set_ylabel('Elevation (m WGS84)')
     axa[0].set_xlabel('Area $\mathregular{km^2}$')
-    axa[0].minorticks_on()
-    axa[1].yaxis.tick_right()
-    axa[1].yaxis.set_label_position("right")
+    pltlib.minorticks_on(axa[0])
     axa[1].axvline(0, lw=1.0, c='k')
     axa[1].axvline(gf.mb_mean, lw=0.5, ls=':', c='k', label='%0.2f m w.e./yr' % gf.mb_mean)
     axa[1].legend(prop={'size':8}, loc='upper right')
     axa[1].plot(mb_bin_med, z_bin_centers, color='k')
+    axa[1].fill_betweenx(z_bin_centers, mb_bin_med-mb_bin_mad, mb_bin_med+mb_bin_mad, color='k', alpha=0.1)
     axa[1].fill_betweenx(z_bin_centers, 0, mb_bin_med, where=(mb_bin_med<0), color='r', alpha=0.2)
     axa[1].fill_betweenx(z_bin_centers, 0, mb_bin_med, where=(mb_bin_med>0), color='b', alpha=0.2)
     #axa[1].set_ylabel('Elevation (m WGS84)')
     #axa[1].set_xlabel('dh/dt (m/yr)')
     axa[1].set_xlabel('mb (m w.e./yr)')
-    axa[1].minorticks_on()
-    axa[1].set_xlim(-2.0, 2.0)
+    pltlib.minorticks_on(axa[1])
+    #Hide y-axis labels
+    axa[1].axes.yaxis.set_ticklabels([])
+    #axa[1].set_xlim(-2.0, 2.0)
     #axa[1].set_xlim(-8.0, 8.0)
+    axa[1].set_xlim(-3.0, 3.0)
+    if gf.debris_class is not None:
+        axa[2].errorbar(debris_thick_med*100., z_bin_centers, xerr=debris_thick_mad*100, color='k', fmt='o', ms=3, label='Thickness', alpha=0.6)
+        axa[2].plot(perc_debris, z_bin_centers, color='sienna', label='Debris Coverage')
+        axa[2].plot(perc_pond, z_bin_centers, color='turquoise', label='Pond Coverage')
+        axa[2].set_xlim(0, 100)
+        pltlib.minorticks_on(axa[2])
+        axa[2].legend(prop={'size':8}, loc='upper right')
+        axa[2].set_xlabel('Debris thickness (cm), coverage (%)')
+        axa[2].yaxis.tick_right()
+        axa[2].yaxis.set_label_position("right")
     plt.tight_layout()
     #Make room for suptitle
     plt.subplots_adjust(top=0.95)
     #print("Saving aed plot")
     fig_fn = os.path.join(outdir, gf.feat_fn+'_mb_aed.png')
     plt.savefig(fig_fn, bbox_inches='tight', dpi=300)
+    plt.close(f)
     return z_bin_edges
 
 def map_plot(gf, z_bin_edges, outdir, hs=True):
@@ -238,6 +306,7 @@ def map_plot(gf, z_bin_edges, outdir, hs=True):
     #print("Saving map plot")
     fig_fn = os.path.join(outdir, gf.feat_fn+'_mb_map.png')
     plt.savefig(fig_fn, bbox_inches='tight', dpi=300)
+    plt.close(f)
 
 def get_date_a(ds, date_shp_lyr, glac_geom_mask, datefield):
     date_r_ds = iolib.mem_drv.CreateCopy('', ds)
@@ -251,8 +320,8 @@ def get_date_a(ds, date_shp_lyr, glac_geom_mask, datefield):
     return date_a
     
 topdir='/nobackup/deshean'
-site='conus'
-#site='hma'
+#site='conus'
+site='hma'
 
 """
 #Consider storing setup variables in dictionary that can be passed to Process
@@ -268,7 +337,8 @@ setup['site'] = site
 #site='other'
 
 #Filter glacier poly - let's stick with big glaciers for now
-min_glac_area = 0.1 #km^2
+#min_glac_area = 0.1 #km^2
+min_glac_area = 10. #km^2
 #Minimum percentage of glacier poly covered by valid dz
 min_valid_area_perc = 0.80
 #Write out DEMs and dz map
@@ -282,7 +352,7 @@ verbose = False
 #Number of parallel processes
 nproc = iolib.cpu_count() - 1
 #Shortcut to use existing glacfeat_list.p if found
-use_existing_glacfeat = False 
+use_existing_glacfeat = True 
 
 global z1_date
 global z2_date
@@ -462,7 +532,8 @@ elif site == 'hma':
     z2_sigma = 1.0
 
     #Output directory
-    outdir = os.path.join(topdir,'hma/mos/%s/mb' % mosdir)
+    #outdir = os.path.join(topdir,'hma/mos/%s/mb' % mosdir)
+    outdir = os.path.join(topdir,'hma/mos/%s/mb_debris' % mosdir)
     #outdir = os.path.join(topdir,'hma/mos/%s/mb_Hexagon_SRTM' % mosdir)
 
     #Output projection
@@ -471,6 +542,13 @@ elif site == 'hma':
 
     #Only write out for larger glaciers
     min_glac_area_writeout = 10.0
+
+    #Amaury velocity
+    #Note: had to force srs on these
+    #gdal_edit.py -a_srs '+proj=lcc +lat_1=28 +lat_2=32 +lat_0=90 +lon_0=85 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs' fn
+    v_dir = '/nobackup/deshean/rpcdem/hma/velocity_jpl_amaury_2013-2015'
+    vx_fn = os.path.join(v_dir, 'PKH_WRS2_B8_2013_2015_snr5_n1_r170_res12.x_vel.TIF')
+    vy_fn = os.path.join(v_dir, 'PKH_WRS2_B8_2013_2015_snr5_n1_r170_res12.y_vel.TIF')
 
 elif site == 'other':
     outdir = os.path.join(topdir,'mb')
@@ -566,6 +644,7 @@ glac_shp_ds = None
 
 def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
     #print("\n%i of %i: %s\n" % (n+1, len(glacfeat_list), gf.feat_fn))
+    print(gf.feat_fn)
 
     #This should already be handled by earlier attribute filter, but RGI area could be wrong
     #24k shp has area in m^2, RGI in km^2
@@ -585,6 +664,27 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
         prism_fn_list.extend([prism_ppt_summer_fn, prism_ppt_winter_fn, prism_tmean_summer_fn, prism_tmean_winter_fn])
         ds_list.extend(warplib.memwarp_multi_fn(prism_fn_list, res=ds_list[0], \
                 extent=gf.glac_geom_extent, t_srs=aea_srs, verbose=verbose))
+
+    if site == 'hma':
+        #Add debris cover datasets
+        #Should tar this up, and extract only necessary file
+        kra_nature_dir = '/nobackup/deshean/data/Kraaijenbrink_hma/regions/out'
+        #This assumes that numbers are identical between RGI50 and RGI60
+        debris_class_fn = os.path.join(kra_nature_dir, 'RGI50-%s/classification.tif' % gf.glacnum)
+        debris_thick_fn = os.path.join(kra_nature_dir, 'RGI50-%s/debris-thickness-50cm.tif' % gf.glacnum)
+        ice_thick_fn = os.path.join(kra_nature_dir, 'RGI50-%s/ice-thickness.tif' % gf.glacnum)
+        hma_fn_list = []
+        if os.path.exists(debris_class_fn):
+            hma_fn_list.append(debris_class_fn)
+        if os.path.exists(debris_thick_fn):
+            hma_fn_list.append(debris_thick_fn)
+        if os.path.exists(ice_thick_fn):
+            hma_fn_list.append(ice_thick_fn)
+        if len(hma_fn_list) > 0:
+            #Add velocity
+            hma_fn_list.extend([vx_fn, vy_fn])
+            ds_list.extend(warplib.memwarp_multi_fn(hma_fn_list, res=ds_list[0], \
+                    extent=gf.glac_geom_extent, t_srs=aea_srs, verbose=verbose))
 
     #Check to see if z2 is empty, as z1 should be continuous
     gf.z2 = iolib.ds_getma(ds_list[1])
@@ -793,6 +893,29 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
 
         outlist.extend([prism_ppt_summer_mean, prism_ppt_winter_mean, prism_tmean_summer_mean, prism_tmean_winter_mean])
 
+    if site == 'hma':
+        #Classes are: 1 = clean ice, 2 = debris, 3 = pond
+        #Load up debris cover maps, ice thickness
+        if len(ds_list) > 2:
+            gf.debris_class = np.ma.array(iolib.ds_getma(ds_list[2]), mask=glac_geom_mask)
+            gf.debris_thick = np.ma.array(iolib.ds_getma(ds_list[3]), mask=glac_geom_mask)
+            #Load ice thickness from glabtop2 
+            gf.H = np.ma.array(iolib.ds_getma(ds_list[4]), mask=glac_geom_mask)
+            #Load surface velocity maps from Dehecq 
+            gf.vx = np.ma.array(iolib.ds_getma(ds_list[5]), mask=glac_geom_mask)
+            gf.vy = np.ma.array(iolib.ds_getma(ds_list[6]), mask=glac_geom_mask)
+            gf.vm = np.ma.sqrt(gf.vx**2 + gf.vy**2)
+            v_col_factor = 0.8
+            #Should smooth, better handling of data gaps
+            gf.divU = np.gradient(v_col_factor*gf.vx)[1] + np.gradient(v_col_factor*gf.vy)[0]
+            gf.divQ = gf.H * gf.divU
+            #Compute debris/pond/clean percentages for entire polygon
+            if gf.debris_class.count() > 0:
+                gf.perc_clean = 100. * (gf.debris_class == 1).sum()/gf.debris_class.count()
+                gf.perc_debris = 100. * (gf.debris_class == 2).sum()/gf.debris_class.count()
+                gf.perc_pond = 100. * (gf.debris_class == 3).sum()/gf.debris_class.count()
+            outlist.extend([gf.H.mean(), gf.debris_thick.mean(), gf.perc_debris, gf.perc_pond, gf.perc_clean])
+
     if verbose:
         print('Mean mb: %0.2f +/- %0.2f mwe/yr' % (gf.mb_mean, gf.mb_mean_sigma))
         print('Sum/Area mb: %0.2f mwe/yr' % (mb_sum/gf.glac_area))
@@ -841,6 +964,27 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
             iolib.writeGTiff(prism_tmean_summer, out_prism_tmean_summer_fn, ds_list[0])
             out_prism_tmean_winter_fn = os.path.join(outdir, gf.feat_fn+'_tmean_winter.tif')
             iolib.writeGTiff(prism_tmean_winter, out_prism_tmean_winter_fn, ds_list[0])
+
+        if site == 'hma':
+            if gf.H is not None:
+                temp_fn = os.path.join(outdir, gf.feat_fn+'_H.tif')
+                iolib.writeGTiff(gf.H, temp_fn, ds_list[0])
+
+            if gf.debris_thick is not None:
+                temp_fn = os.path.join(outdir, gf.feat_fn+'_debris_thick.tif')
+                iolib.writeGTiff(gf.debris_thick, temp_fn, ds_list[0])
+
+            if gf.debris_class is not None:
+                temp_fn = os.path.join(outdir, gf.feat_fn+'_debris_class.tif')
+                iolib.writeGTiff(gf.debris_class, temp_fn, ds_list[0])
+
+            if gf.vm is not None:
+                temp_fn = os.path.join(outdir, gf.feat_fn+'_vm.tif')
+                iolib.writeGTiff(gf.vm, temp_fn, ds_list[0])
+
+            if gf.divQ is not None:
+                temp_fn = os.path.join(outdir, gf.feat_fn+'_divQ.tif')
+                iolib.writeGTiff(gf.divQ, temp_fn, ds_list[0])
 
     #Do AED for all
     #Compute mb using scaled AED vs. polygon
@@ -915,6 +1059,9 @@ out_header = '%s,x,y,z_med,z_p16,z_p84,z_slope,z_aspect,mb_mwea,mb_mwea_sigma,ar
 if site == 'conus':
     out_header += ',ppt_a,tmean_a'
     out_header += ',ppt_s,ppt_w,tmean_s,tmean_w'
+if site == 'hma':
+    #[gf.ice_thick.mean(), gf.debris_thick.mean(), gf.perc_debris, gf.perc_pond, gf.perc_clean]
+    out_header += ',H_m,debris_m,perc_debris,perc_pond,perc_clean'
 
 out_fmt = [glacnum_fmt,] + ['%0.3f'] * (out.shape[1] - 1)
 
