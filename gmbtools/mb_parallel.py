@@ -668,6 +668,7 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
     if site == 'hma':
         #Add debris cover datasets
         #Should tar this up, and extract only necessary file
+        #Downloaded from: http://mountainhydrology.org/data-nature-2017/
         kra_nature_dir = '/nobackup/deshean/data/Kraaijenbrink_hma/regions/out'
         #This assumes that numbers are identical between RGI50 and RGI60
         debris_class_fn = os.path.join(kra_nature_dir, 'RGI50-%s/classification.tif' % gf.glacnum)
