@@ -194,8 +194,9 @@ def hist_plot(gf, outdir, bin_width=10.0):
                 perc_pond[bin_n] = 100. * (debris_class_bin_samp == 3).sum()/debris_class_bin_samp.count()
 
             debris_thick_bin_samp = gf.debris_thick[(idx == bin_n+1)]
-            debris_thick_med[bin_n] = malib.fast_median(debris_thick_bin_samp)
-            debris_thick_mad[bin_n] = malib.mad(debris_thick_bin_samp)
+            if debris_thick_bin_samp.size > 0:
+                debris_thick_med[bin_n] = malib.fast_median(debris_thick_bin_samp)
+                debris_thick_mad[bin_n] = malib.mad(debris_thick_bin_samp)
 
     outbins_header = 'bin_center_elev_m, z1_bin_count_valid, z1_bin_area_valid_km2, z1_bin_area_perc, z2_bin_count_valid, z2_bin_area_valid_km2, z2_bin_area_perc, dhdt_bin_med_ma, dhdt_bin_mad_ma, dhdt_bin_mean_ma, dhdt_bin_std_ma, mb_bin_med_mwea, mb_bin_mad_mwea, mb_bin_mean_mwea, mb_bin_std_mwea'
     fmt = '%0.1f, %i, %0.3f, %0.2f, %i, %0.3f, %0.2f, %0.2f, %0.2f, %0.2f, %0.2f, %0.2f, %0.2f, %0.2f, %0.2f' 
