@@ -544,19 +544,21 @@ elif site == 'hma':
     #Only write out for larger glaciers
     min_glac_area_writeout = 10.0
 
-    #Amaury velocity
-    #Note: had to force srs on these
+    #Surface velocity
+    #Note: had to force srs on Amaury's original products 
     #gdal_edit.py -a_srs '+proj=lcc +lat_1=28 +lat_2=32 +lat_0=90 +lon_0=85 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs' fn
-    v_dir = '/nobackup/deshean/rpcdem/hma/velocity_jpl_amaury_2013-2015'
-    vx_fn = os.path.join(v_dir, 'PKH_WRS2_B8_2013_2015_snr5_n1_r170_res12.x_vel.TIF')
-    vy_fn = os.path.join(v_dir, 'PKH_WRS2_B8_2013_2015_snr5_n1_r170_res12.y_vel.TIF')
+    #v_dir = '/nobackup/deshean/rpcdem/hma/velocity_jpl_amaury_2013-2015'
+    #vx_fn = os.path.join(v_dir, 'PKH_WRS2_B8_2013_2015_snr5_n1_r170_res12.x_vel.TIF')
+    #vy_fn = os.path.join(v_dir, 'PKH_WRS2_B8_2013_2015_snr5_n1_r170_res12.y_vel.TIF')
+    v_dir = '/nobackup/deshean/data/jpl_vel'
+    vx_fn = os.path.join(v_dir, 'HMA_G0240_0000_vx.tif')
+    vy_fn = os.path.join(v_dir, 'HMA_G0240_0000_vy.tif')
 
 elif site == 'other':
     outdir = os.path.join(topdir,'mb')
     aea_srs = geolib.conus_aea_srs
     #Can specify custom subset of glacier polygons
     #glac_shp_fn = '/Users/dshean/data/conus_glacierpoly_24k/rainier_24k_1970-2015_mb_aea.shp'
-    #glac_shp_fn = '/Users/dshean/data/conus_glacierpoly_24k/conus_glacierpoly_24k_aea.shp'
     #glac_shp_fn = '/Users/dshean/data/conus_glacierpoly_24k/conus_glacierpoly_24k_32610_scg_2008_aea.shp'
     glac_shp_fn = os.path.join(topdir,'data/rgi60/regions/rgi60_merge.shp')
     z1_fn = sys.argv[1]
@@ -671,10 +673,12 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
         #Should tar this up, and extract only necessary file
         #Downloaded from: http://mountainhydrology.org/data-nature-2017/
         kra_nature_dir = '/nobackup/deshean/data/Kraaijenbrink_hma/regions/out'
+        huss_dir = '/nobackupp8/deshean/data/huss/'
         #This assumes that numbers are identical between RGI50 and RGI60
         debris_class_fn = os.path.join(kra_nature_dir, 'RGI50-%s/classification.tif' % gf.glacnum)
         debris_thick_fn = os.path.join(kra_nature_dir, 'RGI50-%s/debris-thickness-50cm.tif' % gf.glacnum)
-        ice_thick_fn = os.path.join(kra_nature_dir, 'RGI50-%s/ice-thickness.tif' % gf.glacnum)
+        #ice_thick_fn = os.path.join(kra_nature_dir, 'RGI50-%s/ice-thickness.tif' % gf.glacnum)
+        ice_thick_fn = os.path.join(huss_dir, 'RGI%s_thick/thickness/thick_%s.agr' % tuple(gf.glacnum.split('.')))
         hma_fn_list = []
         if os.path.exists(debris_class_fn):
             hma_fn_list.append(debris_class_fn)
@@ -896,21 +900,33 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
         outlist.extend([prism_ppt_summer_mean, prism_ppt_winter_mean, prism_tmean_summer_mean, prism_tmean_winter_mean])
 
     if site == 'hma':
-        #Classes are: 1 = clean ice, 2 = debris, 3 = pond
-        #Load up debris cover maps, ice thickness
         if len(ds_list) > 2:
+            #Load up debris cover maps
+            #Classes are: 1 = clean ice, 2 = debris, 3 = pond
             gf.debris_class = np.ma.array(iolib.ds_getma(ds_list[2]), mask=glac_geom_mask)
             gf.debris_thick = np.ma.array(iolib.ds_getma(ds_list[3]), mask=glac_geom_mask)
-            #Load ice thickness from glabtop2 
+            #Load ice thickness 
             gf.H = np.ma.array(iolib.ds_getma(ds_list[4]), mask=glac_geom_mask)
-            #Load surface velocity maps from Dehecq 
+            #Load surface velocity maps 
             gf.vx = np.ma.array(iolib.ds_getma(ds_list[5]), mask=glac_geom_mask)
             gf.vy = np.ma.array(iolib.ds_getma(ds_list[6]), mask=glac_geom_mask)
             gf.vm = np.ma.sqrt(gf.vx**2 + gf.vy**2)
             v_col_factor = 0.8
-            #Should smooth, better handling of data gaps
-            gf.divU = np.gradient(v_col_factor*gf.vx)[1] + np.gradient(v_col_factor*gf.vy)[0]
-            gf.divQ = gf.H * gf.divU
+
+            #Compute flux
+            gf.Q = gf.H * v_col_factor * np.array([gf.vx, gf.vy])
+            #Note that np.gradient returns derivatives relative to axis number, so (y, x) in this case
+            #Want x-derivative of x component
+            gf.divQ = np.gradient(gf.Q[0])[1] + np.gradient(gf.Q[1])[0]
+
+            #gf.divU = np.gradient(v_col_factor*gf.vx)[1] + np.gradient(v_col_factor*gf.vy)[0]
+            #gf.gradH = np.sqrt(np.sum(np.gradient(np.square(gf.H), axis=1)))
+            #gf.divQ = np.dot(gf.gradH, np.array([gf.vx, gf.vy])) + gf.divU
+
+            #gf.divQ = gf.H * gf.divU
+
+            #Should smooth divQ, better handling of data gaps
+
             #Compute debris/pond/clean percentages for entire polygon
             if gf.debris_class.count() > 0:
                 gf.perc_clean = 100. * (gf.debris_class == 1).sum()/gf.debris_class.count()
