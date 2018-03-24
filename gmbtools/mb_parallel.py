@@ -339,7 +339,7 @@ setup['site'] = site
 
 #Filter glacier poly - let's stick with big glaciers for now
 #min_glac_area = 0.1 #km^2
-min_glac_area = 10. #km^2
+min_glac_area = 1. #km^2
 #Minimum percentage of glacier poly covered by valid dz
 min_valid_area_perc = 0.80
 #Write out DEMs and dz map
@@ -353,7 +353,7 @@ verbose = False
 #Number of parallel processes
 nproc = iolib.cpu_count() - 1
 #Shortcut to use existing glacfeat_list.p if found
-use_existing_glacfeat = True 
+use_existing_glacfeat = False 
 
 global z1_date
 global z2_date
@@ -458,12 +458,13 @@ if site == 'conus':
     min_glac_area_writeout = 1.0
 
     #PRISM climate data, 800-m 
-    prism_ppt_annual_fn = os.path.join(topdir,'conus/prism/normals/annual/ppt/PRISM_ppt_30yr_normal_800mM2_annual_bil.bil')
-    prism_tmean_annual_fn = os.path.join(topdir,'conus/prism/normals/annual/tmean/PRISM_tmean_30yr_normal_800mM2_annual_bil.bil')
-    prism_ppt_summer_fn = os.path.join(topdir,'conus/prism/normals/monthly/PRISM_ppt_30yr_normal_800mM2_06-09_summer_mean.tif')
-    prism_ppt_winter_fn = os.path.join(topdir,'conus/prism/normals/monthly/PRISM_ppt_30yr_normal_800mM2_10-05_winter_mean.tif')
-    prism_tmean_summer_fn = os.path.join(topdir,'conus/prism/normals/monthly/PRISM_tmean_30yr_normal_800mM2_06-09_summer_mean.tif')
-    prism_tmean_winter_fn = os.path.join(topdir,'conus/prism/normals/monthly/PRISM_tmean_30yr_normal_800mM2_10-05_winter_mean.tif')
+    prism_dir = os.path.join(topdir,'conus/prism/normals')
+    prism_ppt_annual_fn = os.path.join(prism_dir, 'annual/ppt/PRISM_ppt_30yr_normal_800mM2_annual_bil.bil')
+    prism_tmean_annual_fn = os.path.join(prism_dir, 'annual/tmean/PRISM_tmean_30yr_normal_800mM2_annual_bil.bil')
+    prism_ppt_summer_fn = os.path.join(prism_dir, 'monthly/PRISM_ppt_30yr_normal_800mM2_06-09_summer_mean.tif')
+    prism_ppt_winter_fn = os.path.join(prism_dir, 'monthly/PRISM_ppt_30yr_normal_800mM2_10-05_winter_mean.tif')
+    prism_tmean_summer_fn = os.path.join(prism_dir, 'monthly/PRISM_tmean_30yr_normal_800mM2_06-09_summer_mean.tif')
+    prism_tmean_winter_fn = os.path.join(prism_dir, 'monthly/PRISM_tmean_30yr_normal_800mM2_10-05_winter_mean.tif')
 
     #Define priority glaciers 
     glacier_dict = {}
@@ -566,7 +567,7 @@ elif site == 'other':
     z2_fn = sys.argv[2]
     z2_date = timelib.mean_date(timelib.fn_getdatetime_list(z2_fn))
 else:
-    sys.exit()
+    sys.exit("Must specify input site")
 
 ts = datetime.now().strftime('%Y%m%d_%H%M')
 out_fn = '%s_mb_%s.csv' % (site, ts)
@@ -983,26 +984,25 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
             out_prism_tmean_winter_fn = os.path.join(outdir, gf.feat_fn+'_tmean_winter.tif')
             iolib.writeGTiff(prism_tmean_winter, out_prism_tmean_winter_fn, ds_list[0])
 
-        if site == 'hma':
-            if gf.H is not None:
-                temp_fn = os.path.join(outdir, gf.feat_fn+'_H.tif')
-                iolib.writeGTiff(gf.H, temp_fn, ds_list[0])
+        if gf.H is not None:
+            temp_fn = os.path.join(outdir, gf.feat_fn+'_H.tif')
+            iolib.writeGTiff(gf.H, temp_fn, ds_list[0])
 
-            if gf.debris_thick is not None:
-                temp_fn = os.path.join(outdir, gf.feat_fn+'_debris_thick.tif')
-                iolib.writeGTiff(gf.debris_thick, temp_fn, ds_list[0])
+        if gf.debris_thick is not None:
+            temp_fn = os.path.join(outdir, gf.feat_fn+'_debris_thick.tif')
+            iolib.writeGTiff(gf.debris_thick, temp_fn, ds_list[0])
 
-            if gf.debris_class is not None:
-                temp_fn = os.path.join(outdir, gf.feat_fn+'_debris_class.tif')
-                iolib.writeGTiff(gf.debris_class, temp_fn, ds_list[0])
+        if gf.debris_class is not None:
+            temp_fn = os.path.join(outdir, gf.feat_fn+'_debris_class.tif')
+            iolib.writeGTiff(gf.debris_class, temp_fn, ds_list[0])
 
-            if gf.vm is not None:
-                temp_fn = os.path.join(outdir, gf.feat_fn+'_vm.tif')
-                iolib.writeGTiff(gf.vm, temp_fn, ds_list[0])
+        if gf.vm is not None:
+            temp_fn = os.path.join(outdir, gf.feat_fn+'_vm.tif')
+            iolib.writeGTiff(gf.vm, temp_fn, ds_list[0])
 
-            if gf.divQ is not None:
-                temp_fn = os.path.join(outdir, gf.feat_fn+'_divQ.tif')
-                iolib.writeGTiff(gf.divQ, temp_fn, ds_list[0])
+        if gf.divQ is not None:
+            temp_fn = os.path.join(outdir, gf.feat_fn+'_divQ.tif')
+            iolib.writeGTiff(gf.divQ, temp_fn, ds_list[0])
 
     #Do AED for all
     #Compute mb using scaled AED vs. polygon
