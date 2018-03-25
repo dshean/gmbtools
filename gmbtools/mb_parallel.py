@@ -353,7 +353,7 @@ verbose = False
 #Number of parallel processes
 nproc = iolib.cpu_count() - 1
 #Shortcut to use existing glacfeat_list.p if found
-use_existing_glacfeat = False 
+use_existing_glacfeat = True 
 
 global z1_date
 global z2_date
@@ -543,7 +543,7 @@ elif site == 'hma':
     aea_srs = geolib.hma_aea_srs
 
     #Only write out for larger glaciers
-    min_glac_area_writeout = 10.0
+    min_glac_area_writeout = 1.0
 
     #Surface velocity
     #Note: had to force srs on Amaury's original products 
@@ -552,8 +552,8 @@ elif site == 'hma':
     #vx_fn = os.path.join(v_dir, 'PKH_WRS2_B8_2013_2015_snr5_n1_r170_res12.x_vel.TIF')
     #vy_fn = os.path.join(v_dir, 'PKH_WRS2_B8_2013_2015_snr5_n1_r170_res12.y_vel.TIF')
     v_dir = '/nobackup/deshean/data/jpl_vel'
-    vx_fn = os.path.join(v_dir, 'HMA_G0240_0000_vx.tif')
-    vy_fn = os.path.join(v_dir, 'HMA_G0240_0000_vy.tif')
+    vx_fn = os.path.join(v_dir, 'HMA_G0240_0000_vx_masked.tif')
+    vy_fn = os.path.join(v_dir, 'HMA_G0240_0000_vy_masked.tif')
 
 elif site == 'other':
     outdir = os.path.join(topdir,'mb')
@@ -573,11 +573,6 @@ ts = datetime.now().strftime('%Y%m%d_%H%M')
 out_fn = '%s_mb_%s.csv' % (site, ts)
 out_fn = os.path.join(outdir, out_fn)
 
-#Write out temporary file line by line, incase processes interrupted
-#import csv
-#f = open(os.path.splitext(out_fn)[0]+'_temp.csv', 'wb')
-#writer = csv.writer(f)
-
 #List to hold output
 out = []
 
@@ -593,6 +588,18 @@ elif 'rgi' in glac_shp_fn:
     glacnum_fmt = '%08.5f'
 else:
     sys.exit('Unrecognized glacier shp filename')
+
+#Set up output header
+out_header = '%s,x,y,z_med,z_p16,z_p84,z_slope,z_aspect,mb_mwea,mb_mwea_sigma,area_m2,mb_m3wea,mb_m3wea_sigma,t1,t2,dt' % glacnum_fieldname
+if site == 'conus':
+    out_header += ',ppt_a,tmean_a'
+    out_header += ',ppt_s,ppt_w,tmean_s,tmean_w'
+if site == 'hma':
+    out_header += ',H_m,debris_m,perc_debris,perc_pond,perc_clean'
+
+#nf = out.shape[1] 
+nf = len(out_header.split(','))
+out_fmt = [glacnum_fmt,] + ['%0.3f'] * (nf - 1)
 
 glac_shp_ds = ogr.Open(glac_shp_fn, 0)
 glac_shp_lyr = glac_shp_ds.GetLayer()
@@ -933,6 +940,7 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
                 gf.perc_clean = 100. * (gf.debris_class == 1).sum()/gf.debris_class.count()
                 gf.perc_debris = 100. * (gf.debris_class == 2).sum()/gf.debris_class.count()
                 gf.perc_pond = 100. * (gf.debris_class == 3).sum()/gf.debris_class.count()
+
             outlist.extend([gf.H.mean(), gf.debris_thick.mean(), gf.perc_debris, gf.perc_pond, gf.perc_clean])
 
     if verbose:
@@ -942,11 +950,11 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
         print('Sum mb: %0.2f mwe/yr' % mb_sum)
         #print('-------------------------------')
 
-    #Write to master list
-    #out.append(outlist)
-    #Write to temporary file
-    #writer.writerow(outlist)
-    #f.flush()
+    #Write out mb stats for entire polygon - in case processing is interupted
+    out_csv_fn = os.path.join(outdir, gf.feat_fn+'_mb.csv')
+    out = np.array(outlist, dtype=float)
+    #Note, need a 2D array here, add 0 axis
+    np.savetxt(out_csv_fn, out[np.newaxis,:], fmt=out_fmt, delimiter=',', header=out_header, comments='')
 
     if writeout and (gf.glac_area/1E6 > min_glac_area_writeout):
         out_dz_fn = os.path.join(outdir, gf.feat_fn+'_dz.tif')
@@ -1073,15 +1081,7 @@ out = np.array(mb_list, dtype=float)
 #Sort by area
 out = out[out[:,3].argsort()[::-1]]
 
-out_header = '%s,x,y,z_med,z_p16,z_p84,z_slope,z_aspect,mb_mwea,mb_mwea_sigma,area_m2,mb_m3wea,mb_m3wea_sigma,t1,t2,dt' % glacnum_fieldname
-if site == 'conus':
-    out_header += ',ppt_a,tmean_a'
-    out_header += ',ppt_s,ppt_w,tmean_s,tmean_w'
-if site == 'hma':
-    #[gf.ice_thick.mean(), gf.debris_thick.mean(), gf.perc_debris, gf.perc_pond, gf.perc_clean]
-    out_header += ',H_m,debris_m,perc_debris,perc_pond,perc_clean'
-
-out_fmt = [glacnum_fmt,] + ['%0.3f'] * (out.shape[1] - 1)
+#Can also just load up all individual mb.csv files and compile, rather than trying to 
 
 print("Saving output csv: %s" % out_fn)
 np.savetxt(out_fn, out, fmt=out_fmt, delimiter=',', header=out_header, comments='')
