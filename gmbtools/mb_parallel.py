@@ -1027,6 +1027,18 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
 # For testing
 #glacfeat_list_in = glacfeat_list[0:20]
 glacfeat_list_in = glacfeat_list
+
+#This is a hack to limit processing for just a few glaciers
+glac_dict = None
+#Khumbu, Ngozumpa, etc
+#glac_dict = ['15.03473', '15.03733', '15.10070', '15.09991']
+
+if glac_dict:
+    glacfeat_list_in = []
+    for i in glacfeat_list:
+        if i.glacnum in glac_dict:
+            glacfeat_list_in.append(i)
+
 glacfeat_list_out = []
 
 if parallel:
