@@ -33,8 +33,8 @@ area_filter=False
 min_area_m2 = 1E6
 
 #Default mb clim
-mb_clim = (-1.0, 1.0)
-
+#mb_clim = (-1.0, 1.0)
+mb_clim = (-0.7, 0.7)
 
 extent = None
 if site == 'hma':
@@ -197,27 +197,28 @@ if basin_shp_fn is not None:
     #Convert to glac crs
     basin_df = basin_df.to_crs(glac_df.crs)
 
-#Add region and basin fields to RGI polygons
-if not os.path.exists(glac_shp_join_fn):
-    if region_shp_fn is not None:
-        print("One-time spatial join by region")
-        glac_df = gpd.sjoin(glac_df, region_df, how="inner", op="intersects")
-        glac_df.rename(index=str, columns={region_col+"_right": "region", 'index_right':'region_id'}, \
-                inplace=True)
-
-    if basin_shp_fn is not None:
-        print("One-time spatial join by basin")
-        glac_df = gpd.sjoin(glac_df, basin_df, how="inner", op="intersects")
-        glac_df.rename(index=str, columns={"HYBAS_ID": "basin"}, inplace=True)
-
-    #These 'id' are all 0
-    #glac_df.drop('id', 1)
-
-    print("Writing out: %s" % glac_shp_join_fn)
-    glac_df.to_file(glac_shp_join_fn, driver=driver)
-
 region_col = 'region'
 basin_col = 'basin'
+
+#Add region and basin fields to RGI polygons
+#There's a bug here
+#if not os.path.exists(glac_shp_join_fn):
+if region_shp_fn is not None:
+    print("One-time spatial join by region")
+    glac_df = gpd.sjoin(glac_df, region_df, how="inner", op="intersects")
+    glac_df.rename(index=str, columns={region_col+"_right": "region", 'index_right':'region_id'}, \
+            inplace=True)
+
+if basin_shp_fn is not None:
+    print("One-time spatial join by basin")
+    glac_df = gpd.sjoin(glac_df, basin_df, how="inner", op="intersects")
+    glac_df.rename(index=str, columns={"HYBAS_ID": "basin"}, inplace=True)
+
+#These 'id' are all 0
+#glac_df.drop('id', 1)
+
+print("Writing out: %s" % glac_shp_join_fn)
+glac_df.to_file(glac_shp_join_fn, driver=driver)
 
 print("Loading mb")
 mb_df = pd.read_csv(mb_csv_fn)
