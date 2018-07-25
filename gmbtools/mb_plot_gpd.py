@@ -26,17 +26,18 @@ from pygeotools.lib import iolib, geolib
 import geopandas as gpd
 import cartopy.crs as ccrs 
 
-#site = 'hma'
-site = 'conus'
+site = 'hma'
+#site = 'conus'
 
 area_filter=False
 min_area_m2 = 1E6
 
 #Default mb clim
-#mb_clim = (-1.0, 1.0)
-mb_clim = (-0.7, 0.7)
+mb_clim = (-1.0, 1.0)
+#mb_clim = (-0.7, 0.7)
 
 extent = None
+crs = None
 if site == 'hma':
     hs_fn = '/Users/dshean/Documents/UW/HMA/mos/hma_20170716_mos/mos_32m/hma_20170716_mos_32m_100m_hs_az315.tif'
     glac_shp_fn = '/Users/dshean/data/rgi60/regions/rgi60_merge_HMA_aea.shp'
