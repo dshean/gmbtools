@@ -94,7 +94,8 @@ for n, feat in enumerate(glac_shp_lyr):
             fn = os.path.join(asterdir, aster_feat.GetField(0))
             fn_list.append(fn)
         stack = malib.DEMStack(fn_list, outdir=os.path.join(stackdir, feat_fn), \
-                res='max', extent=glac_geom_extent, srs=aster_index_srs, mask_geom=glac_geom, n_thresh=min_aster_count, min_dt_ptp=min_dt_ptp)
+                res='max', extent=glac_geom_extent, srs=aster_index_srs, mask_geom=glac_geom, \
+                trend=True, robust=True, n_thresh=min_aster_count, min_dt_ptp=min_dt_ptp)
         #if stack.ma_stack is not None:
             #sys.exit()
             #glac_geom_mask = geolib.geom2mask(glac_geom, stack.get_ds())
