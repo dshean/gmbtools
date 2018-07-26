@@ -2,7 +2,9 @@
 
 set -e
 
+#pbs_rfe --duration 0+6 --model bro
 #qsub -I -q devel -lselect=1:model=bro,walltime=2:00:00
+#qsub -I -q long -lselect=1:model=bro,walltime=6:00:00
 #cd /nobackup/deshean/hma
 #make_mos.sh
 
@@ -19,28 +21,41 @@ latest=false
 summer=false
 trans=false
 
+#Output mosaic res
+#res=2
 res=8
 #res=32
 
-count=true
-stddev=true
-last=false
-first=false
+#Write out tif mosaic at full res
+out_tif=false
+
+count=false
+stddev=false
+last=true
+first=true
 index=false
 tileindex=false
+
+#Exclude Quickbird-2
+noQB=true
 
 #Hardcoded site and projection for now
 site=hma
 proj='+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
 #site=conus
 #proj='+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
+#site=fuego
+#proj='EPSG:32615'
 
-ncpu=$(cat /proc/cpuinfo | egrep "core id|physical id" | tr -d "\n" | sed s/physical/\\nphysical/g | grep -v ^$ | sort | uniq | wc -l)
-threads=$((ncpu-1))
+#Mosaic tile size in meters
+#tilesize=20000
 tilesize=100000
 mos=~/src/Tools/dem_mosaic_validtiles.py
 #Simplify tolerance in decimal degrees
 tol=0.001
+
+ncpu=$(cat /proc/cpuinfo | egrep "core id|physical id" | tr -d "\n" | sed s/physical/\\nphysical/g | grep -v ^$ | sort | uniq | wc -l)
+threads=$((ncpu-1))
 
 ts=`date +%Y%m%d`
 
@@ -56,11 +71,11 @@ if $latest ; then
     mos_ext+='_latest'
 else
     #CONUS
-    re='201[2-9]'
-    #HMA
-    re='201[0-9]'
     #Want to exclude 2008/2009 data
-    #re='20[0-9]'
+    #re='201[2-9]'
+    #HMA
+    #re='201[0-9]'
+    re='20[0-9]'
 fi
     
 if $summer ; then
@@ -82,23 +97,41 @@ fi
 #list=$(ls */stereo/*00/dem*/*-DEM_${res}m.tif */*00/dem*/*-DEM_${res}m.tif)
 #list=$(ls */*/*/dem*/*-DEM_8m_trans.tif | grep -v QB)
 
-ext="-DEM_${res}m_dem_align"
-mos_ext="${site}_mos_${res}m_dem_align"
+#ext="-DEM_${res}m"
+#ext="-DEM_${res}m_dem_align"
+#ext="-DEM_${res}m_dzfilt_-200_200"
+ext="-DEM_${res}m_dzfilt_-200_200_*align"
+
+mos_ext="${site}_mos_${res}m"
+#mos_ext="${site}_mos_${res}m_dem_align"
 
 echo $re
 echo $ext
 echo $mos_ext
 
-#HMA Nuth and Kaab, round 2
-list=$(ls *track/dem_coreg/*00/dem*/*-DEM_8m_dem_align/*_align_dem_align/*_align.tif)
+#list=$(ls *track/*00/dem*/${re}*${ext}.tif)
+list=$(ls *align/${re}*${ext}.tif)
+#list=$(ls validpairs*/*00/dem*/${re}*${ext}.tif)
+echo $list | wc -w
 
-#list=$(ls *00/dem*/${re}*${ext}.tif)
+if $noQB ; then
+    echo "Removing QB02"
+    #list=$(echo $list | tr ' ' '\n' | grep -v QB02)
+    list=$(echo $list | tr ' ' '\n' | grep -v '_101[0-9A-Z]*_101')
+    echo $list | wc -w
+fi
+
+#HMA Nuth and Kaab, round 2
+#list=$(ls *track/dem_coreg/*00/dem*/*-DEM_8m_dem_align/*_align_dem_align/*_align.tif)
+
 out=mos/${site}_${ts}_mos/${mos_ext}/${mos_ext}
 
 #Sort by date
 #NOTE: Need to update sort key with increased path depths
+list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 2)
 #list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 3)
-list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 5)
+#list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 4)
+#list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 5)
 
 echo
 echo $out
@@ -120,24 +153,47 @@ echo $(echo $list | wc -w) input DEMs
 
 if [ ! -e $out.vrt ] ; then
     $mos --threads $threads --tr $res --t_srs "$proj" --georef_tile_size=$tilesize -o $out $list
+    if $out_tif ; then
+        gdalwarp $gdal_opt $out.vrt ${out}.tif
+        gdaladdo_ro.sh ${out}.tif
+        hs.sh ${out}.tif
+        gdaladdo_ro.sh ${out}_hs_az315.tif
+    fi
 fi
+
 if $last; then
     if [ ! -e ${out}_last.vrt ] ; then
         echo "Preparing lastmap"
         $mos --stat last --threads $threads --tr $res --t_srs "$proj" --georef_tile_size=$tilesize -o $out $list
+        if $out_tif ; then
+            gdalwarp $gdal_opt $out.vrt ${out}_last.tif
+            gdaladdo_ro.sh ${out}_last.tif
+            hs.sh ${out}_last.tif
+            gdaladdo_ro.sh ${out}_last_hs_az315.tif
+        fi
     fi
 fi
+
 if $first; then
     if [ ! -e ${out}_first.vrt ] ; then
         echo "Preparing firstmap"
         $mos --stat first --threads $threads --tr $res --t_srs "$proj" --georef_tile_size=$tilesize -o $out $list
+        if $out_tif ; then
+            gdalwarp $gdal_opt $out.vrt ${out}_first.tif
+            gdaladdo_ro.sh ${out}_first.tif
+            hs.sh ${out}_first.tif
+            gdaladdo_ro.sh ${out}_first_hs_az315.tif
+        fi
     fi
 fi
 
 if (( "$res" == "32" )) ; then
+    #If res above is 32, make lowres products for faster browsing
+    lowres=100
+    #lowres=32
+
     #Should run these in parallel
     gdal_opt='-co TILED=YES -co COMPRESS=LZW -co BIGTIFF=YES'
-    lowres=100
     if [ ! -e ${out}_${lowres}m.tif ] ; then 
         echo "Preparing lowres $lowres m mosaic"
         gdalwarp -tr $lowres $lowres $gdal_opt $out.vrt ${out}_${lowres}m.tif
