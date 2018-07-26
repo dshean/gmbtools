@@ -320,8 +320,8 @@ def get_date_a(ds, date_shp_lyr, glac_geom_mask, datefield):
     return date_a
     
 topdir='/nobackup/deshean'
-site='conus'
-#site='hma'
+#site='conus'
+site='hma'
 
 """
 #Consider storing setup variables in dictionary that can be passed to Process
@@ -337,8 +337,8 @@ setup['site'] = site
 #site='other'
 
 #Filter glacier poly - let's stick with big glaciers for now
-min_glac_area = 0.1 #km^2
-#min_glac_area = 1. #km^2
+#min_glac_area = 0.1 #km^2
+min_glac_area = 1. #km^2
 #Minimum percentage of glacier poly covered by valid dz
 min_valid_area_perc = 0.80
 #Write out DEMs and dz map
@@ -350,8 +350,8 @@ parallel = True
 #Verbose for debugging
 verbose = False 
 #Number of parallel processes
-#nproc = iolib.cpu_count() - 1
-nproc = 12
+nproc = iolib.cpu_count() - 1
+#nproc = 12
 #Shortcut to use existing glacfeat_list.p if found
 use_existing_glacfeat = True 
 
@@ -514,7 +514,8 @@ elif site == 'hma':
 
     #SRTM
     #z1_fn = os.path.join(topdir,'rpcdem/hma/nasadem/srtmOnly/20000211_hma_nasadem_hgt_lt5m_err.vrt')
-    z1_fn = os.path.join(topdir,'rpcdem/hma/nasadem/srtmOnly/20000211_hma_nasadem_hgt.vrt')
+    #z1_fn = os.path.join(topdir,'rpcdem/hma/nasadem/srtmOnly/20000211_hma_nasadem_hgt.vrt')
+    z1_fn = os.path.join(topdir, 'data/nasadem/hma/hgt_srtmOnly_R4/srtmOnly.hgt/20000211_hma_nasadem_hgt_srtmOnly_R4_srtmOnly.hgt_shift.vrt')
     #z1_fn = os.path.join(topdir,'rpcdem/hma/srtm1/hma_srtm_gl1.vrt')
     #z1_date = timelib.dt2decyear(datetime(2000,2,11))
     z1_date = 2000.112
@@ -528,15 +529,16 @@ elif site == 'hma':
     #z2_fn = os.path.join(topdir,'hma/hma_8m_mos_20170410/hma_8m.vrt')
     #mosdir = 'hma_20170716_mos'
     #z2_fn = os.path.join(topdir,'hma/mos/%s/mos_8m/%s_8m.vrt' % (mosdir, mosdir))
-    mosdir = 'hma_20171211_mos'
-    z2_fn = os.path.join(topdir,'hma/mos/%s/hma_mos_8m_dem_align/hma_mos_8m_dem_align.vrt' % mosdir)
+    #mosdir = 'hma_20171211_mos'
+    #z2_fn = os.path.join(topdir,'hma/mos/%s/hma_mos_8m_dem_align/hma_mos_8m_dem_align.vrt' % mosdir)
+    mosdir = 'latest'
+    z2_fn = os.path.join(topdir,'hma/dem_coreg/mos/%s/hma_mos_8m/hma_mos_8m.vrt' % mosdir)
     #z2_date = datetime(2015, 1, 1)
     z2_date = 2015.0
     z2_sigma = 1.0
 
     #Output directory
-    #outdir = os.path.join(topdir,'hma/mos/%s/mb' % mosdir)
-    outdir = os.path.join(topdir,'hma/mos/%s/mb_debris' % mosdir)
+    outdir = os.path.join(topdir,'hma/dem_coreg/mos/%s/mb_debris' % mosdir)
     #outdir = os.path.join(topdir,'hma/mos/%s/mb_Hexagon_SRTM' % mosdir)
 
     #Output projection
@@ -544,7 +546,7 @@ elif site == 'hma':
     aea_srs = geolib.hma_aea_srs
 
     #Only write out for larger glaciers
-    min_glac_area_writeout = 1.0
+    min_glac_area_writeout = 5.0
 
     #Surface velocity
     #Note: had to force srs on Amaury's original products 
@@ -670,7 +672,7 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
     fn_list = [z1_fn, z2_fn]
 
     #Attempt to load Huss ice thickness grid
-    huss_dir = '/nobackupp8/deshean/data/huss/'
+    huss_dir = '/nobackup/deshean/data/huss/'
     ice_thick_fn = os.path.join(huss_dir, 'RGI%02i_thick/thickness/thick_%05i.agr' % \
             tuple(map(int, gf.glacnum.split('.'))))
     if os.path.exists(ice_thick_fn):
@@ -680,8 +682,7 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
         #Add prism datasets
         fn_list.extend([prism_ppt_annual_fn, prism_tmean_annual_fn])
         fn_list.extend([prism_ppt_summer_fn, prism_ppt_winter_fn, prism_tmean_summer_fn, prism_tmean_winter_fn])
-
-    if site == 'hma':
+    elif site == 'hma':
         #Add debris cover datasets
         #Should tar this up, and extract only necessary file
         #Downloaded from: http://mountainhydrology.org/data-nature-2017/
@@ -961,8 +962,11 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
 
     #Write out mb stats for entire polygon - in case processing is interupted
     out_csv_fn = os.path.join(outdir, gf.feat_fn+'_mb.csv')
-    out = np.array(outlist, dtype=float)
+    #out = np.array(outlist, dtype=float)
+    out = np.full(len(out_fmt), np.nan)
+    out[0:len(outlist)] = np.array(outlist, dtype=float)
     #Note, need a 2D array here, add 0 axis
+
     np.savetxt(out_csv_fn, out[np.newaxis,:], fmt=out_fmt, delimiter=',', header=out_header, comments='')
 
     if writeout and (gf.glac_area/1E6 > min_glac_area_writeout):
