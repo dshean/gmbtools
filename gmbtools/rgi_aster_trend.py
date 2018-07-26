@@ -5,8 +5,15 @@ Script to create DEMStack objects from ASTER DEMs for RGI polygons
 
 To do:
 Should run in parallel with multiprocessing, similar to mb_parallel
-Implement RANSAC linear regression
-Implement smoothness constraint to penalize large spatial gradients in trend
+
+After transfer, organize into annual subdir
+for y in `seq 2000 2018` ; do if [ ! -d $y ] ; then mkdir $y ; fi ; mv AST_${y}* $y/ done
+
+#Generate ASTER index
+##gdaltindex -t_srs EPSG:4326 aster_align_index.shp 2*/*align/*align.tif
+parallel 'gdaltindex -t_srs EPSG:4326 {}/aster_align_index_{}.shp {}/*align/*align.tif' ::: {2000..2018}
+ogr_merge.sh aster_align_index.shp 2*/aster_align_index_*.shp
+ogr2ogr -t_srs '+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs ' aster_align_index_aea.shp aster_align_index.shp
 
 """
 
@@ -15,9 +22,15 @@ import sys
 from osgeo import ogr
 from pygeotools.lib import geolib, warplib, malib
 
+min_glac_area = 1 
+min_aster_count = 5
+min_dt_ptp = 1825
+
 topdir='/nobackup/deshean/'
-asterdir = os.path.join(topdir, 'hma/aster/align')
-stackdir = os.path.join(asterdir, 'stack_n5_1825days')
+asterdir = os.path.join(topdir, 'hma/aster/dsm')
+os.chdir(asterdir)
+#stackdir = os.path.join(asterdir, 'stack')
+stackdir = 'stack'
 if not os.path.exists(stackdir):
     os.makedirs(stackdir)
 
@@ -55,15 +68,10 @@ feat_count = glac_shp_lyr.GetFeatureCount()
 print("Input glacier polygon count: %i" % feat_count)
 
 #Area filter
-min_glac_area = 10 
 glac_shp_lyr.SetAttributeFilter("Area > %s" % min_glac_area)
 feat_count = glac_shp_lyr.GetFeatureCount()
 print("Min. Area filter glacier polygon count: %i" % feat_count)
 glac_shp_lyr.ResetReading()
-
-#Generate ASTER index
-#gdaltindex -t_srs EPSG:4326 aster_align_index.shp *align/*align.tif
-#ogr2ogr -t_srs '+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs ' aster_align_index_aea.shp aster_align_index.shp
 
 aster_index_fn = os.path.join(asterdir, 'aster_align_index_aea.shp')
 aster_index_ds = ogr.Open(aster_index_fn, 0)
@@ -73,14 +81,15 @@ aster_index_srs = aster_index_lyr.GetSpatialRef()
 feat_count = aster_index_lyr.GetFeatureCount()
 print("Input ASTER count: %i" % feat_count)
 
-min_aster_count = 5
-min_dt_ptp = 1825
+cmd_fn = 'aster_stack_cmd.sh'
+f = open(cmd_fn, "w") 
 
 for n, feat in enumerate(glac_shp_lyr):
     #glac_geom_orig = geolib.geom_dup(feat.GetGeometryRef())
     feat_fn = rgi_name(feat)
     print(n, feat_fn)
     glac_geom = geolib.geom_dup(feat.GetGeometryRef())
+    #Should buffer by ~1 km here, preserve surrounding pixels for uncertainty analysis
     glac_geom_extent = geolib.geom_extent(glac_geom)
 
     #Spatial filter
@@ -91,19 +100,41 @@ for n, feat in enumerate(glac_shp_lyr):
         fn_list = []
         for aster_feat in aster_index_lyr:
             #Only 1 field from gdaltindex, 'location'
-            fn = os.path.join(asterdir, aster_feat.GetField(0))
+            #Can have issues with commands that are too long with full path
+            #fn = os.path.join(asterdir, aster_feat.GetField(0))
+            #This is relative path, must be in correct directory when running make_stack.py
+            fn = aster_feat.GetField(0)
             fn_list.append(fn)
-        stack = malib.DEMStack(fn_list, outdir=os.path.join(stackdir, feat_fn), \
-                res='max', extent=glac_geom_extent, srs=aster_index_srs, mask_geom=glac_geom, \
-                trend=True, robust=True, n_thresh=min_aster_count, min_dt_ptp=min_dt_ptp)
+        fn_list.sort() 
+        #Hack to deal with long filenames
+        outdir=os.path.join(stackdir, feat_fn)
+        #stack_fn='%s_%s_%s_stack.npz' % (feat_fn[0:8], os.path.split(fn_list[0])[-1].split('_DEM_')[0], os.path.split(fn_list[-1])[-1].split('_DEM_')[0])
+        stack_fn='%s_AST_align_stack.npz' % feat_fn[0:8]
+
+        #Create file with commands to make stacks
+        #Run later with GNU parallel `parallel < aster_stack_cmd.sh`
+        cmd='make_stack.py -outdir %s -stack_fn %s -tr max -te "%s" -t_srs "%s" --med --trend --robust \
+                -min_n %i -min_dt_ptp %f %s \n' % \
+                (outdir, os.path.join(outdir, stack_fn), ' '.join(str(i) for i in glac_geom_extent), \
+                aster_index_srs.ExportToProj4(), min_aster_count, min_dt_ptp, ' '.join(fn_list))
+        f.write(cmd)
+
+        #Generate stacks serially
+        #stack = malib.DEMStack(fn_list, outdir=os.path.join(stackdir, feat_fn), \
+        #        res='max', extent=glac_geom_extent, srs=aster_index_srs, mask_geom=glac_geom, \
+        #        trend=True, robust=True, n_thresh=min_aster_count, min_dt_ptp=min_dt_ptp)
+
         #if stack.ma_stack is not None:
             #sys.exit()
             #glac_geom_mask = geolib.geom2mask(glac_geom, stack.get_ds())
             #ds_list = warplib.memwarp_multi_fn(fn_list, res='max', extent=glac_geom_extent)
+
     aster_index_lyr.ResetReading()
 
+f.close()
+
 #Generate plots
-#hs.sh */*mean.tif
-#for i in */*trend.tif; do  imviewer.py -clim -10 10 -cmap RdYlBu -label 'Trend (m/yr)' -of png -overlay $(echo $i | sed 's/_trend/_mean_hs_az315/') $i -scalebar -outsize 8 8 -dpi 100; done
-#for i in */*count.tif; do imviewer.py -clim 0 20 -cmap inferno -label 'Count' -of png -overlay $(echo $i | sed 's/_count/_mean_hs_az315/') $i -scalebar -outsize 8 8 -dpi 100; done
-#for i in */*[0-9]_std.tif; do imviewer.py -clim 0 30 -label 'Std (m)' -of png -overlay $(echo $i | sed 's/_std/_mean_hs_az315/') $i -scalebar -outsize 8 8 -dpi 100; done
+#hs.sh */*med.tif
+#for i in */*trend.tif; do  imviewer.py -clim -5 5 -cmap RdYlBu -label 'Trend (m/yr)' -of png -overlay $(echo $i | sed 's/_trend/_med_hs_az315/') $i -scalebar -outsize 8 8 -dpi 100; done
+#for i in */*count.tif; do imviewer.py -clim 0 20 -cmap inferno -label 'Count' -of png -overlay $(echo $i | sed 's/_count/_med_hs_az315/') $i -scalebar -outsize 8 8 -dpi 100; done
+#for i in */*[0-9]_nmad.tif; do imviewer.py -clim 0 30 -label 'Std (m)' -of png -overlay $(echo $i | sed 's/_std/_med_hs_az315/') $i -scalebar -outsize 8 8 -dpi 100; done
