@@ -13,7 +13,13 @@ for y in `seq 2000 2018` ; do if [ ! -d $y ] ; then mkdir $y ; fi ; mv AST_${y}*
 ##gdaltindex -t_srs EPSG:4326 aster_align_index.shp 2*/*align/*align.tif
 parallel 'gdaltindex -t_srs EPSG:4326 {}/aster_align_index_{}.shp {}/*align/*align.tif' ::: {2000..2018}
 ogr_merge.sh aster_align_index.shp 2*/aster_align_index_*.shp
-ogr2ogr -t_srs '+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs ' aster_align_index_aea.shp aster_align_index.shp
+ogr_merge.sh aster_align_index_2000-2009.shp 2*/aster_align_index_200[0-9].shp
+ogr_merge.sh aster_align_index_2009-2018.shp 2*/aster_align_index_2009.shp 2*/aster_align_index_201[0-9].shp
+for i in aster_align_index.shp aster_align_index_2000-2009.shp aster_align_index_2009-2018.shp
+do
+ogr2ogr -t_srs '+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs ' ${i%.*}_aea.shp $i
+rgi_aster_trend.py ${i%.*}_aea.shp
+done
 
 """
 
@@ -22,15 +28,27 @@ import sys
 from osgeo import ogr
 from pygeotools.lib import geolib, warplib, malib
 
+#aster_index_fn = os.path.join(asterdir, 'aster_align_index_aea.shp')
+aster_index_fn = sys.argv[1]
+
+
+#Most DEMs are 32 m
+#res='max'
+res=32
+
+#Minimum glacier area (km2)
 min_glac_area = 1 
+#Minimum number of samples
 min_aster_count = 5
+#Min to max timestamp difference (days)
+#5 years
 min_dt_ptp = 1825
 
 topdir='/nobackup/deshean/'
 asterdir = os.path.join(topdir, 'hma/aster/dsm')
 os.chdir(asterdir)
 #stackdir = os.path.join(asterdir, 'stack')
-stackdir = 'stack'
+stackdir = os.path.splitext(aster_index_fn)[0]+'_stack'
 if not os.path.exists(stackdir):
     os.makedirs(stackdir)
 
@@ -73,7 +91,6 @@ feat_count = glac_shp_lyr.GetFeatureCount()
 print("Min. Area filter glacier polygon count: %i" % feat_count)
 glac_shp_lyr.ResetReading()
 
-aster_index_fn = os.path.join(asterdir, 'aster_align_index_aea.shp')
 aster_index_ds = ogr.Open(aster_index_fn, 0)
 aster_index_lyr = aster_index_ds.GetLayer()
 #This should be contained in features
@@ -81,7 +98,8 @@ aster_index_srs = aster_index_lyr.GetSpatialRef()
 feat_count = aster_index_lyr.GetFeatureCount()
 print("Input ASTER count: %i" % feat_count)
 
-cmd_fn = 'aster_stack_cmd.sh'
+#cmd_fn = 'aster_stack_cmd.sh'
+cmd_fn = os.path.splitext(aster_index_fn)[0]+'_stack_cmd.sh'
 f = open(cmd_fn, "w") 
 
 for n, feat in enumerate(glac_shp_lyr):
@@ -109,13 +127,13 @@ for n, feat in enumerate(glac_shp_lyr):
         #Hack to deal with long filenames
         outdir=os.path.join(stackdir, feat_fn)
         #stack_fn='%s_%s_%s_stack.npz' % (feat_fn[0:8], os.path.split(fn_list[0])[-1].split('_DEM_')[0], os.path.split(fn_list[-1])[-1].split('_DEM_')[0])
-        stack_fn='%s_AST_align_stack.npz' % feat_fn[0:8]
+        stack_fn='%s_%s.npz' % (feat_fn[0:8], os.path.split(stackdir)[-1])
 
         #Create file with commands to make stacks
         #Run later with GNU parallel `parallel < aster_stack_cmd.sh`
-        cmd='make_stack.py -outdir %s -stack_fn %s -tr max -te "%s" -t_srs "%s" --med --trend --robust \
+        cmd='make_stack.py -outdir %s -stack_fn %s -tr %s -te "%s" -t_srs "%s" --med --trend --robust \
                 -min_n %i -min_dt_ptp %f %s \n' % \
-                (outdir, os.path.join(outdir, stack_fn), ' '.join(str(i) for i in glac_geom_extent), \
+                (outdir, os.path.join(outdir, stack_fn), res, ' '.join(str(i) for i in glac_geom_extent), \
                 aster_index_srs.ExportToProj4(), min_aster_count, min_dt_ptp, ' '.join(fn_list))
         f.write(cmd)
 
