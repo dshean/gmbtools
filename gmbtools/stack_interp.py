@@ -8,7 +8,8 @@ import numpy as np
 from datetime import datetime
 from pygeotools.lib import timelib, iolib
 
-dt_list = [datetime(2000,5,31), datetime(2009,5,31), datetime(2018,5,31)]
+#SRTM, then systematic timestamps
+dt_list = [datetime(2000,2,11), datetime(2000,5,31), datetime(2009,5,31), datetime(2018,5,31)]
 stack_fn=sys.argv[1]
 
 #Use tif on disk if available
