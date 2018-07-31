@@ -150,6 +150,7 @@ fi
 
 echo $list | tr ' ' '\n' > ${out}_input_DEM_list.txt
 echo $(echo $list | wc -w) input DEMs
+gdal_opt='-co COMPRESS=LZW -co TILED=YES -co BIGTIFF=IF_SAFER'
 
 if [ ! -e $out.vrt ] ; then
     $mos --threads $threads --tr $res --t_srs "$proj" --georef_tile_size=$tilesize -o $out $list
