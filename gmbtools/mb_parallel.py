@@ -270,7 +270,7 @@ def hist_plot(gf, outdir, bin_width=10.0):
     plt.close(f)
     return z_bin_edges
 
-def map_plot(gf, z_bin_edges, outdir, hs=True):
+def map_plot(gf, z_bin_edges, outdir, hs=True, dz_clim=(-2.0, 2.0)):
     #print("Generating map plot")
     f,axa = plt.subplots(1,3, figsize=(10,7.5))
     #f.suptitle(gf.feat_fn)
@@ -297,8 +297,6 @@ def map_plot(gf, z_bin_edges, outdir, hs=True):
     axa[0].set_title(t1_title)
     axa[1].set_title(t2_title)
     axa[2].set_title('%s to %s (%0.2f yr)' % (t1_title, t2_title, gf.dt))
-    #dz_clim = (-10, 10)
-    dz_clim = (-2.0, 2.0)
     dz_im = axa[2].imshow(gf.dhdt, cmap='RdBu', vmin=dz_clim[0], vmax=dz_clim[1])
     for ax in axa:
         pltlib.hide_ticks(ax)
@@ -1042,7 +1040,10 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
             z_bin_edges = hist_plot(gf, outdir)
             gf.z1_hs = geolib.gdaldem_mem_ds(ds_list[0], processing='hillshade', returnma=True)
             gf.z2_hs = geolib.gdaldem_mem_ds(ds_list[1], processing='hillshade', returnma=True)
-            map_plot(gf, z_bin_edges, outdir)
+            dz_clim = (-2.0, 2.0)
+            if site == 'hma':
+                dz_clim = (-5.0, 5.0)
+            map_plot(gf, z_bin_edges, outdir, dz_clim=dz_clim)
 
     #Write out the populated glacfeat objects (contain raster grids, stats, etc)
     #Should compress with gzip module
