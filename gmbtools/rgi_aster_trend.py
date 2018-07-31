@@ -31,7 +31,6 @@ from pygeotools.lib import geolib, warplib, malib
 #aster_index_fn = os.path.join(asterdir, 'aster_align_index_aea.shp')
 aster_index_fn = sys.argv[1]
 
-
 #Most DEMs are 32 m
 #res='max'
 res=32
@@ -131,8 +130,7 @@ for n, feat in enumerate(glac_shp_lyr):
 
         #Create file with commands to make stacks
         #Run later with GNU parallel `parallel < aster_stack_cmd.sh`
-        cmd='make_stack.py -outdir %s -stack_fn %s -tr %s -te "%s" -t_srs "%s" --med --trend --robust \
-                -min_n %i -min_dt_ptp %f %s \n' % \
+        cmd='make_stack.py -outdir %s -stack_fn %s -tr %s -te "%s" -t_srs "%s" --med --trend --robust -min_n %i -min_dt_ptp %f %s \n' % \
                 (outdir, os.path.join(outdir, stack_fn), res, ' '.join(str(i) for i in glac_geom_extent), \
                 aster_index_srs.ExportToProj4(), min_aster_count, min_dt_ptp, ' '.join(fn_list))
         f.write(cmd)
