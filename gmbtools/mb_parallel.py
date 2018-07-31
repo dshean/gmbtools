@@ -518,16 +518,26 @@ elif site == 'hma':
     z2_srtm_penetration_corr = True
     """
 
+    """
     #SRTM
     #z1_fn = os.path.join(topdir,'rpcdem/hma/nasadem/srtmOnly/20000211_hma_nasadem_hgt_lt5m_err.vrt')
     #z1_fn = os.path.join(topdir,'rpcdem/hma/nasadem/srtmOnly/20000211_hma_nasadem_hgt.vrt')
-    z1_fn = os.path.join(topdir, 'data/nasadem/hma/hgt_srtmOnly_R4/srtmOnly.hgt/20000211_hma_nasadem_hgt_srtmOnly_R4_srtmOnly.hgt_shift.vrt')
+    #z1_fn = os.path.join(topdir, 'data/nasadem/hma/hgt_srtmOnly_R4/srtmOnly.hgt/20000211_hma_nasadem_hgt_srtmOnly_R4_srtmOnly.hgt_shift.vrt')
+    z1_fn = os.path.join(topdir, 'data/nasadem/hma/hgt_merge/hgt/hma_nasadem_hgt_merge_hgt_adj_shift.vrt')
     #z1_fn = os.path.join(topdir,'rpcdem/hma/srtm1/hma_srtm_gl1.vrt')
     #z1_date = timelib.dt2decyear(datetime(2000,2,11))
     z1_date = 2000.112
     z1_sigma = 4.0
     z1_srtm_penetration_corr = True
+    """
 
+    #ASTER interap 2000
+    z1_fn = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_aea_stack/20000531_mos.vrt'
+    z1_date = 2000.412
+    z1_sigma = 4.0
+    z1_srtm_penetration_corr = False
+
+    """
     #Second DEM Source (WV mosaic)
     #z2_fn = '/nobackup/deshean/hma/hma1_2016dec22/hma_8m_tile/hma_8m.vrt'
     #z2_fn = os.path.join(topdir,'hma/hma1_2016dec22/hma_8m_tile/hma_8m.vrt')
@@ -542,9 +552,34 @@ elif site == 'hma':
     #z2_date = datetime(2015, 1, 1)
     z2_date = 2015.0
     z2_sigma = 1.0
+    """
+
+    """
+    #ASTER interp 2009 
+    z2_fn = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_aea_stack/20090531_mos.vrt'
+    z2_date = 2009.412
+    z2_sigma = 4.0
+    z2_srtm_penetration_corr = False
+    """
+
+    """
+    #ASTER interp 2009 
+    z1_fn = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_aea_stack/20090531_mos.vrt'
+    z1_date = 2009.412
+    z1_sigma = 4.0
+    z1_srtm_penetration_corr = False
+    """
+
+    #ASTER interp 2018
+    z2_fn = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_aea_stack/20180531_mos.vrt'
+    z2_date = 2018.412
+    z2_sigma = 4.0
+    z2_srtm_penetration_corr = False
 
     #Output directory
-    outdir = os.path.join(topdir,'hma/dem_coreg/mos/%s/mb_debris' % mosdir)
+    #outdir = os.path.join(topdir,'hma/dem_coreg/mos/%s/mb_debris_aster' % mosdir)
+    #outdir = '/nobackup/deshean/hma/aster/dsm/aster_align_index_aea_stack/mos/mb_2000-2018'
+    outdir = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_2000-2009_aea_stack/mb'
     #outdir = os.path.join(topdir,'hma/mos/%s/mb_Hexagon_SRTM' % mosdir)
 
     #Output projection
