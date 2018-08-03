@@ -1025,22 +1025,23 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
                 gf.vy = np.ma.array(iolib.ds_getma(ds_dict['vy']), mask=glac_geom_mask)
                 gf.vm = np.ma.sqrt(gf.vx**2 + gf.vy**2)
 
-                #Surface to column average velocity scaling
-                v_col_factor = 0.8
+                if gf.H is not None:
+                    #Surface to column average velocity scaling
+                    v_col_factor = 0.8
 
-                #Compute flux
-                gf.Q = gf.H * v_col_factor * np.array([gf.vx, gf.vy])
-                #Note that np.gradient returns derivatives relative to axis number, so (y, x) in this case
-                #Want x-derivative of x component
-                gf.divQ = np.gradient(gf.Q[0])[1] + np.gradient(gf.Q[1])[0]
+                    #Compute flux
+                    gf.Q = gf.H * v_col_factor * np.array([gf.vx, gf.vy])
+                    #Note that np.gradient returns derivatives relative to axis number, so (y, x) in this case
+                    #Want x-derivative of x component
+                    gf.divQ = np.gradient(gf.Q[0])[1] + np.gradient(gf.Q[1])[0]
 
-                #gf.divU = np.gradient(v_col_factor*gf.vx)[1] + np.gradient(v_col_factor*gf.vy)[0]
-                #gf.gradH = np.sqrt(np.sum(np.gradient(np.square(gf.H), axis=1)))
-                #gf.divQ = np.dot(gf.gradH, np.array([gf.vx, gf.vy])) + gf.divU
+                    #gf.divU = np.gradient(v_col_factor*gf.vx)[1] + np.gradient(v_col_factor*gf.vy)[0]
+                    #gf.gradH = np.sqrt(np.sum(np.gradient(np.square(gf.H), axis=1)))
+                    #gf.divQ = np.dot(gf.gradH, np.array([gf.vx, gf.vy])) + gf.divU
 
-                #gf.divQ = gf.H * gf.divU
+                    #gf.divQ = gf.H * gf.divU
 
-                #Should smooth divQ, better handling of data gaps
+                    #Should smooth divQ, better handling of data gaps
 
         if verbose:
             print('Mean mb: %0.2f +/- %0.2f mwe/yr' % (gf.mb_mean, gf.mb_mean_sigma))
