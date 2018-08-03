@@ -31,12 +31,15 @@ from pygeotools.lib import geolib, warplib, malib
 #aster_index_fn = os.path.join(asterdir, 'aster_align_index_aea.shp')
 aster_index_fn = sys.argv[1]
 
+#Minimum glacier area (km2)
+#min_glac_area = 0.1 
+min_glac_area = sys.argv[2]
+max_glac_area = sys.argv[3]
+
 #Most DEMs are 32 m
 #res='max'
 res=32
 
-#Minimum glacier area (km2)
-min_glac_area = 1 
 #Minimum number of samples
 min_aster_count = 5
 #Min to max timestamp difference (days)
@@ -85,7 +88,7 @@ feat_count = glac_shp_lyr.GetFeatureCount()
 print("Input glacier polygon count: %i" % feat_count)
 
 #Area filter
-glac_shp_lyr.SetAttributeFilter("Area > %s" % min_glac_area)
+glac_shp_lyr.SetAttributeFilter("Area > %s and Area < %s" % (min_glac_area, max_glac_area))
 feat_count = glac_shp_lyr.GetFeatureCount()
 print("Min. Area filter glacier polygon count: %i" % feat_count)
 glac_shp_lyr.ResetReading()
@@ -98,7 +101,7 @@ feat_count = aster_index_lyr.GetFeatureCount()
 print("Input ASTER count: %i" % feat_count)
 
 #cmd_fn = 'aster_stack_cmd.sh'
-cmd_fn = os.path.splitext(aster_index_fn)[0]+'_stack_cmd.sh'
+cmd_fn = os.path.splitext(aster_index_fn)[0]+'_%s-%s_km2_stack_cmd.sh' % (min_glac_area, max_glac_area)
 f = open(cmd_fn, "w") 
 
 for n, feat in enumerate(glac_shp_lyr):
