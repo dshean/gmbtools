@@ -6,12 +6,12 @@ Run dem_mosaic in parallel for valid tiles only
 #res=8
 #mkdir conus_${res}m_tile
 #lfs setstripe conus_${res}m_tile --count 64
-#~/src/Tools/dem_mosaic_validtiles.py --tr $res --t_projwin 'union' --t_srs '+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs ' --georef_tile_size 100000 -o conus_${res}m_tile/conus_${res}m *00/*/*DEM_${res}m.tif
+#dem_mosaic_validtiles.py --tr $res --t_projwin 'union' --t_srs '+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs ' --georef_tile_size 100000 -o conus_${res}m_tile/conus_${res}m *00/*/*DEM_${res}m.tif
 
 #res=8
 #mkdir hma_${res}m_tile
 #lfs setstripe hma_${res}m_tile --count 64
-#~/src/Tools/dem_mosaic_validtiles.py --tr $res --t_projwin 'union' --t_srs '+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs ' --georef_tile_size 100000 -o hma_${res}m_tile/hma_${res}m */*00/*/*DEM_${res}m.tif
+#dem_mosaic_validtiles.py --tr $res --t_projwin 'union' --t_srs '+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs ' --georef_tile_size 100000 -o hma_${res}m_tile/hma_${res}m */*00/*/*DEM_${res}m.tif
 
 import os
 import sys
@@ -29,13 +29,15 @@ from osgeo import gdal, ogr
 
 from pygeotools.lib import geolib, warplib, iolib
 
+from dem_mosaic_index_ts import make_dem_mosaic_index_ts
+
 #Hack to work around file open limit
 #Set this in shell with `ulimit -n 65536` before running
 #import resource
 #resource.setrlimit(resource.RLIMIT_NOFILE,(resource.RLIM_INFINITY, resource.RLIM_INFINITY))
 
 def getparser():
-    stat_choices = ['first', 'last', 'min', 'max', 'stddev', 'count', 'median']
+    stat_choices = ['first', 'firstindex', 'last', 'lastindex', 'min', 'max', 'stddev', 'count', 'median']
     parser = argparse.ArgumentParser(description='Wrapper for dem_mosaic that will only write valid tiles')
     parser.add_argument('--tr', default='min', help='Output resolution (default: %(default)s)')
     parser.add_argument('--t_projwin', default='union', help='Output extent (default: %(default)s)')
@@ -87,10 +89,10 @@ def main():
 
     #Input filelist
     fn_list = args.src_fn_list
+    #Sort?
     #Might hit OS open file limit here
     print("Loading input datasets")
-    print("Note: this could take several minutes depending on number of inputs")
-    #ds_list = [gdal.Open(fn) for fn in fn_list]
+    print("Note: this could take several minutes depending on number of inputs and I/O performance")
     ds_list = []
     for n, fn in enumerate(fn_list):
         if (n % 100 == 0):
@@ -199,20 +201,26 @@ def main():
             tile_fn = '%s-tile-%0*i.tif' % (o, ni, tile)
             if stat is not None:
                 tile_fn = os.path.splitext(tile_fn)[0]+'-%s.tif' % stat
-            #dem_mosaic_args = [tile_dict[tile]['fn_list'], o, tr, t_srs, t_projwin, tile_width, 1]
-            #dem_mosaic_args = {'fn_list':tile_dict[tile]['fn_list'], 'o':o, 'tr':tr, 't_srs':t_srs, 't_projwin':t_projwin, \
-            #        'georef_tile_size':tile_width, 'threads':1, 'tile':tile, 'stat':stat}
             dem_mosaic_args = {'fn_list':tile_dict[tile]['fn_list'], 'o':tile_fn, 'tr':tr, 't_srs':t_srs, \
                     't_projwin':tile_dict[tile]['extent'], 'threads':1, 'stat':stat}
             if not os.path.exists(tile_fn):
                 #This passes only files that intersect the tile, but issues with dem_mosaic reducing bounding box
                 #dem_mosaic_args[0] = tile_dict[tile]['fn_list']
-                #Continue with inefficient approach providing full filename list to each dem_mosaic tile
                 cmd = geolib.get_dem_mosaic_cmd(**dem_mosaic_args)
                 #print(cmd)
                 executor.submit(subprocess.call, cmd, stdout=outf, stderr=subprocess.STDOUT)
             tile_fn_list.append(tile_fn)
             time.sleep(delay)
+
+    #Convert dem_mosaic index files to timestamp arrays
+    if stat in ['lastindex', 'firstindex']:
+        temp = []
+        with ThreadPoolExecutor(max_workers=threads) as executor:
+            for tile_fn in tile_fn_list:
+                if not os.path.exists(os.path.splitext(tile_fn)[0]+'_ts.tif'):
+                    executor.submit(make_dem_mosaic_index_ts, tile_fn)
+                temp.append(os.path.splitext(tile_fn)[0]+'_ts.tif')
+        tile_fn_list = temp
 
     outf = None
 
@@ -221,6 +229,8 @@ def main():
     vrt_fn = o+'.vrt'
     if stat is not None:
         vrt_fn = os.path.splitext(vrt_fn)[0]+'_%s.vrt' % stat
+        if stat in ['lastindex', 'firstindex']:
+            vrt_fn = os.path.splitext(vrt_fn)[0]+'_ts.vrt'
     cmd = ['gdalbuildvrt', vrt_fn] 
     vrt_fn_list = []
     for tile_fn in tile_fn_list:
