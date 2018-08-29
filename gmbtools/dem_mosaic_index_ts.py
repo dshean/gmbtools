@@ -10,12 +10,18 @@ from pygeotools.lib import iolib, timelib
 import numpy as np
 
 def make_dem_mosaic_index_ts(index_tif_fn):
-    if not os.path.exists(index_tif_fn):
-        sys.exit("Unable to find input file: %s" % index_tif_fn)
-
     index_txt_fn = index_tif_fn+'-index-map.txt'
+    out_fn = os.path.splitext(index_tif_fn)[0]+'_ts.tif'
+
+    if not os.path.exists(index_tif_fn):
+        print("Unable to find input file: %s" % index_tif_fn)
+        return False 
     if not os.path.exists(index_txt_fn):
-        sys.exit("Unable to find input file: %s" % index_txt_fn)
+        print("Unable to find input file: %s" % index_txt_fn)
+        return False
+    if os.path.exists(out_fn):
+        print("Existing ts output found: %s" % out_fn)
+        return True
 
     #Load dem_mosaic index tif
     index_tif_ds = iolib.fn_getds(index_tif_fn)
@@ -43,12 +49,14 @@ def make_dem_mosaic_index_ts(index_tif_fn):
     for n, dt in enumerate(index_ts):
         index_ts_tif[index_tif == n] = dt
 
-    out_fn = os.path.splitext(index_tif_fn)[0]+'_ts.tif'
     iolib.writeGTiff(index_ts_tif, out_fn, index_tif_ds, ndv=0) 
+    return True
 
 def main():
     index_tif_fn = sys.argv[1]
-    make_dem_mosaic_index_ts(index_tif_fn)
+    if not os.path.exists(index_tif_fn):
+        sys.exit("Unable to find input file: %s" % index_tif_fn)
+    result = make_dem_mosaic_index_ts(index_tif_fn)
 
 if __name__ == "__main__":
     main()
