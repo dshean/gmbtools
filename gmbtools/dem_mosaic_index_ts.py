@@ -33,7 +33,7 @@ def make_dem_mosaic_index_ts(index_tif_fn):
     index_ts_tif = np.ma.masked_all(index_tif.shape, dtype=np.float32)
 
     #Read in dem_mosaic index txt file - should be "fn, index" for each record
-    index_txt = np.genfromtxt(index_txt_fn, dtype=str)
+    index_txt = np.atleast_2d(np.genfromtxt(index_txt_fn, dtype=str))
 
     #Extract Python datetime object from filename (should pull out YYYYMMDD_HHMM)
     index_ts = [timelib.fn_getdatetime(fn) for fn in index_txt[:,0]]
