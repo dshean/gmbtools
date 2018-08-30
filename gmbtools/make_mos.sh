@@ -17,6 +17,8 @@ set -e
 #Note on ordering within vrt
 #If there is some amount of spatial overlapping between files, the order of files appearing in the list of source matter: files that are listed at the end are the ones from which the content will be fetched. Note that nodata will be taken into account to potentially fetch data from less prioritary datasets
 
+gdal_opt='-co TILED=YES -co COMPRESS=LZW -co BIGTIFF=YES'
+
 #Set open file limit
 #Default is 2048
 ulimit -n 65536
@@ -27,8 +29,8 @@ trans=false
 
 #Output mosaic res
 #res=2
-res=8
-#res=32
+#res=8
+res=32
 
 #If res is better than 32, make lowres products for faster browsing
 lowres=100
@@ -36,15 +38,18 @@ lowres=100
 
 #Write out tif mosaics at full res
 fullres_tif=false
+lowres_tif=true
 
-count=false
-stddev=false
-median=false
-last=true
-lastindex=true
-first=true
-firstindex=true
+#Specify the output types
+statlist="wmean"
+statlist+=" count stddev"
+#statlist+=" median nmad"
+statlist+=" last lastindex first firstindex"
+
+#Generate strip index shp
 stripindex=false
+
+#Generate tile index shp
 tileindex=false
 
 #Exclude Quickbird-2
@@ -53,12 +58,13 @@ noQB=true
 #Default computes union from input DEMs
 extent='union'
 
-#Hardcoded site and projection for now
-site=hma
-proj='+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
-extent='-1553632.99074 -1030104.4196 1727255.00926 1268847.5804'
-#site=conus
-#proj='+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
+#Hardcoded sitename, projection and extent (performance improvement)
+#site=hma
+#proj='+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
+#extent='-1553632.99074 -1030104.4196 1727255.00926 1268847.5804'
+site=conus
+proj='+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
+extent='-684633.544035 -694442.824668 824774.455965 804533.175332'
 #site=fuego
 #proj='EPSG:32615'
 
@@ -73,24 +79,23 @@ ncpu=$(cat /proc/cpuinfo | egrep "core id|physical id" | tr -d "\n" | sed s/phys
 threads=$((ncpu-1))
 
 ts=`date +%Y%m%d`
-ts=20180724
 
 #Should add option to split annually
 echo "Identifying input DEMs"
 
 ext="-DEM_${res}m"
+
 mos_ext="${site}_mos_${res}m"
+#mos_ext=${site}_${ts}_mos
 
 if $latest ; then
     #Note: CONUS is only current through June 2016, missing 
     re='201[5-9]'
     mos_ext+='_latest'
 else
-    #CONUS
-    #Want to exclude 2008/2009 data
-    #re='201[2-9]'
-    #HMA
+    #Exclude 2008/2009 data
     #re='201[0-9]'
+    #Include all
     re='20[0-9]'
 fi
     
@@ -117,22 +122,19 @@ fi
 #ext="-DEM_${res}m_dem_align"
 #ext="-DEM_${res}m_dzfilt_-200_200"
 #WV/GE dem_align
-ext="-DEM_${res}m_dzfilt_-200_200_*align"
+#ext="-DEM_${res}m_dzfilt_-200_200_*align"
 
 #ASTER
 #ext="_align_dzfilt_-100_100"
-
-mos_ext="${site}_mos_${res}m"
-#mos_ext=${site}_${ts}_mos
 
 echo $re
 echo $ext
 echo $mos_ext
 
-#list=$(ls *00/dem*/${re}*${ext}.tif)
+list=$(ls *00/dem*/${re}*${ext}.tif)
 #list=$(ls *track/*00/dem*/${re}*${ext}.tif)
 #WV/GE dem_align
-list=$(ls *align/${re}*${ext}.tif)
+#list=$(ls *align/${re}*${ext}.tif)
 
 #ASTER
 #list=$(ls 2*/*cr_dem_align/*${re}*${ext}.tif)
@@ -149,8 +151,11 @@ out=mos/${site}_${ts}_mos/${mos_ext}/${mos_ext}
 
 #Sort by date
 #NOTE: Need to update sort key with increased path depths
-list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 2)
-#list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 3)
+#*align/*DEM.tif 
+#list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 2)
+#*00/dem*/*DEM.tif
+list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 3)
+#*00/dem*/*align/*DEM.tif
 #list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 4)
 #list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 5)
 
@@ -180,158 +185,63 @@ gdal_opt='-co COMPRESS=LZW -co TILED=YES -co BIGTIFF=IF_SAFER'
 
 #~/src/gmbtools/gmbtools/dem_mosaic_validtiles.py --threads 27 --tr 32 --t_srs '+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs ' --georef_tile_size 100000 -o mos/hma_20180731_mos 2*/*align/*100.tif
 
-#Define common dem_mosaic_validtiles arguments
-mos_arg="--threads $threads --tr $res --t_srs \"$proj\" --t_projwin \"$extent\" --georef_tile_size=$tilesize -o $out $list"
+#Check for existing final products
+echo $statlist
+statlist_todo=''
+for stat in $statlist
+do
+    if [ ! -e ${out}_${stat}.vrt ] && [ ! -e ${out}_${stat}_ts.vrt ] ; then
+        statlist_todo+=" $stat"
+    else
+        echo "Found existing vrt: ${out}_${stat}.vrt"
+    fi
+done
+echo $statlist_todo
 
-if [ ! -e $out.vrt ] ; then
-    eval $mos $mos_arg
+#If some stat mosaics have not yet been generated
+if [[ ! -z "${statlist_todo// }" ]] ; then
+    #Run dem_mosaic_validtiles for all stats
+    #Define common dem_mosaic_validtiles arguments
+    mos_arg="--threads $threads --tr $res --t_srs \"$proj\" --t_projwin \"$extent\" --georef_tile_size=$tilesize -o $out $list"
+    eval $mos --stat $statlist_todo $mos_arg
+fi
+
+#Define function to convert vrt to output tif products
+stat_vrt2tif() {
+    in=${out}_${1}
     if $fullres_tif ; then
-        gdalwarp $gdal_opt $out.vrt ${out}.tif
-        gdaladdo_ro.sh ${out}.tif
-        #Should hs each tile, then vrt, then warp, as above
-        #hs.sh ${out}.tif
-        #gdaladdo_ro.sh ${out}_hs_az315.tif
-    fi
-fi
-
-if $count ; then
-    if [ ! -e ${out}_count.vrt ] ; then
-        echo "Preparing countmap"
-        eval $mos --stat count $mos_arg
-        if $fullres_tif ; then
-            gdalwarp $gdal_opt ${out}_count.vrt ${out}_count.tif
-            gdaladdo_ro.sh ${out}_count.tif
+        if [ ! -e $in.tif ] ; then
+            echo "Converting vrt to tif: $in.vrt"
+            gdalwarp $gdal_opt $in.vrt $in.tif
+            echo "Adding overviews: $in.tif"
+            gdaladdo_ro.sh $in.tif
+            #hs.sh $in.tif
+            #gdaladdo_ro.sh ${in}_hs_az315.tif
         fi
     fi
-fi
-
-if $stddev ; then
-    if [ ! -e ${out}_stddev.vrt ] ; then
-        echo "Preparing stddevmap"
-        eval $mos --stat stddev $mos_arg
-        if $fullres_tif ; then
-            gdalwarp $gdal_opt ${out}_stddev.vrt ${out}_stddev.tif
-            gdaladdo_ro.sh ${out}_stddev.tif
+    if $lowres_tif ; then
+        if [ ! -e ${in}_${lowres}m.tif ] ; then
+            echo "Converting vrt to lowres tif: $in.vrt"
+            gdalwarp -tr $lowres $lowres $gdal_opt $in.vrt ${in}_${lowres}m.tif
+            echo "Adding overviews: ${in}_${lowres}m.tif"
+            gdaladdo_ro.sh ${in}_${lowres}m.tif
+            #hs.sh ${in}_${lowres}m.tif
+            #gdaladdo_ro.sh ${in}_${lowres}m_hs_az315.tif
         fi
     fi
-fi
+}
+export out
+export gdal_opt
+export fullres_tif
+export lowres_tif
+export lowres
+export -f stat_vrt2tif
+#Run tif generation and lowres in parallel for all stat mosaics
+statlist=$(echo $statlist | sed -e 's/lastindex/lastindex_ts/' -e 's/firstindex/firstindex_ts/')
+parallel --env _ stat_vrt2tif ::: $statlist 
 
-if $median ; then
-    if [ ! -e ${out}_median.vrt ] ; then
-        echo "Preparing medianmap"
-        eval $mos --stat median $mos_arg
-        if $fullres_tif ; then
-            gdalwarp $gdal_opt ${out}_median.vrt ${out}_median.tif
-            gdaladdo_ro.sh ${out}_median.tif
-        fi
-    fi
-fi
-
-if $last; then
-    if [ ! -e ${out}_last.vrt ] ; then
-        echo "Preparing lastmap"
-        eval $mos --stat last $mos_arg
-        if $fullres_tif ; then
-            gdalwarp $gdal_opt ${out}_last.vrt ${out}_last.tif
-            gdaladdo_ro.sh ${out}_last.tif
-        fi
-    fi
-fi
-
-if $lastindex; then
-    if [ ! -e ${out}_lastindex_ts.vrt ] ; then
-        echo "Preparing lastindex map"
-        eval $mos --stat lastindex $mos_arg
-        if $fullres_tif ; then
-            gdalwarp $gdal_opt ${out}_lastindex_ts.vrt ${out}_lastindex_ts.tif
-            gdaladdo_ro.sh ${out}_lastindex_ts.tif
-        fi
-    fi
-fi
-
-if $first; then
-    if [ ! -e ${out}_first.vrt ] ; then
-        echo "Preparing firstmap"
-        eval $mos --stat first $mos_arg
-        if $fullres_tif ; then
-            gdalwarp $gdal_opt $out.vrt ${out}_first.tif
-            gdaladdo_ro.sh ${out}_first.tif
-        fi
-    fi
-fi
-
-if $firstindex; then
-    if [ ! -e ${out}_firstindex_ts.vrt ] ; then
-        echo "Preparing firstindex map"
-        eval $mos --stat firstindex $mos_arg
-        if $fullres_tif ; then
-            gdalwarp $gdal_opt ${out}_firstindex_ts.vrt ${out}_firstindex_ts.tif
-            gdaladdo_ro.sh ${out}_firstindex_ts.tif
-        fi
-    fi
-fi
-
-#Generat lowres products
+#Generate lowres products
 if (( "$res" == "32" )) ; then
-    #Should run these in parallel
-    gdal_opt='-co TILED=YES -co COMPRESS=LZW -co BIGTIFF=YES'
-    if [ ! -e ${out}_${lowres}m.tif ] ; then 
-        echo "Preparing lowres $lowres m mosaic"
-        gdalwarp -tr $lowres $lowres $gdal_opt $out.vrt ${out}_${lowres}m.tif
-        gdaladdo_ro.sh ${out}_${lowres}m.tif
-        hs.sh ${out}_${lowres}m.tif
-        gdaladdo_ro.sh ${out}_${lowres}m_hs_az315.tif
-    fi
-    if $count ; then
-        if [ ! -e ${out}_count_${lowres}m.tif ] ; then
-            echo "Preparing lowres $lowres m countmap"
-            gdalwarp -tr $lowres $lowres $gdal_opt ${out}_count.vrt ${out}_count_${lowres}m.tif
-            gdaladdo_ro.sh ${out}_count_${lowres}m.tif
-        fi
-    fi
-    if $stddev; then
-        if [ ! -e ${out}_stddev_${lowres}m.tif ] ; then
-            echo "Preparing lowres $lowres m stddev map"
-            gdalwarp -tr $lowres $lowres $gdal_opt ${out}_stddev.vrt ${out}_stddev_${lowres}m.tif
-            gdaladdo_ro.sh ${out}_stddev_${lowres}m.tif
-        fi
-    fi
-    if $median ; then
-        if [ ! -e ${out}_median_${lowres}m.tif ] ; then
-            echo "Preparing lowres $lowres m medianmap"
-            gdalwarp -tr $lowres $lowres $gdal_opt ${out}_median.vrt ${out}_median_${lowres}m.tif
-            gdaladdo_ro.sh ${out}_median_${lowres}m.tif
-        fi
-    fi
-    if $last ; then
-        if [ ! -e ${out}_last_${lowres}m.tif ] ; then
-            echo "Preparing lowres $lowres m lastmap"
-            gdalwarp -tr $lowres $lowres $gdal_opt ${out}_last.vrt ${out}_last_${lowres}m.tif
-            gdaladdo_ro.sh ${out}_last_${lowres}m.tif
-        fi
-    fi
-    if $lastindex ; then
-        if [ ! -e ${out}_lastindex_ts_${lowres}m.tif ] ; then
-            echo "Preparing lowres $lowres m lastindexmap"
-            gdalwarp -tr $lowres $lowres $gdal_opt ${out}_lastindex_ts.vrt ${out}_lastindex_ts_${lowres}m.tif
-            gdaladdo_ro.sh ${out}_lastindex_ts_${lowres}m.tif
-        fi
-    fi
-    if $first ; then
-        if [ ! -e ${out}_first_${lowres}m.tif ] ; then
-            echo "Preparing lowres $lowres m firstmap"
-            gdalwarp -tr $lowres $lowres $gdal_opt ${out}_first.vrt ${out}_first_${lowres}m.tif
-            gdaladdo_ro.sh ${out}_first_${lowres}m.tif
-        fi
-    fi
-    if $firstindex ; then
-        if [ ! -e ${out}_firstindex_ts_${lowres}m.tif ] ; then
-            echo "Preparing lowres $lowres m firstindexmap"
-            gdalwarp -tr $lowres $lowres $gdal_opt ${out}_firstindex_ts.vrt ${out}_firstindex_ts_${lowres}m.tif
-            gdaladdo_ro.sh ${out}_firstindex_ts_${lowres}m.tif
-        fi
-    fi
-
     if $stripindex ; then
         if [ ! -e ${out}_stripindex.shp ] ; then
             echo "Generating strip index shp"
