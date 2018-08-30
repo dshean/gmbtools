@@ -195,7 +195,7 @@ elif site == 'hma':
     aea_srs = geolib.hma_aea_srs
     #title = "HMA Glacier Mass Balance (1970s to 2015)"
     #title = "HMA Glacier Mass Balance (1970s to 2000)"
-    title = "HMA Glacier Mass Balance (2000 to 2015)"
+    title = "HMA Glacier Mass Balance (2000 to 2018)"
     sf = 2 
 
 #Compute lat, lon
