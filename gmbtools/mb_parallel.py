@@ -139,7 +139,7 @@ def z_vs_dz(z,dz):
     plt.scatter(z.compressed(), dz.compressed())
 
 #RGI uses 50 m bins
-def hist_plot(gf, outdir, bin_width=10.0):
+def hist_plot(gf, outdir, bin_width=10.0, dz_clim=(-2.0, 2.0)):
     #print("Generating histograms")
     #Create bins for full range of input data and specified bin width
 
@@ -207,6 +207,16 @@ def hist_plot(gf, outdir, bin_width=10.0):
                 perc_clean[bin_n] = 100. * (debris_class_bin_samp == 1).sum()/debris_class_bin_samp.count()
                 perc_debris[bin_n] = 100. * (debris_class_bin_samp == 2).sum()/debris_class_bin_samp.count()
                 perc_pond[bin_n] = 100. * (debris_class_bin_samp == 3).sum()/debris_class_bin_samp.count()
+        if gf.vm is not None:
+            vm_bin_samp = gf.vm[(idx == bin_n+1)]
+            if vm_bin_samp.size > 0:
+                vm_med[bin_n] = malib.fast_median(vm_bin_samp)
+                vm_mad[bin_n] = malib.mad(vm_bin_samp)
+        if gf.H is not None:
+            H_bin_samp = gf.H[(idx == bin_n+1)]
+            if H_bin_samp.size > 0:
+                H_mean[bin_n] = H_bin_samp.mean()
+                H_std[bin_n] = H_bin_samp.std()
 
     outbins_header = 'bin_center_elev_m, z1_bin_count_valid, z1_bin_area_valid_km2, z1_bin_area_perc, z2_bin_count_valid, z2_bin_area_valid_km2, z2_bin_area_perc, dhdt_bin_med_ma, dhdt_bin_mad_ma, dhdt_bin_mean_ma, dhdt_bin_std_ma, mb_bin_med_mwea, mb_bin_mad_mwea, mb_bin_mean_mwea, mb_bin_std_mwea'
     fmt = '%0.1f, %i, %0.3f, %0.2f, %i, %0.3f, %0.2f, %0.2f, %0.2f, %0.2f, %0.2f, %0.2f, %0.2f, %0.2f, %0.2f' 
@@ -221,9 +231,15 @@ def hist_plot(gf, outdir, bin_width=10.0):
     if gf.debris_class is not None:
         outbins_header += ', perc_debris, perc_pond, perc_clean'
         fmt += ', %0.2f, %0.2f, %0.2f'
-        debris_thick_med[debris_thick_med == -(np.inf)] = 0.00
-        debris_thick_mad[debris_thick_mad == -(np.inf)] = 0.00
         outbins.extend([perc_debris, perc_pond, perc_clean])
+    if gf.vm is not None:
+        outbins_header += ', vm_med, vm_mad'
+        fmt += ', %0.2f, %0.2f'
+        outbins.extend([vm_med, vm_mad])
+    if gf.H is not None:
+        outbins_header += ', H_mean, H_std'
+        fmt += ', %0.2f, %0.2f'
+        outbins.extend([H_mean, H_std])
 
     #print(len(outbins), len(fmt.split(',')), len(outbins_header.split(',')))
     outbins = np.ma.array(outbins).T.astype('float32')
@@ -1107,6 +1123,10 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
                 iolib.writeGTiff(gf.debris_class, temp_fn, ds_dict['z1'])
 
             if gf.vm is not None:
+                temp_fn = os.path.join(outdir, gf.feat_fn+'_vx.tif')
+                iolib.writeGTiff(gf.vx, temp_fn, ds_dict['z1'])
+                temp_fn = os.path.join(outdir, gf.feat_fn+'_vy.tif')
+                iolib.writeGTiff(gf.vy, temp_fn, ds_dict['z1'])
                 temp_fn = os.path.join(outdir, gf.feat_fn+'_vm.tif')
                 iolib.writeGTiff(gf.vm, temp_fn, ds_dict['z1'])
 
@@ -1119,12 +1139,12 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
         #Check for valid pixel count vs. feature area, fill if appropriate
 
         if mb_plot and (gf.glac_area/1E6 > min_glac_area_writeout):
-            z_bin_edges = hist_plot(gf, outdir)
-            gf.z1_hs = geolib.gdaldem_mem_ds(ds_dict['z1'], processing='hillshade', returnma=True)
-            gf.z2_hs = geolib.gdaldem_mem_ds(ds_dict['z2'], processing='hillshade', returnma=True)
             dz_clim = (-2.0, 2.0)
             if site == 'hma':
                 dz_clim = (-5.0, 5.0)
+            z_bin_edges = hist_plot(gf, outdir, dz_clim=dz_clim)
+            gf.z1_hs = geolib.gdaldem_mem_ds(ds_dict['z1'], processing='hillshade', returnma=True)
+            gf.z2_hs = geolib.gdaldem_mem_ds(ds_dict['z2'], processing='hillshade', returnma=True)
             map_plot(gf, z_bin_edges, outdir, dz_clim=dz_clim)
 
     #Write out the populated glacfeat objects (contain raster grids, stats, etc)
