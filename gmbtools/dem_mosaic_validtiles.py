@@ -189,13 +189,13 @@ def main():
     out_tile_list_str = ' '.join(map(str, out_tile_list))
     print(out_tile_list_str)
 
-    print("Running dem_mosaic in parallel with %i threads" % threads)
     delay = 0.001
     outf = open(os.devnull, 'w') 
     #outf = open('%s-log-dem_mosaic-tile-%i.log' % (o, tile), 'w')
 
     tile_fn_list = []
     with ThreadPoolExecutor(max_workers=threads) as executor:
+        print("Running dem_mosaic in parallel with %i threads" % threads)
         for n, tile in enumerate(out_tile_list):
             #print('%i of %i tiles: %i' % (n+1, len(out_tile_list), tile))
             tile_fn = '%s-tile-%0*i.tif' % (o, ni, tile)
@@ -214,13 +214,13 @@ def main():
 
     #Convert dem_mosaic index files to timestamp arrays
     if stat in ['lastindex', 'firstindex']:
-        temp = []
-        with ThreadPoolExecutor(max_workers=threads) as executor:
-            for tile_fn in tile_fn_list:
-                if not os.path.exists(os.path.splitext(tile_fn)[0]+'_ts.tif'):
-                    executor.submit(make_dem_mosaic_index_ts, tile_fn)
-                temp.append(os.path.splitext(tile_fn)[0]+'_ts.tif')
-        tile_fn_list = temp
+        print("Running dem_mosaic_index_ts in parallel with %i threads" % threads)
+        from multiprocessing import Pool
+        pool = Pool(processes=threads)
+        results = pool.map(make_dem_mosaic_index_ts, tuple(tile_fn_list), 1)
+        #results.wait()
+        #Update filenames
+        tile_fn_list = [os.path.splitext(tile_fn)[0]+'_ts.tif' for tile_fn in tile_fn_list]
 
     outf = None
 
@@ -246,7 +246,7 @@ def main():
 
     #This cleans up all of the log txt files (potentially 1000s of files)
     #Want to preserve these, as they contain list of DEMs that went into each tile
-    log_fn_list = glob.glob(o+'*-log-dem_mosaic-*.txt')
+    log_fn_list = glob.glob(o+'*%s.tif-log-dem_mosaic-*.txt' % stat)
     print("\nCleaning up %i dem_mosaic log files" % len(log_fn_list))
     if stat is not None:
         tar_fn = o+'_%s_dem_mosaic_log.tar.gz' % stat
