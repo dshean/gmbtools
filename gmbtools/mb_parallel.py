@@ -5,19 +5,14 @@ Compute dh/dt and mass balance for input DEMs and glacier polygons
 
 """
 Todo:
-Fix z1_date and z2_date writeout - populate arrays
+Better error estimates - use buffered dz/dt and semivariogram
+Filling gaps using 1) dz/dt obs 2) setting to 0 around polygon margins
 Curves for PRISM T an precip vs. mb
-Filling using dz/dt obs
-Add date fields to mb curve output
-Write z1, z2, dz, stats etc to GlacFeat object
-Export polygons with mb numbers as geojson, spatialite, shp?
+Move mb_plot_gpd funcitonality here, export polygons with mb numbers as geojson, spatialite, shp?
 Add +/- std for each dh/dt polygon, some idea of spread
+Create main function, pass args to mb_proc
 Clean up mb_proc function, one return, globals
-Should move everything to main, pass args to mb_proc
-CONUS z1_date update in mb_proc
 Better penetration correction
-Filling gaps
-Error estimates
 """
 
 import sys
@@ -32,12 +27,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from osgeo import gdal, ogr
 
-from pygeotools.lib import malib
-from pygeotools.lib import warplib
-from pygeotools.lib import geolib
-from pygeotools.lib import iolib
-from pygeotools.lib import timelib
-
+from pygeotools.lib import malib, warplib, geolib, iolib, timelib
 from imview.lib import pltlib
 
 #Avoid printing out divide by 0 errors
@@ -97,13 +87,16 @@ class GlacFeat:
         self.t1 = None
         self.t2 = None
         self.dt = None
+        self.t1_mean = None
+        self.t2_mean = None
+        self.dt_mean = None
 
         self.H = None
         self.H_mean = np.nan 
         self.vx = None
         self.vy = None
         self.vm = None
-        self.divU = None
+        self.vm_mean = np.nan 
         self.divQ = None
         self.debris_class = None
         self.debris_thick = None
@@ -174,6 +167,12 @@ def hist_plot(gf, outdir, bin_width=10.0, dz_clim=(-2.0, 2.0)):
     dz_bin_mad = np.ma.masked_all_like(z1_bin_areas)
     dz_bin_mean = np.ma.masked_all_like(z1_bin_areas)
     dz_bin_std = np.ma.masked_all_like(z1_bin_areas)
+    if gf.vm is not None:
+        vm_bin_med = np.ma.masked_all_like(z1_bin_areas)
+        vm_bin_mad = np.ma.masked_all_like(z1_bin_areas)
+    if gf.H is not None:
+        H_bin_mean = np.ma.masked_all_like(z1_bin_areas)
+        H_bin_std = np.ma.masked_all_like(z1_bin_areas)
     if gf.debris_class is not None:
         perc_clean = np.ma.masked_all_like(z1_bin_areas)
         perc_debris = np.ma.masked_all_like(z1_bin_areas)
@@ -210,13 +209,13 @@ def hist_plot(gf, outdir, bin_width=10.0, dz_clim=(-2.0, 2.0)):
         if gf.vm is not None:
             vm_bin_samp = gf.vm[(idx == bin_n+1)]
             if vm_bin_samp.size > 0:
-                vm_med[bin_n] = malib.fast_median(vm_bin_samp)
-                vm_mad[bin_n] = malib.mad(vm_bin_samp)
+                vm_bin_med[bin_n] = malib.fast_median(vm_bin_samp)
+                vm_bin_mad[bin_n] = malib.mad(vm_bin_samp)
         if gf.H is not None:
             H_bin_samp = gf.H[(idx == bin_n+1)]
             if H_bin_samp.size > 0:
-                H_mean[bin_n] = H_bin_samp.mean()
-                H_std[bin_n] = H_bin_samp.std()
+                H_bin_mean[bin_n] = H_bin_samp.mean()
+                H_bin_std[bin_n] = H_bin_samp.std()
 
     outbins_header = 'bin_center_elev_m, z1_bin_count_valid, z1_bin_area_valid_km2, z1_bin_area_perc, z2_bin_count_valid, z2_bin_area_valid_km2, z2_bin_area_perc, dhdt_bin_med_ma, dhdt_bin_mad_ma, dhdt_bin_mean_ma, dhdt_bin_std_ma, mb_bin_med_mwea, mb_bin_mad_mwea, mb_bin_mean_mwea, mb_bin_std_mwea'
     fmt = '%0.1f, %i, %0.3f, %0.2f, %i, %0.3f, %0.2f, %0.2f, %0.2f, %0.2f, %0.2f, %0.2f, %0.2f, %0.2f, %0.2f' 
@@ -235,11 +234,11 @@ def hist_plot(gf, outdir, bin_width=10.0, dz_clim=(-2.0, 2.0)):
     if gf.vm is not None:
         outbins_header += ', vm_med, vm_mad'
         fmt += ', %0.2f, %0.2f'
-        outbins.extend([vm_med, vm_mad])
+        outbins.extend([vm_bin_med, vm_bin_mad])
     if gf.H is not None:
         outbins_header += ', H_mean, H_std'
         fmt += ', %0.2f, %0.2f'
-        outbins.extend([H_mean, H_std])
+        outbins.extend([H_bin_mean, H_bin_std])
 
     #print(len(outbins), len(fmt.split(',')), len(outbins_header.split(',')))
     outbins = np.ma.array(outbins).T.astype('float32')
@@ -248,50 +247,82 @@ def hist_plot(gf, outdir, bin_width=10.0, dz_clim=(-2.0, 2.0)):
     #print(outbins.shape)
     np.savetxt(outbins_fn, outbins, fmt=fmt, delimiter=',', header=outbins_header)
 
+    #Create plots of elevation bins
     #print("Generating aed plot")
     #f,axa = plt.subplots(1,2, figsize=(6, 6))
-    f,axa = plt.subplots(1,3, figsize=(10, 7.5))
+    f,axa = plt.subplots(1,4, figsize=(10, 7.5))
     f.suptitle(gf.feat_fn)
-    axa[0].plot(z1_bin_areas, z_bin_centers, label='%0.2f' % gf.t1)
+    fs = 9 
+
+    axa[0].plot(z1_bin_areas, z_bin_centers, label='%0.2f' % gf.t1_mean)
     axa[0].axhline(gf.z1_ela, ls=':', c='C0')
     if gf.z2 is not None:
-        axa[0].plot(z2_bin_areas, z_bin_centers, label='%0.2f' % gf.t2)
+        axa[0].plot(z2_bin_areas, z_bin_centers, label='%0.2f' % gf.t2_mean)
         axa[0].axhline(gf.z2_ela, ls=':', c='C1')
     axa[0].legend(prop={'size':8}, loc='upper right')
-    axa[0].set_ylabel('Elevation (m WGS84)')
-    axa[0].set_xlabel('Area $\mathregular{km^2}$')
+    axa[0].set_ylabel('Elevation (m WGS84)', fontsize=fs)
+    axa[0].set_xlabel('Area $\mathregular{km^2}$', fontsize=fs)
+    axa[0].yaxis.set_ticks_position('both')
     pltlib.minorticks_on(axa[0])
+
     axa[1].axvline(0, lw=1.0, c='k')
-    axa[1].axvline(gf.mb_mean, lw=0.5, ls=':', c='k', label='%0.2f m w.e./yr' % gf.mb_mean)
-    axa[1].legend(prop={'size':8}, loc='upper right')
+    """
+    #Plot flux divergence values for each bin
+    if gf.vm is not None and gf.H is not None:
+        divQ_bin_mean = np.gradient(H_bin_mean * vm_bin_med * v_col_f)
+        axa[1].plot(divQ_bin_mean, z_bin_centers, color='green')
+    """
     axa[1].plot(mb_bin_med, z_bin_centers, color='k')
+    axa[1].axvline(gf.mb_mean, lw=0.5, ls=':', c='k', label='%0.2f m w.e./yr' % gf.mb_mean)
     axa[1].fill_betweenx(z_bin_centers, mb_bin_med-mb_bin_mad, mb_bin_med+mb_bin_mad, color='k', alpha=0.1)
     axa[1].fill_betweenx(z_bin_centers, 0, mb_bin_med, where=(mb_bin_med<0), color='r', alpha=0.2)
     axa[1].fill_betweenx(z_bin_centers, 0, mb_bin_med, where=(mb_bin_med>0), color='b', alpha=0.2)
-    #axa[1].set_ylabel('Elevation (m WGS84)')
     #axa[1].set_xlabel('dh/dt (m/yr)')
-    axa[1].set_xlabel('mb (m w.e./yr)')
+    axa[1].set_xlabel('Mass balance (m w.e./yr)', fontsize=fs)
+    axa[1].legend(prop={'size':8}, loc='upper right')
+    axa[1].yaxis.set_ticks_position('both')
     pltlib.minorticks_on(axa[1])
     #Hide y-axis labels
     axa[1].axes.yaxis.set_ticklabels([])
-    axa[1].set_xlim(-2.0, 2.0)
-    #axa[1].set_xlim(-8.0, 8.0)
-    #axa[1].set_xlim(-3.0, 3.0)
+    axa[1].set_xlim(*dz_clim)
+
     if gf.debris_thick is not None:
-        axa[2].errorbar(debris_thick_med*100., z_bin_centers, xerr=debris_thick_mad*100, color='k', fmt='o', ms=3, label='Thickness', alpha=0.6)
+        axa[2].errorbar(debris_thick_med*100., z_bin_centers, xerr=debris_thick_mad*100, color='k', fmt='o', ms=3, label='Debris Thickness', alpha=0.6)
     if gf.debris_class is not None:
         axa[2].plot(perc_debris, z_bin_centers, color='sienna', label='Debris Coverage')
         axa[2].plot(perc_pond, z_bin_centers, color='turquoise', label='Pond Coverage')
     if gf.debris_thick is not None or gf.debris_class is not None:
         axa[2].set_xlim(0, 100)
+        axa[2].yaxis.set_ticks_position('both')
         pltlib.minorticks_on(axa[2])
+        axa[2].axes.yaxis.set_ticklabels([])
         axa[2].legend(prop={'size':8}, loc='upper right')
-        axa[2].set_xlabel('Debris thickness (cm), coverage (%)')
-        axa[2].yaxis.tick_right()
-        axa[2].yaxis.set_label_position("right")
+        axa[2].set_xlabel('Debris thickness (cm), coverage (%)', fontsize=fs)
+
+    if gf.vm is not None:
+        ax4 = axa[3].twinx()
+        ax4.set_xlabel('Velocity (m/yr)', fontsize=fs)
+        ax4.plot(vm_bin_med, z_bin_centers, color='g', label='Vm (%0.2f m/yr)' % gf.vm_mean)
+        ax4.fill_betweenx(z_bin_centers, vm_bin_med-vm_bin_mad, vm_bin_med+vm_bin_mad, color='g', alpha=0.1)
+        #ax4.set_xlim(0, 50)
+        ax4.xaxis.tick_top()
+        ax4.xaxis.set_label_position("top")
+        ax4.legend(prop={'size':8}, loc='upper right')
+
+    if gf.H is not None:
+        axa[3].plot(H_bin_mean, z_bin_centers, color='b', label='H (%0.2f m)' % gf.H_mean)
+        axa[3].fill_betweenx(z_bin_centers, H_bin_mean-H_bin_std, H_bin_mean+H_bin_std, color='b', alpha=0.1)
+        axa[3].set_xlabel('Ice Thickness (m)', fontsize=fs)
+        axa[3].legend(prop={'size':8}, loc='lower right')
+        pltlib.minorticks_on(axa[3])
+        #axa[3].set_xlim(0, 400)
+        axa[3].yaxis.tick_right()
+        axa[3].yaxis.set_ticks_position('both')
+        axa[3].yaxis.set_label_position("right")
+
     plt.tight_layout()
     #Make room for suptitle
-    plt.subplots_adjust(top=0.95)
+    plt.subplots_adjust(top=0.95, wspace=0.1)
     #print("Saving aed plot")
     fig_fn = os.path.join(outdir, gf.feat_fn+'_mb_aed.png')
     plt.savefig(fig_fn, bbox_inches='tight', dpi=300)
@@ -318,13 +349,13 @@ def map_plot(gf, z_bin_edges, outdir, hs=True, dz_clim=(-2.0, 2.0)):
     axa[1].contour(gf.z2, [gf.z2_ela,], linewidths=0.5, linestyles=':', colors='w')
     #t1_title = int(np.round(gf.t1))
     #t2_title = int(np.round(gf.t2))
-    t1_title = '%0.2f' % gf.t1
-    t2_title = '%0.2f' % gf.t2
+    t1_title = '%0.2f' % gf.t1_mean
+    t2_title = '%0.2f' % gf.t2_mean
     #t1_title = gf.t1.strftime('%Y-%m-%d')
     #t2_title = gf.t2.strftime('%Y-%m-%d')
     axa[0].set_title(t1_title)
     axa[1].set_title(t2_title)
-    axa[2].set_title('%s to %s (%0.2f yr)' % (t1_title, t2_title, gf.dt))
+    axa[2].set_title('%s to %s (%0.2f yr)' % (t1_title, t2_title, gf.dt_mean))
     dz_im = axa[2].imshow(gf.dhdt, cmap='RdBu', vmin=dz_clim[0], vmax=dz_clim[1])
     for ax in axa:
         pltlib.hide_ticks(ax)
@@ -371,8 +402,8 @@ setup['site'] = site
 #site='other'
 
 #Filter glacier poly - let's stick with big glaciers for now
-min_glac_area = 0.1 #km^2
-#min_glac_area = 1. #km^2
+#min_glac_area = 0.1 #km^2
+min_glac_area = 1. #km^2
 #Minimum percentage of glacier poly covered by valid dz
 min_valid_area_perc = 0.80
 #Write out DEMs and dz map
@@ -384,10 +415,25 @@ parallel = True
 #Verbose for debugging
 verbose = False 
 #Number of parallel processes
-nproc = iolib.cpu_count() - 1
+#Use all virtual cores
+#nproc = iolib.cpu_count(logical=True) - 1
+#Use all physical cores
+nproc = iolib.cpu_count(logical=False) - 1
 #nproc = 12
 #Shortcut to use existing glacfeat_list.p if found
 use_existing_glacfeat = True 
+
+#Surface to column average velocity scaling
+v_col_f = 0.8
+
+#This is recommendation by Huss et al (2013)
+rho_is = 0.85
+rho_sigma = 0.06
+
+#If breaking down into accumulation vs. ablation area
+rho_i = 0.91
+rho_s = 0.50
+rho_f = 0.60
 
 global z1_date
 global z2_date
@@ -413,9 +459,9 @@ if site == 'conus':
 
     #NED 2003 1-arcsec 
     z1_fn = os.path.join(topdir,'rpcdem/ned1_2003/ned1_2003_adj.vrt')
-    z1_date_shp_fn = os.path.join(topdir,'rpcdem/ned1_2003/meta0306_PAL_24k_10kmbuffer_clean_dissolve_aea.shp')
+    z1_date_fn = os.path.join(topdir,'rpcdem/ned1_2003/meta0306_PAL_24k_10kmbuffer_clean_dissolve_aea.shp')
     #ogr2ogr -t_srs '+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs ' meta0306_PAL_24k_10kmbuffer_clean_dissolve_aea.shp meta0306_PAL_24k_10kmbuffer_clean_dissolve_32611.shp
-    z1_date_shp_ds = ogr.Open(z1_date_shp_fn)
+    z1_date_shp_ds = ogr.Open(z1_date_fn)
     z1_date_shp_lyr = z1_date_shp_ds.GetLayer()
     z1_date_shp_srs = z1_date_shp_lyr.GetSpatialRef()
     z1_date_shp_lyr.ResetReading()
@@ -522,8 +568,6 @@ if site == 'conus':
     glacier_dict[9130] = 'LyellGlacier'
 
 elif site == 'hma':
-    #glac_shp_fn = os.path.join(topdir,'data/rgi50/regions/rgi50_hma_aea.shp')
-    #glac_shp_fn = os.path.join(topdir,'data/rgi60/regions/rgi60_merge_HMA.geojson')
     glac_shp_fn = os.path.join(topdir,'data/rgi60/regions/rgi60_merge_HMA_aea.shp')
     glacfeat_fn = os.path.splitext(glac_shp_fn)[0]+'_glacfeat_list.p'
 
@@ -546,7 +590,6 @@ elif site == 'hma':
     z2_srtm_penetration_corr = True
     """
 
-    """
     #SRTM
     #z1_fn = os.path.join(topdir,'rpcdem/hma/nasadem/srtmOnly/20000211_hma_nasadem_hgt_lt5m_err.vrt')
     #z1_fn = os.path.join(topdir,'rpcdem/hma/nasadem/srtmOnly/20000211_hma_nasadem_hgt.vrt')
@@ -557,15 +600,15 @@ elif site == 'hma':
     z1_date = 2000.112
     z1_sigma = 4.0
     z1_srtm_penetration_corr = True
+    
     """
-
     #ASTER interap 2000
     z1_fn = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_2000-2018_aea_stack/aster_align_index_2000-2018_aea_mos_20000211.vrt'
     z1_date = 2000.412
     z1_sigma = 4.0
     z1_srtm_penetration_corr = False
-
     """
+
     #Second DEM Source (WV mosaic)
     #z2_fn = '/nobackup/deshean/hma/hma1_2016dec22/hma_8m_tile/hma_8m.vrt'
     #z2_fn = os.path.join(topdir,'hma/hma1_2016dec22/hma_8m_tile/hma_8m.vrt')
@@ -576,11 +619,12 @@ elif site == 'hma':
     #mosdir = 'hma_20171211_mos'
     #z2_fn = os.path.join(topdir,'hma/mos/%s/hma_mos_8m_dem_align/hma_mos_8m_dem_align.vrt' % mosdir)
     mosdir = 'latest'
-    z2_fn = os.path.join(topdir,'hma/dem_coreg/mos/%s/hma_mos_8m/hma_mos_8m.vrt' % mosdir)
+    #z2_fn = os.path.join(topdir,'hma/dem_coreg/mos/%s/hma_mos_8m/hma_mos_8m.vrt' % mosdir)
+    z2_fn = os.path.join(topdir,'hma/dem_coreg/mos/%s/hma_mos_8m/hma_mos_8m_last.vrt' % mosdir)
     #z2_date = datetime(2015, 1, 1)
-    z2_date = 2015.0
+    #z2_date = 2015.0
+    z2_date_fn = os.path.join(topdir,'hma/dem_coreg/mos/%s/hma_mos_8m/hma_mos_8m_lastindex_ts.vrt' % mosdir)
     z2_sigma = 1.0
-    """
 
     """
     #ASTER interp 2009 
@@ -598,15 +642,17 @@ elif site == 'hma':
     z1_srtm_penetration_corr = False
     """
 
+    """
     #ASTER interp 2018
     z2_fn = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_2000-2018_aea_stack/aster_align_index_2000-2018_aea_mos_20180531.vrt'
     z2_date = 2018.412
     z2_sigma = 4.0
     z2_srtm_penetration_corr = False
+    """
 
     #Output directory
-    #outdir = os.path.join(topdir,'hma/dem_coreg/mos/%s/mb_debris_aster' % mosdir)
-    outdir = '/nobackup/deshean/hma/aster/dsm/aster_align_index_2000-2018_aea_stack/mb'
+    outdir = os.path.join(topdir,'hma/dem_coreg/mos/%s/mb_last' % mosdir)
+    #outdir = '/nobackup/deshean/hma/aster/dsm/aster_align_index_2000-2018_aea_stack/mb'
     #outdir = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_2000-2009_aea_stack/mb'
     #outdir = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_aea_stack/mb'
     #outdir = os.path.join(topdir,'hma/mos/%s/mb_Hexagon_SRTM' % mosdir)
@@ -616,7 +662,7 @@ elif site == 'hma':
     aea_srs = geolib.hma_aea_srs
 
     #Only write out for larger glaciers
-    min_glac_area_writeout = 5.0
+    min_glac_area_writeout = 1.0
 
     #Surface velocity
     #Note: had to force srs on Amaury's original products 
@@ -669,6 +715,7 @@ if site == 'conus':
     out_header += ',ppt_s,ppt_w,tmean_s,tmean_w'
 if site == 'hma':
     out_header += ',debris_m,perc_debris,perc_pond,perc_clean'
+    out_header += ',vm_ma'
 
 #nf = out.shape[1] 
 nf = len(out_header.split(','))
@@ -777,6 +824,26 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
                 fn_dict['vx'] = vx_fn 
                 fn_dict['vy'] = vy_fn 
 
+        if z1_date is None:
+            #Rasterize source dates
+            if os.path.splitext(z1_date_fn)[1] == 'shp':
+                z1_date = get_date_a(ds_dict['z1'], z1_date_shp_lyr, glac_geom_mask, z1_datefield) 
+                gf.t1 = z1_date.mean()
+            else:
+                #Otherwise, clip the timestamp array
+                fn_dict['z1_date'] = z1_date_fn
+        else:
+            gf.t1 = z1_date
+
+        if z2_date is None:
+            if os.path.splitext(z2_date_fn)[1] == 'shp':
+                z2_date = get_date_a(ds_dict['z2'], z2_date_shp_lyr, glac_geom_mask, z2_datefield) 
+                gf.t1 = z2_date.mean()
+            else:
+                fn_dict['z2_date'] = z2_date_fn
+        else:
+            gf.t2 = z2_date
+
         #Warp everything to common res/extent/proj
         ds_list = warplib.memwarp_multi_fn(fn_dict.values(), res='min', \
                 extent=gf.glac_geom_extent, t_srs=aea_srs, verbose=verbose)
@@ -853,35 +920,25 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
         gf.z2_slope_stats = malib.get_stats(gf.z2_slope)
         z2_slope_med = gf.z2_slope_stats[5]
 
-        #Rasterize source dates
-        if z1_date is None:
-            z1_date = get_date_a(ds_dict['z1'], z1_date_shp_lyr, glac_geom_mask, z1_datefield) 
-            gf.t1 = z1_date.mean()
+        if 'z1_date' in ds_dict:
+            gf.t1 = iolib.ds_getma(ds_dict['z1_date'])
         else:
-            gf.t1 = z1_date
+            if isinstance(gf.t1, datetime):
+                gf.t1 = float(timelib.dt2decyear(gf.t1))
+            #else, assume we've hardcoded decimal year
+        gf.t1_mean = np.mean(gf.t1)
 
-        if z2_date is None:
-            z2_date = get_date_a(ds_dict['z1'], z2_date_shp_lyr, glac_geom_mask, z2_datefield) 
-            #Attempt to use YYYYMMDD string
-            #z2_dta = np.datetime64(z2_date.astype("S8").tolist())
-            gf.t2 = z2_date.mean()
+        if 'z2_date' in ds_dict:
+            gf.t2 = iolib.ds_getma(ds_dict['z2_date'])
         else:
-            gf.t2 = z2_date
+            if isinstance(gf.t2, datetime):
+                gf.t2 = float(timelib.dt2decyear(gf.t2))
+            #else, assume we've hardcoded decimal year
+        gf.t2_mean = np.mean(gf.t2)
 
-        if isinstance(gf.t1, datetime):
-            gf.t1 = timelib.dt2decyear(gf.t1)
-
-        if isinstance(gf.t2, datetime):
-            gf.t2 = timelib.dt2decyear(gf.t2)
-
-        gf.t1 = float(gf.t1)
-        gf.t2 = float(gf.t2)
-
-        #Calculate dt grids
-        #gf.dt = z2_date - z1_date
-        #gf.dt = gf.dt.mean()
-        #This should be decimal years
+        #These should be decimal years, either grids or constants
         gf.dt = gf.t2 - gf.t1
+        gf.dt_mean = np.mean(gf.dt)
         #if isinstance(gf.dt, timedelta):
         #    gf.dt = gf.dt.total_seconds()/timelib.spy
         #Calculate dh/dt, in m/yr
@@ -889,14 +946,6 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
         gf.dhdt_stats = malib.get_stats(gf.dhdt)
         dhdt_mean = gf.dhdt_stats[3]
         dhdt_med = gf.dhdt_stats[5]
-
-        rho_i = 0.91
-        rho_s = 0.50
-        rho_f = 0.60
-
-        #This is recommendation by Huss et al (2013)
-        rho_is = 0.85
-        rho_sigma = 0.06
 
         #Can estimate ELA values computed from hypsometry and typical AAR
         #For now, assume ELA is mean
@@ -968,7 +1017,7 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
 
         outlist = [gf.glacnum, gf.cx, gf.cy, z2_elev_med, z2_elev_p16, z2_elev_p84, z2_slope_med, z2_aspect_med, \
                 gf.mb_mean, gf.mb_mean_sigma, gf.glac_area, gf.mb_mean_totalarea, gf.mb_mean_totalarea_sigma, \
-                gf.t1, gf.t2, gf.dt]
+                gf.t1_mean, gf.t2_mean, gf.dt_mean]
 
         if 'ice_thick' in ds_dict:
             #Load ice thickness 
@@ -1040,24 +1089,20 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
                 gf.vx = np.ma.array(iolib.ds_getma(ds_dict['vx']), mask=glac_geom_mask)
                 gf.vy = np.ma.array(iolib.ds_getma(ds_dict['vy']), mask=glac_geom_mask)
                 gf.vm = np.ma.sqrt(gf.vx**2 + gf.vy**2)
+                gf.vm_mean = gf.vm.mean()
 
                 if gf.H is not None:
-                    #Surface to column average velocity scaling
-                    v_col_factor = 0.8
-
                     #Compute flux
-                    gf.Q = gf.H * v_col_factor * np.array([gf.vx, gf.vy])
-                    #Note that np.gradient returns derivatives relative to axis number, so (y, x) in this case
+                    gf.Q = gf.H * v_col_f * np.array([gf.vx, gf.vy])
+                    #Note: np.gradient returns derivatives relative to axis number, so (y, x) in this case
                     #Want x-derivative of x component
                     gf.divQ = np.gradient(gf.Q[0])[1] + np.gradient(gf.Q[1])[0]
 
-                    #gf.divU = np.gradient(v_col_factor*gf.vx)[1] + np.gradient(v_col_factor*gf.vy)[0]
-                    #gf.gradH = np.sqrt(np.sum(np.gradient(np.square(gf.H), axis=1)))
-                    #gf.divQ = np.dot(gf.gradH, np.array([gf.vx, gf.vy])) + gf.divU
-
-                    #gf.divQ = gf.H * gf.divU
+                    #gf.divQ = gf.H*(np.gradient(v_col_f*gf.vx)[1] + np.gradient(v_col_f*gf.vy)[0]) \
+                            #+ v_col_f*gf.vx*(np.gradient(gf.H)[1]) + v_col_f*gf.vy*(np.gradient(gf.H)[0])
 
                     #Should smooth divQ, better handling of data gaps
+            outlist.append(gf.vm_mean)
 
         if verbose:
             print('Mean mb: %0.2f +/- %0.2f mwe/yr' % (gf.mb_mean, gf.mb_mean_sigma))
@@ -1077,6 +1122,10 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
         if writeout and (gf.glac_area/1E6 > min_glac_area_writeout):
             out_dz_fn = os.path.join(outdir, gf.feat_fn+'_dz.tif')
             iolib.writeGTiff(gf.dz, out_dz_fn, ds_dict['z1'])
+
+            if isinstance(gf.dt, np.ndarray):
+                out_dt_fn = os.path.join(outdir, gf.feat_fn+'_dt.tif')
+                iolib.writeGTiff(gf.dt, out_dt_fn, ds_dict['z1'])
 
             out_z1_fn = os.path.join(outdir, gf.feat_fn+'_z1.tif')
             iolib.writeGTiff(gf.z1, out_z1_fn, ds_dict['z1'])
@@ -1181,7 +1230,7 @@ if glac_dict:
 #glacfeat_list_out = []
 
 if parallel:
-    print("Running in parallel")
+    print("Running in parallel with %i processes" % nproc)
     from multiprocessing import Pool
     # By default, use all cores - 1
     p = Pool(nproc)
