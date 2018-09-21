@@ -36,15 +36,30 @@ min_area_m2 = 1E6
 mb_clim = (-1.0, 1.0)
 #mb_clim = (-0.7, 0.7)
 
+#HMA
+scaling_f = 0.2 
+#CONUS
+#scaling_f = 3 
+
+region_col = 'region'
+basin_col = 'basin'
+#basin_col = 'HYBAS_ID'
+qdgc_col = 'qdgc'
+
 extent = None
 crs = None
 if site == 'hma':
-    hs_fn = '/Users/dshean/Documents/UW/HMA/mos/hma_20170716_mos/mos_32m/hma_20170716_mos_32m_100m_hs_az315.tif'
+    hs_fn = '/Users/dshean/Documents/UW/HMA/mos/hma_mos_32m_20180723/hma_mos_32m_100m_hs_az315.tif'
     glac_shp_fn = '/Users/dshean/data/rgi60/regions/rgi60_merge_HMA_aea.shp'
+    #glac_shp_fn = '/Users/dshean/data/rgi60/regions/rgi60_merge_HMA_aea_0.1km.shp'
+    #glac_shp_fn = '/Users/dshean/data/rgi60/regions/rgi60_merge_HMA_aea_1km.shp'
     border_shp_fn = '/Users/dshean/data/NaturalEarth/10m_cultural/10m_cultural/ne_10m_admin_0_countries_lakes.shp'
     basin_shp_fn = '/Users/dshean/data/HydroBASINS/hybas_lake_as_lev01-12_v1c/hybas_lake_as_lev04_v1c.shp'
     region_shp_fn = '/Users/dshean/Documents/UW/HMA/Kaab_regions/regions_from_kaab2015_merged.shp'
+    qdgc_shp_fn = '/Users/dshean/data/qdgc/qdgc_asia/qdgc_01_asia.shp'
+    #This is geopandas crs format
     glac_crs = {u'datum':u'WGS84',u'lat_0':36,u'lat_1':25,u'lat_2':47,u'lon_0':85,u'no_defs':True,u'proj':u'aea',u'units':u'm',u'x_0':0,u'y_0':0}
+    #minx, miny, maxx, maxy
     extent = [-1610900, -1142400, 1767400, 1145700]
 elif site == 'conus':
     #hs_fn = '/scr/mb/gpd/conus_20171018_mos_32m_trans_100m_hs_az315_1km.tif'
@@ -52,11 +67,9 @@ elif site == 'conus':
     region_shp_fn = '/Users/dshean/Documents/UW/CONUS/regions/conus_mb_regions_aea.shp'
     border_shp_fn = '/Users/dshean/data/NaturalEarth/10m_cultural/10m_cultural/ne_10m_admin_1_states_provinces_lakes.shp'
     basin_shp_fn = '/Users/dshean/data/HydroBASINS/hybas_lake_na_lev01-12_v1c/hybas_lake_na_lev07_v1c.shp'
-    #This is geopandas crs format
     glac_crs = {u'datum':u'WGS84',u'lat_0':43,u'lat_1':36,u'lat_2':49,u'lon_0':-115,u'no_defs':True,u'proj':u'aea',u'units':u'm',u'x_0':0,u'y_0':0}
     #This is cartopy
     crs = ccrs.AlbersEqualArea(central_longitude=-115, central_latitude=43, standard_parallels=(36, 49))
-    #minx, miny, maxx, maxy
     extent = [-856800, -789000, 910700, 839400]
 else:
     sys.exit("Site not currently supported")
@@ -123,10 +136,6 @@ def make_map(mb_dissolve_df=None, glac_df_mb=None, region_df=None, col='mb_mwea'
 
     if mb_dissolve_df is not None:
         #Plot single values for region or basin
-        #This was HMA
-        #scaling_f = 0.2 
-        #CONUS
-        scaling_f = 3 
         x = mb_dissolve_df['centroid_x']
         y = mb_dissolve_df['centroid_y']
         #s = scaling_f*mb_dissolve_df[('area_m2_sum')]/1E6
@@ -198,12 +207,21 @@ if basin_shp_fn is not None:
     #Convert to glac crs
     basin_df = basin_df.to_crs(glac_df.crs)
 
-region_col = 'region'
-basin_col = 'basin'
+if qdgc_shp_fn is not None:
+    print("Loading qdgc")
+    qdgc_df = gpd.read_file(qdgc_shp_fn)
+    #Convert to glac crs
+    qdgc_df = qdgc_df.to_crs(glac_df.crs)
 
 #Add region and basin fields to RGI polygons
 #There's a bug here
+#https://github.com/Toblerity/Shapely/issues/553
+#pip3 uninstall shapely fiona ; pip3 install --no-binary shapely shapely ; pip3 install fiona
 #if not os.path.exists(glac_shp_join_fn):
+if qdgc_shp_fn is not None:
+    print("One-time spatial join by qdgc")
+    glac_df = gpd.sjoin(glac_df, qdgc_df, how="inner", op="intersects")
+
 if region_shp_fn is not None:
     print("One-time spatial join by region")
     glac_df = gpd.sjoin(glac_df, region_df, how="inner", op="intersects")
@@ -264,7 +282,7 @@ if region_shp_fn is not None:
     glac_df_mb_region['Area_all'] = glac_df_region_sum['Area']
     #glac_df_mb_region = gpd.DataFrame(glac_df_mb_region)
     append_centroid_xy(region_df)
-    region_df.rename(index=str, columns={"Name": "region"}, inplace=True)
+    #region_df.rename(index=str, columns={"Name": "region"}, inplace=True)
     glac_df_mb_region = glac_df_mb_region.merge(region_df[['region', 'centroid_x', 'centroid_y']], left_index=True, right_on='region')
 
 if basin_shp_fn is not None:
