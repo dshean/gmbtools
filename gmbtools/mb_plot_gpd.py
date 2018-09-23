@@ -18,10 +18,11 @@ import pandas as pd
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
+import matplotlib.patheffects as path_effects
 from imview.lib import pltlib
 
 from osgeo import gdal
-from pygeotools.lib import iolib, geolib
+from pygeotools.lib import iolib, geolib, malib
 
 import geopandas as gpd
 import cartopy.crs as ccrs 
@@ -33,6 +34,11 @@ site = 'hma'
 
 area_filter = False
 min_area_m2 = 1E6
+
+outlier_removal = True
+outlier_perc = (0.001, 0.999)
+
+plot = False
 
 #Default mb clim
 mb_clim = (-1.0, 1.0)
@@ -91,7 +97,7 @@ def append_centroid_xy(df):
 
 def aggregate(glac_df, glac_df_mb, agg_df, col):
     #Define aggregation function for the dissolve
-    aggfunc = {'area_m2':[np.mean, np.sum], 'mb_mwea':[np.mean, np.std, np.sum, np.size], 'mb_mwea_sigma':np.mean, 'Area':[np.mean, np.sum], 't1':[np.mean, np.min, np.max], 't2':[np.mean, np.min, np.max], 'dt':[np.mean, np.min, np.max]}
+    aggfunc = {'area_m2':[np.mean, np.sum], 'mb_mwea':[np.mean, np.std, np.sum, np.size], 'mb_mwea_sigma':np.mean, 'mb_m3wea':[np.mean,np.sum], 'mb_Gta':[np.sum], 'Area':[np.mean, np.sum], 't1':[np.mean, np.min, np.max], 't2':[np.mean, np.min, np.max], 'dt':[np.mean, np.min, np.max]}
     #This is for all glaciers - mostly just to get total area
     glac_df_agg_sum = glac_df.groupby(col).sum()
     glac_df_agg_mean = glac_df.groupby(col).mean()
@@ -106,23 +112,52 @@ def aggregate(glac_df, glac_df_mb, agg_df, col):
     glac_df_mb_agg[('mb_mwe_cum', 'mean')] = glac_df_mb_agg[('mb_mwea','mean')] * glac_df_mb_agg[('dt', 'mean')]
     glac_df_mb_agg[('mb_mwe_cum', 'total_m3')] = glac_df_mb_agg[('mb_mwea', 'total_m3a')] * glac_df_mb_agg[('dt', 'mean')] 
     glac_df_mb_agg[('mb_mwe_cum', 'total_Gt')] = glac_df_mb_agg[('mb_mwea', 'total_Gta')] * glac_df_mb_agg[('dt', 'mean')] 
+    append_centroid_xy(agg_df)
     glac_df_mb_agg = glac_df_mb_agg.merge(agg_df[['centroid_x', 'centroid_y']], left_index=True, right_index=True)
     glac_df_mb_agg.sort_values(by=('Area_all', 'sum'), ascending=False, inplace=True)
     return glac_df_mb_agg
 
-def make_map(mb_dissolve_df=None, glac_df_mb=None, agg_df=None, col='mb_mwea', border_df=None, crs=crs, extent=None, hs=None, hs_extent=None, clim=None, labels=True):
+def add_legend(ax, sf=16, loc='upper right'):
+    """
+    Create legend for scaled scatterplot markers
+    """
+    ax.autoscale(False)
+    #CONUS
+    #leg_s = np.array([0.1, 0.5, 1.0, 5.0, 10.0])
+    #HMA
+    #leg_s = np.array([0.1, 1.0, 10.0, 100.0])
+    leg_s = np.array([1.0, 10.0, 100.0, 1000.0, 10000.0])
+    #Spoof dummy coordinates way off map
+    leg_x = np.full(leg_s.size, -999999999)
+    leg_y = np.full(leg_s.size, -999999999)
+    for i, s in enumerate(leg_s):
+        #lbl = r'$%0.1f\/km^2$' % s
+        lbl = '%i' % s
+        ax.scatter(leg_x[i], leg_y[i], s=s*sf, c='gray', label=lbl)
+    legend = ax.legend(title=r'$Glacier\/Area\/(km^2)$', scatterpoints=1, loc=loc, prop={'size':7}, ncol=leg_s.size)
+    legend.get_title().set_fontsize('8')
+    return legend
+
+def make_map(mb_dissolve_df=None, glac_df_mb=None, agg_df=None, col=('mb_mwea', 'mean'), border_df=None, crs=crs, extent=None, hs=None, hs_extent=None, clim=None, labels='val', title=None):
 
     fig, ax = plt.subplots(figsize=(10,8))
     ax.set_aspect('equal')
+    legend = add_legend(ax, sf=scaling_f)
+    if title is not None:
+        ax.set_title(title)
 
     cmap = 'RdBu'
-    label = 'Mass Balance (m we/yr)'
-    if 't1' in col:
+    if 'mb_mwea' in col:
+        label = 'Mass Balance (m we/yr)'
+    elif 'mb_Gta' in col: 
+        label = 'Mass Balance (Gt/yr)'
+    elif 't1' in col:
         cmap = 'inferno'
         label = 'Source Date (year)'
 
     if clim is None:
-        clim = (glac_df_mb[col].min(), glac_df_mb[col].max())
+        #clim = (glac_df_mb[col].min(), glac_df_mb[col].max())
+        clim = malib.calcperc_sym(mb_dissolve_df[col], perc=(1,99))
 
     #This is cartopy-enabled axes
     #ax = plt.axes(projection=crs)
@@ -137,13 +172,17 @@ def make_map(mb_dissolve_df=None, glac_df_mb=None, agg_df=None, col='mb_mwea', b
 
     if border_df is not None:
         print("Plotting borders")
-        border_style = {'facecolor':'0.95','edgecolor':'k', 'linewidth':0.7}
+        border_style = {'facecolor':'0.65','edgecolor':'k', 'linewidth':0.7}
         border_df.plot(ax=ax, **border_style)
 
     if agg_df is not None:
+        print("Plotting agg boundaries")
         #This was to get colored regions
-        #agg_style = {'cmap':'cpt_rainbow', 'edgecolor':'k', 'linewidth':0.5, 'alpha':0.05}
-        agg_style = {'facecolor':'none','edgecolor':'k', 'linewidth':0.3, 'alpha':0.4}
+        #agg_style = {'cmap':'cpt_rainbow', 'edgecolor':'none', 'linewidth':0, 'alpha':0.05}
+        agg_style = {'cmap':'summer', 'edgecolor':'none', 'linewidth':0, 'alpha':0.05}
+        #agg_style = {'facecolor':'0.95','edgecolor':'k', 'linewidth':0.3, 'alpha':0.2}
+        agg_df.plot(ax=ax, **agg_style)
+        agg_style = {'facecolor':'none', 'edgecolor':'w', 'linewidth':0.5}
         agg_df.plot(ax=ax, **agg_style)
 
     #https://stackoverflow.com/questions/36008648/colorbar-on-geopandas
@@ -152,34 +191,48 @@ def make_map(mb_dissolve_df=None, glac_df_mb=None, agg_df=None, col='mb_mwea', b
     sc._A = []
 
     if mb_dissolve_df is not None:
+        print("Plotting scatterplot of %s values" % (col, ))
         #Plot single values for region or basin
         x = mb_dissolve_df['centroid_x']
         y = mb_dissolve_df['centroid_y']
         #Scale by total glacier area in each polygon 
         s = scaling_f*mb_dissolve_df[('Area_all', 'sum')]
-        c = mb_dissolve_df['mb_mwea', 'mean']
-        sc_style = {'cmap':cmap, 'edgecolor':'k', 'linewidth':0.5}
+        c = mb_dissolve_df[col]
+        sc_style = {'cmap':cmap, 'edgecolor':'k', 'linewidth':0.5, 'alpha':0.8}
         sc = ax.scatter(x, y, s, c, vmin=clim[0], vmax=clim[1], **sc_style) 
         #Add labels
-        if labels:
+        text_kw = {'family':'sans-serif', 'fontsize':8, 'color':'k'}
+        if labels is not None:
+            print("Adding annotations")
             for k, v in mb_dissolve_df.iterrows():
-                #lbl = '%0.2f +/- %0.2f' % (v[('mb_mwea_mean')], v[('mb_mwea_sigma_mean')])
-                lbl = '%0.2f +/- %0.2f' % (v[col, 'mean'], v[col+'_sigma','mean'])
-                ax.annotate(lbl, xy=(v['centroid_x'],v['centroid_y']), xytext=(1,0), textcoords='offset points', family='sans-serif', fontsize=8, color='k')
+                #lbl = '%0.2f +/- %0.2f' % (v[col], v[(col[0]+'_sigma',col[1])])
+                if labels == 'name+val':
+                    lbl = '%s\n%+0.2f' % (k, v[col])
+                else:
+                    lbl = '%+0.2f' % v[col]
+                #ax.annotate(lbl, xy=(v['centroid_x'],v['centroid_y']), xytext=(1,0), textcoords='offset points', family='sans-serif', fontsize=6, color='darkgreen')
+                txt = ax.annotate(lbl, xy=(v['centroid_x'],v['centroid_y']), ha='center', va='center', **text_kw)
+                txt.set_path_effects([path_effects.Stroke(linewidth=0.75, foreground='w'),path_effects.Normal()])
 
     if glac_df_mb is not None:
         print("Plotting glacier polygons")
-        glac_style = {'edgecolor':'k', 'linewidth':0.5, 'alpha':0.3}
-        glac_ax = glac_df_mb.plot(ax=ax, column=col, cmap=cmap, vmin=clim[0], vmax=clim[1], **glac_style)
+        glac_style = {'edgecolor':'k', 'linewidth':0.1, 'alpha':0.2}
+        #This plots mb color ramp for each glacier polygon
+        #glac_ax = glac_df_mb.plot(ax=ax, column=col[0], cmap=cmap, vmin=clim[0], vmax=clim[1], **glac_style)
+        #This plots outlines
+        glac_ax = glac_df_mb.plot(ax=ax, facecolor='none', **glac_style)
 
     #This is minx, miny, maxx, maxy
     if extent is None:
-        if glac_df_mb is not None:
-            extent = glac_df_mb.total_bounds
-        else:
-            extent = mb_dissolve_df.total_bounds
+        #if glac_df_mb is not None:
+        #    extent = glac_df_mb.total_bounds
+        #else:
+        extent = mb_dissolve_df.total_bounds
+
     #For cartopy axes
     #ax.set_extent(cartopy_extent(extent), crs=crs)
+    #Pad extent so labels fit within map
+    #extent = geolib.pad_extent(extent, perc=0.01, uniform=True)
     ax.set_xlim(extent[0], extent[2])
     ax.set_ylim(extent[1], extent[3])
 
@@ -215,6 +268,14 @@ else:
     print("Loading glacier polygons")
     glac_df = gpd.read_file(glac_shp_fn)
     glac_df.set_index(rgi_col, inplace=True)
+    #Add centroid field - needed for proper partitioning in spatial join
+    glac_df['centroid_geom'] = gpd.GeoSeries(glac_df.centroid)
+    glac_df['polygon_geom'] = gpd.GeoSeries(glac_df.geometry)
+    glac_df.set_geometry('centroid_geom', inplace=True, drop=True)
+
+#Area in km2
+#glac_df.geometry.area.sum()/1E6
+#glac_df['Area'].sum()
 
 if region_shp_fn is not None:
     print("Loading regions")
@@ -222,7 +283,6 @@ if region_shp_fn is not None:
     #Convert to glac crs
     region_df = region_df.to_crs(glac_df.crs)
     region_df.set_index(region_col, inplace=True)
-    append_centroid_xy(region_df)
 
 if basin_shp_fn is not None:
     print("Loading basins")
@@ -234,7 +294,6 @@ if basin_shp_fn is not None:
     #Convert to glac crs
     basin_df = basin_df.to_crs(glac_df.crs)
     basin_df.set_index(basin_col, inplace=True)
-    append_centroid_xy(basin_df)
 
 if qdgc_shp_fn is not None:
     print("Loading qdgc")
@@ -242,25 +301,29 @@ if qdgc_shp_fn is not None:
     #Convert to glac crs
     qdgc_df = qdgc_df.to_crs(glac_df.crs)
     qdgc_df.set_index(qdgc_col, inplace=True)
-    append_centroid_xy(qdgc_df)
 
+print(glac_df.shape)
 #Add region and basin fields to RGI polygons
 if not os.path.exists(glac_shp_join_fn):
     if qdgc_shp_fn is not None:
         print("One-time spatial join by qdgc")
         glac_df = gpd.sjoin(glac_df, qdgc_df, how="inner", op="intersects")
         glac_df.rename(index=str, columns={'index_right':qdgc_col}, inplace=True)
+        print(glac_df.shape)
 
     if region_shp_fn is not None:
         print("One-time spatial join by region")
         glac_df = gpd.sjoin(glac_df, region_df, how="inner", op="intersects")
         glac_df.rename(index=str, columns={'index_right':region_col}, inplace=True)
+        print(glac_df.shape)
 
     if basin_shp_fn is not None:
         print("One-time spatial join by basin")
         glac_df = gpd.sjoin(glac_df, basin_df, how="inner", op="intersects")
         glac_df.rename(index=str, columns={'index_right':basin_col}, inplace=True)
+        print(glac_df.shape)
 
+    glac_df.set_geometry('polygon_geom', inplace=True, drop=True)
     print("Writing out: %s" % glac_shp_join_fn)
     #With index set to RGIId, it is not written out, hack to create new column
     glac_df.reset_index().rename(columns={'index':rgi_col}).to_file(glac_shp_join_fn, driver=driver)
@@ -269,6 +332,7 @@ print("Loading mb")
 mb_df = pd.read_csv(mb_csv_fn)
 mb_df[rgi_col] = 'RGI60-'+mb_df[rgi_col].map('{:08.5f}'.format)
 mb_df.set_index(rgi_col, inplace=True)
+mb_df['mb_Gta'] = mb_df['mb_m3wea']/1E9
 
 #mb_df['mb_mwea_area'] = mb_df['mb_mwea'] * mb_df['area_km2']*1E6
 
@@ -280,9 +344,10 @@ else:
     print("Merging glacier polygons and mb results")
     glac_df_mb = glac_df.merge(mb_df, left_index=True, right_index=True)
     #With index set to RGIId, it is not written out, hack to create new column
+    print("Writing out: %s" % merge_fn)
     glac_df_mb.reset_index().rename(columns={'index':rgi_col}).to_file(merge_fn, driver=driver)
 
-print("%i records loaded" % (glac_df_mb.shape[0]))
+print("%i merged records loaded" % (glac_df_mb.shape[0]))
 
 if area_filter:
     print("Filtering by glacier polygon area (min %0.2f km^2)" % (min_area_m2/1E6))
@@ -290,13 +355,25 @@ if area_filter:
     glac_df_mb = glac_df_mb[glac_df_mb['area_m2'] > min_area_m2]
     print("%i of %i records preserved" % (glac_df_mb.shape[0], orig_count))
 
-plt.figure()
-print("%i records before outlier removal" % (glac_df_mb.shape[0]))
-glac_df_mb['mb_mwea'].hist(bins=256)
-inlier_idx = np.abs(glac_df_mb['mb_mwea'] - glac_df_mb['mb_mwea'].mean()) <= (3*glac_df_mb['mb_mwea'].std())
-glac_df_mb = glac_df_mb[inlier_idx]
-print("%i records after outlier removal" % (glac_df_mb.shape[0]))
-glac_df_mb['mb_mwea'].hist(bins=256)
+if outlier_removal:
+    print("Removing outliers")
+    outlier_clim = (glac_df_mb['mb_mwea'].quantile(outlier_perc[0]), glac_df_mb['mb_mwea'].quantile(outlier_perc[1]))
+
+    if plot:
+        plt.figure()
+        ax = plt.gca()
+        ax.set_xlabel('Mass balance (m we/yr)')
+        ax.set_ylabel('Number of glaciers')
+        hist_clim = (-1.0, 1.0)
+        ax.set_xlim(*hist_clim)
+        print("%i records before outlier removal" % (glac_df_mb.shape[0]))
+        glac_df_mb['mb_mwea'].hist(range=hist_clim, bins=256, label='Before outlier filter')
+        inlier_idx = np.abs(glac_df_mb['mb_mwea'] - glac_df_mb['mb_mwea'].mean()) <= (3*glac_df_mb['mb_mwea'].std())
+        glac_df_mb = glac_df_mb[inlier_idx]
+        print("%i records after outlier removal" % (glac_df_mb.shape[0]))
+        glac_df_mb['mb_mwea'].hist(range=hist_clim, bins=256, label='After outlier filter')
+        ax.axvline(0, linewidth=0.5, color='k')
+        ax.legend()
 
 if qdgc_shp_fn is not None:
     glac_df_mb_qdgc = aggregate(glac_df, glac_df_mb, qdgc_df, qdgc_col)
@@ -309,6 +386,7 @@ if basin_shp_fn is not None:
 
 #Compile stats for all glaciers
 all_stats = glac_df_mb[['mb_mwea','mb_m3wea']].mean()
+#All area in RGI db
 total_area_m2 = glac_df['Area'].sum()*1E6
 all_stats['mb_m3wea_sum'] = glac_df_mb['mb_m3wea'].sum()
 all_stats['mb_m3wea_all'] = all_stats['mb_mwea'] * total_area_m2
@@ -323,7 +401,7 @@ print(all_stats)
 #print("All glaciers, cumulative")
 #print(all_stats_cum)
 
-print(glac_df_mb_region[[('mb_mwea', 'size'),('mb_mwea', 'mean'),('mb_mwea', 'std'),('Area', 'sum'),('Area_all', 'sum'),('mb_mwea', 'total_Gta')]].to_string())
+print(glac_df_mb_region[[('mb_mwea', 'size'),('mb_mwea', 'mean'),('mb_mwea', 'std'),('Area', 'sum'),('Area_all', 'sum'),('Area', 'perc'),('mb_mwea', 'total_Gta')]].to_string())
 
 #Compile stats for each division
 for i in [glac_df_mb_basin, glac_df_mb_region, glac_df_mb_qdgc]:
@@ -359,17 +437,37 @@ if border_shp_fn is not None:
 #date_fig = make_map(col='t1', glac_df_mb=glac_df_mb, border_df=border_df, clim=None, crs=crs, extent=extent)
 
 if qdgc_shp_fn is not None:
-    #To plot grid cells, pass agg_df=qdgc_df
-    qdgc_fig = make_map(col='mb_mwea', mb_dissolve_df=glac_df_mb_qdgc, glac_df_mb=glac_df_mb, agg_df=None, border_df=border_df, clim=mb_clim, crs=crs, extent=extent, labels=False)
     qdgc_fig_fn = os.path.splitext(glac_shp_join_fn)[0]+'_qdgc_fig.png'
+    print("Generating figure: %s" % qdgc_fig_fn)
+    #To plot grid cells, pass agg_df=qdgc_df
+    title = 'Glacier Mass Balance (ASTER 2000-2018): Quarter-degree Grid Cells'
+    qdgc_fig = make_map(col=('mb_mwea', 'mean'), mb_dissolve_df=glac_df_mb_qdgc, glac_df_mb=glac_df_mb, agg_df=None, border_df=border_df, clim=None, crs=crs, extent=extent, labels=None, title=title)
+    print("Saving figure: %s" % qdgc_fig_fn)
     qdgc_fig.savefig(qdgc_fig_fn, dpi=300, bbox_inches='tight', pad_inches=0) 
 
 if region_shp_fn is not None:
-    region_fig = make_map(col='mb_mwea', mb_dissolve_df=glac_df_mb_region, glac_df_mb=glac_df_mb, agg_df=region_df, border_df=border_df, clim=mb_clim, crs=crs, extent=extent)
-    region_fig_fn = os.path.splitext(glac_shp_join_fn)[0]+'_region_fig.png'
+    region_fig_fn = os.path.splitext(glac_shp_join_fn)[0]+'_region_Gt_fig.png'
+    print("Generating figure: %s" % region_fig_fn)
+    title = 'Glacier Mass Balance (ASTER 2000-2018): Kaab Regions'
+    #region_fig = make_map(col='mb_mwea', mb_dissolve_df=glac_df_mb_region, glac_df_mb=glac_df_mb, agg_df=region_df, border_df=border_df, clim=mb_clim, crs=crs, extent=extent, labels='name+val')
+    region_fig = make_map(col=('mb_Gta', 'sum'), mb_dissolve_df=glac_df_mb_region, glac_df_mb=glac_df_mb, agg_df=region_df, border_df=border_df, clim=None, crs=crs, extent=extent, labels='name+val', title=title)
+    print("Saving figure: %s" % region_fig_fn)
+    region_fig.savefig(region_fig_fn, dpi=300, bbox_inches='tight', pad_inches=0) 
+
+if region_shp_fn is not None:
+    region_fig_fn = os.path.splitext(glac_shp_join_fn)[0]+'_region_mwe_fig.png'
+    print("Generating figure: %s" % region_fig_fn)
+    title = 'Glacier Mass Balance (ASTER 2000-2018): Kaab Regions'
+    #region_fig = make_map(col='mb_mwea', mb_dissolve_df=glac_df_mb_region, glac_df_mb=glac_df_mb, agg_df=region_df, border_df=border_df, clim=mb_clim, crs=crs, extent=extent, labels='name+val')
+    region_fig = make_map(col=('mb_mwea', 'mean'), mb_dissolve_df=glac_df_mb_region, glac_df_mb=glac_df_mb, agg_df=region_df, border_df=border_df, clim=None, crs=crs, extent=extent, labels='name+val', title=title)
+    print("Saving figure: %s" % region_fig_fn)
     region_fig.savefig(region_fig_fn, dpi=300, bbox_inches='tight', pad_inches=0) 
 
 if basin_shp_fn is not None:
-    basin_fig = make_map(col='mb_mwea', mb_dissolve_df=glac_df_mb_basin, glac_df_mb=glac_df_mb, agg_df=basin_df, border_df=border_df, clim=mb_clim, crs=crs, extent=extent)
     basin_fig_fn = os.path.splitext(glac_shp_join_fn)[0]+'_basin_fig.png'
-    basin_fig.savefig(basin_fig_fn, dpi=300, bbox_inches='tight', pad_inches=0) 
+    print("Generating figure: %s" % basin_fig_fn)
+    title = 'Glacier Mass Balance (ASTER 2000-2018): HydroBASINS level 4'
+    basin_fig = make_map(col=('mb_Gta', 'sum'), mb_dissolve_df=glac_df_mb_basin, glac_df_mb=glac_df_mb, agg_df=basin_df, border_df=border_df, clim=None, crs=crs, extent=extent, labels='val', title=title)
+    print("Saving figure: %s" % basin_fig_fn)
+    #basin_fig.savefig(basin_fig_fn, dpi=300, bbox_inches='tight', pad_inches=0) 
+    basin_fig.savefig(basin_fig_fn, dpi=300, pad_inches=0) 
