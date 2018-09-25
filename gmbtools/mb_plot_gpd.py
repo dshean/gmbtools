@@ -6,12 +6,7 @@ Uses geopandas to join, compute stats for differen regions and plot
 """
 
 #Todo
-#Fix issue with int32 conversion after join
-#Rivers
-#Use 'Name' and HYBAS_ID for index
-#Output shp, clean up field names <10 char
-#Fix issue with geojson crs definition in output files (currently not written)
-#Sum area for all glaciers in each region, not just those with mb numbers
+#Plot rivers
 
 import os, sys
 import pandas as pd
@@ -53,6 +48,7 @@ rgi_col = 'RGIId'
 region_col = 'region'
 basin_col = 'HYBAS_ID'
 qdgc_col = 'qdgc'
+mascon_col = 'mascon'
 
 extent = None
 crs = None
@@ -66,6 +62,7 @@ if site == 'hma':
     region_shp_fn = '/Users/dshean/Documents/UW/HMA/Kaab_regions/regions_from_kaab2015_merged_clean.shp'
     #http://www.mindland.com/wp/download-qdgc-continents/
     qdgc_shp_fn = '/Users/dshean/data/qdgc/qdgc_asia/qdgc_01_asia.shp'
+    mascon_shp_fn = '/Users/dshean/data/grace_mascons/GSFC.glb.200301_201607_v02.4_clip.gpkg'
     #This is geopandas crs format
     glac_crs = {u'datum':u'WGS84',u'lat_0':36,u'lat_1':25,u'lat_2':47,u'lon_0':85,u'no_defs':True,u'proj':u'aea',u'units':u'm',u'x_0':0,u'y_0':0}
     #minx, miny, maxx, maxy
@@ -260,7 +257,7 @@ merge_fn = os.path.splitext(mb_csv_fn)[0]+'_'+os.path.splitext(os.path.split(gla
 glac_shp_join_fn = os.path.splitext(merge_fn)[0]+'_join.'+ext
 
 if os.path.exists(glac_shp_join_fn):
-    print("Loading glaciers polygons joined with regions, basins, qdgc")
+    print("Loading glaciers polygons joined with regions, basins, qdgc, mascons")
     glac_df = gpd.read_file(glac_shp_join_fn)
     #This is a hack, as geojson doesn't properly preserve custom aae proj
     glac_df.crs = glac_crs
@@ -295,6 +292,15 @@ if basin_shp_fn is not None:
     basin_df = basin_df.to_crs(glac_df.crs)
     basin_df.set_index(basin_col, inplace=True)
 
+if mascon_shp_fn is not None:
+    print("Loading mascon")
+    mascon_df = gpd.read_file(mascon_shp_fn)
+    #Convert to glac crs
+    mascon_df = mascon_df.to_crs(glac_df.crs)
+    #Add a unique identifier
+    mascon_df[mascon_col] = mascon_df.lat_center.map('{:,.0f}N'.format) + mascon_df.lon_center.map('{:,.0f}E'.format)
+    mascon_df.set_index(mascon_col, inplace=True)
+
 if qdgc_shp_fn is not None:
     print("Loading qdgc")
     qdgc_df = gpd.read_file(qdgc_shp_fn)
@@ -305,6 +311,12 @@ if qdgc_shp_fn is not None:
 print(glac_df.shape)
 #Add region and basin fields to RGI polygons
 if not os.path.exists(glac_shp_join_fn):
+    if mascon_shp_fn is not None:
+        print("One-time spatial join by mascon")
+        glac_df = gpd.sjoin(glac_df, mascon_df, how="inner", op="intersects")
+        glac_df.rename(index=str, columns={'index_right':mascon_col}, inplace=True)
+        print(glac_df.shape)
+
     if qdgc_shp_fn is not None:
         print("One-time spatial join by qdgc")
         glac_df = gpd.sjoin(glac_df, qdgc_df, how="inner", op="intersects")
@@ -375,6 +387,9 @@ if outlier_removal:
         ax.axvline(0, linewidth=0.5, color='k')
         ax.legend()
 
+if mascon_shp_fn is not None:
+    glac_df_mb_mascon = aggregate(glac_df, glac_df_mb, mascon_df, mascon_col)
+
 if qdgc_shp_fn is not None:
     glac_df_mb_qdgc = aggregate(glac_df, glac_df_mb, qdgc_df, qdgc_col)
 
@@ -435,6 +450,29 @@ if border_shp_fn is not None:
 
 #Create source date map for CONUS
 #date_fig = make_map(col='t1', glac_df_mb=glac_df_mb, border_df=border_df, clim=None, crs=crs, extent=extent)
+
+mascon_df_out = glac_df_mb_mascon[[('mb_mwea','size'),('mb_mwea', 'mean'), ('mb_mwea', 'std'), ('Area','sum'),('mb_Gta', 'sum'), ('Area_all', 'sum'), ('mb_mwea', 'total_Gta')]]
+header = ('n_glaciers','mb_mwea_mean','mb_mwea_std','obs_glacier_area_km2','mb_Gta_sum','all_glacier_area_km2','mb_Gta_all')
+mascon_csv_fn = os.path.splitext(glac_shp_join_fn)[0]+'_mascon.csv'
+mascon_df_out.to_csv(mascon_csv_fn, float_format='%0.2f',header=header)
+
+if mascon_shp_fn is not None:
+    mascon_fig_fn = os.path.splitext(glac_shp_join_fn)[0]+'_mascon_mwe_fig.png'
+    print("Generating figure: %s" % mascon_fig_fn)
+    #To plot grid cells, pass agg_df=mascon_df
+    title = 'Glacier Mass Balance (ASTER 2000-2018): GSFC GRACE Mascons'
+    mascon_fig = make_map(col=('mb_mwea', 'mean'), mb_dissolve_df=glac_df_mb_mascon, glac_df_mb=glac_df_mb, agg_df=None, border_df=border_df, clim=None, crs=crs, extent=extent, labels=None, title=title)
+    print("Saving figure: %s" % mascon_fig_fn)
+    mascon_fig.savefig(mascon_fig_fn, dpi=300, bbox_inches='tight', pad_inches=0) 
+
+if mascon_shp_fn is not None:
+    mascon_fig_fn = os.path.splitext(glac_shp_join_fn)[0]+'_mascon_Gt_fig.png'
+    print("Generating figure: %s" % mascon_fig_fn)
+    #To plot grid cells, pass agg_df=mascon_df
+    title = 'Glacier Mass Balance (ASTER 2000-2018): GSFC GRACE Mascons'
+    mascon_fig = make_map(col=('mb_Gta', 'sum'), mb_dissolve_df=glac_df_mb_mascon, glac_df_mb=glac_df_mb, agg_df=None, border_df=border_df, clim=None, crs=crs, extent=extent, labels=None, title=title)
+    print("Saving figure: %s" % mascon_fig_fn)
+    mascon_fig.savefig(mascon_fig_fn, dpi=300, bbox_inches='tight', pad_inches=0) 
 
 if qdgc_shp_fn is not None:
     qdgc_fig_fn = os.path.splitext(glac_shp_join_fn)[0]+'_qdgc_fig.png'
