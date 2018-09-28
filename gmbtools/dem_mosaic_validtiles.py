@@ -186,8 +186,8 @@ def main():
     for tilenum in tile_dict.keys():
         if 'fn_list' in tile_dict[tilenum]:
             out_tile_list.append(tilenum)
-        #else:
-        #    del tile_dict[tilenum]
+        else:
+            del tile_dict[tilenum]
 
     print("%i valid output tiles" % len(out_tile_list))
     out_tile_list.sort()
@@ -201,20 +201,18 @@ def main():
     #outf = open('%s-log-dem_mosaic-tile-%i.log' % (o, tile), 'w')
 
     #Should run the tiles with the largest file count first, as they will likely take longer
-    #tile_dict = OrderedDict(sorted(tile_dict.items(), key=lambda item: len(item[1]), reverse=True))
-    #out_tile_list = tile_dict.keys()
+    tile_dict = OrderedDict(sorted(tile_dict.items(), key=lambda item: len(item[1]['fn_list']), reverse=True))
+    out_tile_list = tile_dict.keys()
 
-    for stat in stat_list:
-        print("\nMosaic type: %s" % stat)
-
-        tile_fn_list = []
-        with ThreadPoolExecutor(max_workers=threads) as executor:
-            print("Running dem_mosaic in parallel with %i threads" % threads)
-            for n, tile in enumerate(out_tile_list):
-                #print('%i of %i tiles: %i' % (n+1, len(out_tile_list), tile))
-                tile_fn = '%s-tile-%0*i.tif' % (o, ni, tile)
-                if stat is not None:
-                    tile_fn = os.path.splitext(tile_fn)[0]+'-%s.tif' % stat
+    #Reorganized to run all tiles for all stats in parallel
+    #So we're not waiting for one tile to finish 
+    with ThreadPoolExecutor(max_workers=threads) as executor:
+        print("Running dem_mosaic in parallel with %i threads" % threads)
+        for n, tile in enumerate(out_tile_list):
+            #print('%i of %i tiles: %i' % (n+1, len(out_tile_list), tile))
+            tile_fn_base = '%s-tile-%0*i.tif' % (o, ni, tile)
+            for stat in stat_list:
+                tile_fn = os.path.splitext(tile_fn_base)[0]+'-%s.tif' % stat
                 dem_mosaic_args = {'fn_list':tile_dict[tile]['fn_list'], 'o':tile_fn, 'tr':tr, 't_srs':t_srs, \
                         't_projwin':tile_dict[tile]['extent'], 'threads':1, 'stat':stat}
                 if not os.path.exists(tile_fn):
@@ -223,9 +221,17 @@ def main():
                     cmd = geolib.get_dem_mosaic_cmd(**dem_mosaic_args)
                     #print(cmd)
                     executor.submit(subprocess.call, cmd, stdout=outf, stderr=subprocess.STDOUT)
-                tile_fn_list.append(tile_fn)
-                time.sleep(delay)
+            time.sleep(delay)
 
+    #Now aggegate into stats
+    for stat in stat_list:
+        tile_fn_list = []
+        for n, tile in enumerate(out_tile_list):
+            tile_fn_base = '%s-tile-%0*i.tif' % (o, ni, tile)
+            tile_fn = os.path.splitext(tile_fn_base)[0]+'-%s.tif' % stat
+            if os.path.exists(tile_fn):
+                tile_fn_list.append(tile_fn)
+        print("\nMosaic type: %s" % stat)
         #Convert dem_mosaic index files to timestamp arrays
         if stat in ['lastindex', 'firstindex', 'medianindex']:
             print("Running dem_mosaic_index_ts in parallel with %i threads" % threads)
