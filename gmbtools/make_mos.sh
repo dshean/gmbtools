@@ -29,8 +29,8 @@ trans=false
 
 #Output mosaic res
 #res=2
-#res=8
-res=32
+res=8
+#res=32
 
 #If res is better than 32, make lowres products for faster browsing
 lowres=100
@@ -41,9 +41,12 @@ fullres_tif=false
 lowres_tif=true
 
 #Specify the output types
-statlist="wmean"
-statlist+=" count stddev"
-#statlist+=" median nmad"
+statlist=""
+statlist+="wmean"
+statlist+=" count"
+statlist+=" stddev"
+statlist+=" median medianindex"
+statlist+=" nmad"
 statlist+=" last lastindex first firstindex"
 
 #Generate strip index shp
@@ -75,7 +78,10 @@ mos=~/src/gmbtools/gmbtools/dem_mosaic_validtiles.py
 #Simplify tolerance in decimal degrees
 tol=0.001
 
+#If res is 8, use all physical cores (avoid memory caching slowdows)
 ncpu=$(cat /proc/cpuinfo | egrep "core id|physical id" | tr -d "\n" | sed s/physical/\\nphysical/g | grep -v ^$ | sort | uniq | wc -l)
+#If res is 32, use all virtual cores
+#ncpu=$(python -c 'import multiprocessing as mp; print(mp.cpu_count())')
 threads=$((ncpu-1))
 
 ts=`date +%Y%m%d`
@@ -122,7 +128,7 @@ fi
 #ext="-DEM_${res}m_dem_align"
 #ext="-DEM_${res}m_dzfilt_-200_200"
 #WV/GE dem_align
-#ext="-DEM_${res}m_dzfilt_-200_200_*align"
+ext="-DEM_${res}m_dzfilt_-200_200_*align"
 
 #ASTER
 #ext="_align_dzfilt_-100_100"
@@ -131,10 +137,11 @@ echo $re
 echo $ext
 echo $mos_ext
 
-list=$(ls *00/dem*/${re}*${ext}.tif)
+#list=$(ls *00/dem*/${re}*${ext}.tif)
+#HMA alongtrack/crosstrack
 #list=$(ls *track/*00/dem*/${re}*${ext}.tif)
 #WV/GE dem_align
-#list=$(ls *align/${re}*${ext}.tif)
+list=$(ls *align/${re}*${ext}.tif)
 
 #ASTER
 #list=$(ls 2*/*cr_dem_align/*${re}*${ext}.tif)
@@ -152,9 +159,10 @@ out=mos/${site}_${ts}_mos/${mos_ext}/${mos_ext}
 #Sort by date
 #NOTE: Need to update sort key with increased path depths
 #*align/*DEM.tif 
-#list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 2)
+list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 2)
 #*00/dem*/*DEM.tif
-list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 3)
+#list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 3)
+#*track/*00/dem*/*DEM.tif
 #*00/dem*/*align/*DEM.tif
 #list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 4)
 #list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 5)
@@ -176,12 +184,11 @@ echo
 
 if [ ! -d $(dirname $out) ] ; then 
     mkdir -p $(dirname $out)
-    lfs setstripe -c $threads $(dirname $out)
+    lfs setstripe -c $ncpu $(dirname $out)
 fi
 
 echo $list | tr ' ' '\n' > ${out}_input_DEM_list.txt
 echo $(echo $list | wc -w) input DEMs
-gdal_opt='-co COMPRESS=LZW -co TILED=YES -co BIGTIFF=IF_SAFER'
 
 #~/src/gmbtools/gmbtools/dem_mosaic_validtiles.py --threads 27 --tr 32 --t_srs '+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs ' --georef_tile_size 100000 -o mos/hma_20180731_mos 2*/*align/*100.tif
 
@@ -237,7 +244,7 @@ export lowres_tif
 export lowres
 export -f stat_vrt2tif
 #Run tif generation and lowres in parallel for all stat mosaics
-statlist=$(echo $statlist | sed -e 's/lastindex/lastindex_ts/' -e 's/firstindex/firstindex_ts/')
+statlist=$(echo $statlist | sed -e 's/lastindex/lastindex_ts/' -e 's/firstindex/firstindex_ts/' -e 's/medianindex/medianindex_ts/')
 parallel --env _ stat_vrt2tif ::: $statlist 
 
 #Generate lowres products
