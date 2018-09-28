@@ -37,7 +37,7 @@ from dem_mosaic_index_ts import make_dem_mosaic_index_ts
 #resource.setrlimit(resource.RLIMIT_NOFILE,(resource.RLIM_INFINITY, resource.RLIM_INFINITY))
 
 def getparser():
-    stat_choices = ['first', 'firstindex', 'last', 'lastindex', 'min', 'max', 'mean', 'stddev', 'count', 'median', 'nmad', 'wmean']
+    stat_choices = ['first', 'firstindex', 'last', 'lastindex', 'min', 'max', 'mean', 'stddev', 'count', 'median', 'medianindex', 'nmad', 'wmean']
     parser = argparse.ArgumentParser(description='Wrapper for dem_mosaic that will only write valid tiles')
     parser.add_argument('--tr', default='min', help='Output resolution (default: %(default)s)')
     parser.add_argument('--t_projwin', default='union', help='Output extent (default: %(default)s)')
@@ -186,6 +186,8 @@ def main():
     for tilenum in tile_dict.keys():
         if 'fn_list' in tile_dict[tilenum]:
             out_tile_list.append(tilenum)
+        #else:
+        #    del tile_dict[tilenum]
 
     print("%i valid output tiles" % len(out_tile_list))
     out_tile_list.sort()
@@ -197,6 +199,10 @@ def main():
     delay = 0.001
     outf = open(os.devnull, 'w') 
     #outf = open('%s-log-dem_mosaic-tile-%i.log' % (o, tile), 'w')
+
+    #Should run the tiles with the largest file count first, as they will likely take longer
+    #tile_dict = OrderedDict(sorted(tile_dict.items(), key=lambda item: len(item[1]), reverse=True))
+    #out_tile_list = tile_dict.keys()
 
     for stat in stat_list:
         print("\nMosaic type: %s" % stat)
@@ -221,7 +227,7 @@ def main():
                 time.sleep(delay)
 
         #Convert dem_mosaic index files to timestamp arrays
-        if stat in ['lastindex', 'firstindex']:
+        if stat in ['lastindex', 'firstindex', 'medianindex']:
             print("Running dem_mosaic_index_ts in parallel with %i threads" % threads)
             from multiprocessing import Pool
             pool = Pool(processes=threads)
@@ -236,7 +242,7 @@ def main():
         vrt_fn = o+'.vrt'
         if stat is not None:
             vrt_fn = os.path.splitext(vrt_fn)[0]+'_%s.vrt' % stat
-            if stat in ['lastindex', 'firstindex']:
+            if stat in ['lastindex', 'firstindex', 'medianindex']:
                 vrt_fn = os.path.splitext(vrt_fn)[0]+'_ts.vrt'
         cmd = ['gdalbuildvrt', vrt_fn] 
         vrt_fn_list = []
