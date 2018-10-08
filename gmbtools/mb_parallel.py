@@ -5,6 +5,7 @@ Compute dh/dt and mass balance for input DEMs and glacier polygons
 
 """
 Todo:
+GDAL_MAX_DATASET_POOL_SIZE - set to large number of open datasets in vrt
 Better error estimates - use buffered dz/dt and semivariogram
 Filling gaps using 1) dz/dt obs 2) setting to 0 around polygon margins
 Curves for PRISM T an precip vs. mb
@@ -104,6 +105,20 @@ class GlacFeat:
         self.perc_clean = np.nan 
         self.perc_debris = np.nan 
         self.perc_pond = np.nan 
+
+        #These are PRISM (or other reanalysis products)
+        self.ppt_annual = None
+        self.tmean_annual = None
+        self.ppt_summer = None
+        self.ppt_winter = None
+        self.tmean_summer = None
+        self.tmean_winter = None
+        self.ppt_annual_mean = np.nan
+        self.tmean_annual_mean = np.nan
+        self.ppt_summer_mean = np.nan
+        self.ppt_winter_mean = np.nan
+        self.tmean_summer_mean = np.nan
+        self.tmean_winter_mean = np.nan
 
     def geom_attributes(self, srs=None):
         if srs is not None:
@@ -402,10 +417,12 @@ setup['site'] = site
 #site='other'
 
 #Filter glacier poly - let's stick with big glaciers for now
-#min_glac_area = 0.1 #km^2
-min_glac_area = 1. #km^2
+min_glac_area = 0.1 #km^2
+#min_glac_area = 1. #km^2
 #Minimum percentage of glacier poly covered by valid dz
 min_valid_area_perc = 0.80
+#Process thickness, velocity, etc
+extra_layers = False
 #Write out DEMs and dz map
 writeout = True 
 #Generate figures
@@ -421,7 +438,7 @@ verbose = False
 nproc = iolib.cpu_count(logical=False) - 1
 #nproc = 12
 #Shortcut to use existing glacfeat_list.p if found
-use_existing_glacfeat = True 
+use_existing_glacfeat = False
 
 #Surface to column average velocity scaling
 v_col_f = 0.8
@@ -590,6 +607,7 @@ elif site == 'hma':
     z2_srtm_penetration_corr = True
     """
 
+    """
     #SRTM
     #z1_fn = os.path.join(topdir,'rpcdem/hma/nasadem/srtmOnly/20000211_hma_nasadem_hgt_lt5m_err.vrt')
     #z1_fn = os.path.join(topdir,'rpcdem/hma/nasadem/srtmOnly/20000211_hma_nasadem_hgt.vrt')
@@ -600,15 +618,18 @@ elif site == 'hma':
     z1_date = 2000.112
     z1_sigma = 4.0
     z1_srtm_penetration_corr = True
-    
     """
-    #ASTER interap 2000
-    z1_fn = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_2000-2018_aea_stack/aster_align_index_2000-2018_aea_mos_20000211.vrt'
+
+    #ASTER interp 2000
+    #2000-2018
+    #z1_fn = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_2000-2018_aea_stack/aster_align_index_2000-2018_aea_mos_20000531.vrt'
+    #2000-2009
+    z1_fn = '/nobackup/deshean/hma/aster/dsm/aster_align_index_2000-2009_aea_stack/aster_align_index_2000-2009_aea_mos_20000531.tif'
     z1_date = 2000.412
     z1_sigma = 4.0
     z1_srtm_penetration_corr = False
-    """
 
+    """
     #Second DEM Source (WV mosaic)
     #z2_fn = '/nobackup/deshean/hma/hma1_2016dec22/hma_8m_tile/hma_8m.vrt'
     #z2_fn = os.path.join(topdir,'hma/hma1_2016dec22/hma_8m_tile/hma_8m.vrt')
@@ -625,33 +646,35 @@ elif site == 'hma':
     #z2_date = 2015.0
     z2_date_fn = os.path.join(topdir,'hma/dem_coreg/mos/%s/hma_mos_8m/hma_mos_8m_lastindex_ts.vrt' % mosdir)
     z2_sigma = 1.0
-
     """
     #ASTER interp 2009 
-    z2_fn = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_aea_stack/20090531_mos.vrt'
+    #2000-2009
+    z2_fn = '/nobackup/deshean/hma/aster/dsm/aster_align_index_2000-2009_aea_stack/aster_align_index_2000-2009_aea_mos_20090531.tif'
     z2_date = 2009.412
     z2_sigma = 4.0
     z2_srtm_penetration_corr = False
     """
-
-    """
     #ASTER interp 2009 
-    z1_fn = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_aea_stack/20090531_mos.vrt'
+    #2009-2018
+    z1_fn = '/nobackup/deshean/hma/aster/dsm/aster_align_index_2009-2018_aea_stack/aster_align_index_2009-2018_aea_mos_20090531.tif'
     z1_date = 2009.412
     z1_sigma = 4.0
     z1_srtm_penetration_corr = False
     """
-
     """
     #ASTER interp 2018
-    z2_fn = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_2000-2018_aea_stack/aster_align_index_2000-2018_aea_mos_20180531.vrt'
+    #2000-2018
+    #z2_fn = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_2000-2018_aea_stack/aster_align_index_2000-2018_aea_mos_20180531.tif'
+    #2009-2018
+    z2_fn = '/nobackup/deshean/hma/aster/dsm/aster_align_index_2009-2018_aea_stack/aster_align_index_2009-2018_aea_mos_20180531.tif'
     z2_date = 2018.412
     z2_sigma = 4.0
     z2_srtm_penetration_corr = False
     """
 
     #Output directory
-    outdir = os.path.join(topdir,'hma/dem_coreg/mos/%s/mb_last' % mosdir)
+    #outdir = os.path.join(topdir,'hma/dem_coreg/mos/%s/mb_last' % mosdir)
+    outdir = os.path.join(os.path.split(z2_fn)[0], 'mb')
     #outdir = '/nobackup/deshean/hma/aster/dsm/aster_align_index_2000-2018_aea_stack/mb'
     #outdir = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_2000-2009_aea_stack/mb'
     #outdir = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_aea_stack/mb'
@@ -662,7 +685,7 @@ elif site == 'hma':
     aea_srs = geolib.hma_aea_srs
 
     #Only write out for larger glaciers
-    min_glac_area_writeout = 1.0
+    min_glac_area_writeout = 5.0
 
     #Surface velocity
     #Note: had to force srs on Amaury's original products 
@@ -709,13 +732,15 @@ else:
     sys.exit('Unrecognized glacier shp filename')
 
 #Set up output header
-out_header = '%s,x,y,z_med,z_p16,z_p84,z_slope,z_aspect,mb_mwea,mb_mwea_sigma,area_m2,mb_m3wea,mb_m3wea_sigma,t1,t2,dt,H_m' % glacnum_fieldname
-if site == 'conus':
-    out_header += ',ppt_a,tmean_a'
-    out_header += ',ppt_s,ppt_w,tmean_s,tmean_w'
-if site == 'hma':
-    out_header += ',debris_m,perc_debris,perc_pond,perc_clean'
-    out_header += ',vm_ma'
+out_header = '%s,x,y,z_med,z_p16,z_p84,z_slope,z_aspect,mb_mwea,mb_mwea_sigma,area_m2,mb_m3wea,mb_m3wea_sigma,t1,t2,dt' % glacnum_fieldname
+if extra_layers:
+    out_header += ',H_m'
+    if site == 'conus':
+        out_header += ',ppt_a,tmean_a'
+        out_header += ',ppt_s,ppt_w,tmean_s,tmean_w'
+    if site == 'hma':
+        out_header += ',debris_m,perc_debris,perc_pond,perc_clean'
+        out_header += ',vm_ma'
 
 #nf = out.shape[1] 
 nf = len(out_header.split(','))
@@ -792,37 +817,38 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
         fn_dict['z1'] = z1_fn
         fn_dict['z2'] = z2_fn
 
-        #Attempt to load Huss ice thickness grid
-        huss_dir = '/nobackup/deshean/data/huss/'
-        ice_thick_fn = os.path.join(huss_dir, 'RGI%02i_thick/thickness/thick_%05i.agr' % \
-                tuple(map(int, gf.glacnum.split('.'))))
-        if os.path.exists(ice_thick_fn):
-            fn_dict['ice_thick'] = ice_thick_fn
+        if extra_layers:
+            #Attempt to load Huss ice thickness grid
+            huss_dir = os.path.join(topdir, 'data/huss')
+            ice_thick_fn = os.path.join(huss_dir, 'RGI%02i_thick/thickness/thick_%05i.agr' % \
+                    tuple(map(int, gf.glacnum.split('.'))))
+            if os.path.exists(ice_thick_fn):
+                fn_dict['ice_thick'] = ice_thick_fn
 
-        if site == 'conus':
-            #Add prism datasets
-            fn_dict['ppt_annual'] = prism_ppt_annual_fn
-            fn_dict['tmean_annual'] = prism_tmean_annual_fn
-            fn_dict['ppt_summer'] = prism_ppt_summer_fn
-            fn_dict['ppt_winter'] = prism_ppt_winter_fn
-            fn_dict['tmean_summer'] = prism_tmean_summer_fn
-            fn_dict['tmean_winter'] = prism_tmean_winter_fn
-        elif site == 'hma':
-            #Add debris cover datasets
-            #Should tar this up, and extract only necessary file
-            #Downloaded from: http://mountainhydrology.org/data-nature-2017/
-            kra_nature_dir = '/nobackup/deshean/data/Kraaijenbrink_hma/regions/out'
-            #This assumes that numbers are identical between RGI50 and RGI60
-            debris_class_fn = os.path.join(kra_nature_dir, 'RGI50-%s/classification.tif' % gf.glacnum)
-            debris_thick_fn = os.path.join(kra_nature_dir, 'RGI50-%s/debris-thickness-50cm.tif' % gf.glacnum)
-            #ice_thick_fn = os.path.join(kra_nature_dir, 'RGI50-%s/ice-thickness.tif' % gf.glacnum)
-            if os.path.exists(debris_class_fn):
-                fn_dict['debris_class'] = debris_class_fn
-            if os.path.exists(debris_thick_fn):
-                fn_dict['debris_thick'] = debris_thick_fn
-            if os.path.exists(vx_fn):
-                fn_dict['vx'] = vx_fn 
-                fn_dict['vy'] = vy_fn 
+            if site == 'conus':
+                #Add prism datasets
+                fn_dict['ppt_annual'] = prism_ppt_annual_fn
+                fn_dict['tmean_annual'] = prism_tmean_annual_fn
+                fn_dict['ppt_summer'] = prism_ppt_summer_fn
+                fn_dict['ppt_winter'] = prism_ppt_winter_fn
+                fn_dict['tmean_summer'] = prism_tmean_summer_fn
+                fn_dict['tmean_winter'] = prism_tmean_winter_fn
+            elif site == 'hma':
+                #Add debris cover datasets
+                #Should tar these up, and extract only necessary file
+                #Downloaded from: http://mountainhydrology.org/data-nature-2017/
+                kra_nature_dir = '/nobackup/deshean/data/Kraaijenbrink_hma/regions/out'
+                #This assumes that numbers are identical between RGI50 and RGI60
+                debris_class_fn = os.path.join(kra_nature_dir, 'RGI50-%s/classification.tif' % gf.glacnum)
+                debris_thick_fn = os.path.join(kra_nature_dir, 'RGI50-%s/debris-thickness-50cm.tif' % gf.glacnum)
+                #ice_thick_fn = os.path.join(kra_nature_dir, 'RGI50-%s/ice-thickness.tif' % gf.glacnum)
+                if os.path.exists(debris_class_fn):
+                    fn_dict['debris_class'] = debris_class_fn
+                if os.path.exists(debris_thick_fn):
+                    fn_dict['debris_thick'] = debris_thick_fn
+                if os.path.exists(vx_fn):
+                    fn_dict['vx'] = vx_fn 
+                    fn_dict['vy'] = vy_fn 
 
         if z1_date is None:
             #Rasterize source dates
@@ -846,7 +872,8 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
 
         #Warp everything to common res/extent/proj
         ds_list = warplib.memwarp_multi_fn(fn_dict.values(), res='min', \
-                extent=gf.glac_geom_extent, t_srs=aea_srs, verbose=verbose)
+                extent=gf.glac_geom_extent, t_srs=aea_srs, verbose=verbose, \
+                r='cubic')
 
         ds_dict = dict(zip(fn_dict.keys(), ds_list))
 
@@ -920,6 +947,7 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
         gf.z2_slope_stats = malib.get_stats(gf.z2_slope)
         z2_slope_med = gf.z2_slope_stats[5]
 
+        #Load timestamp array, if available
         if 'z1_date' in ds_dict:
             gf.t1 = iolib.ds_getma(ds_dict['z1_date'])
         else:
@@ -1019,54 +1047,54 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
                 gf.mb_mean, gf.mb_mean_sigma, gf.glac_area, gf.mb_mean_totalarea, gf.mb_mean_totalarea_sigma, \
                 gf.t1_mean, gf.t2_mean, gf.dt_mean]
 
-        if 'ice_thick' in ds_dict:
-            #Load ice thickness 
-            gf.H = np.ma.array(iolib.ds_getma(ds_dict['ice_thick']), mask=glac_geom_mask)
-            gf.H_mean = gf.H.mean()
-        outlist.append(gf.H_mean)
+        if extra_layers:
+            if 'ice_thick' in ds_dict:
+                #Load ice thickness 
+                gf.H = np.ma.array(iolib.ds_getma(ds_dict['ice_thick']), mask=glac_geom_mask)
+                gf.H_mean = gf.H.mean()
+            #These should be NaN or None
+            outlist.append(gf.H_mean)
 
-        if site == 'conus':
-            if 'ppt_annual' in ds_dict:
-                prism_ppt_annual = np.ma.array(iolib.ds_getma(ds_dict['ppt_annual']), mask=glac_geom_mask)/1000.
-                prism_ppt_annual_stats = malib.get_stats(prism_ppt_annual)
-                prism_ppt_annual_mean = prism_ppt_annual_stats[3]
-                #Need to be better about this
-                outlist.append(prism_ppt_annual_mean)
+            if site == 'conus':
+                if 'ppt_annual' in ds_dict:
+                    gf.ppt_annual = np.ma.array(iolib.ds_getma(ds_dict['ppt_annual']), mask=glac_geom_mask)/1000.
+                    gf.ppt_annual_stats = malib.get_stats(gf.ppt_annual)
+                    gf.ppt_annual_mean = gf.ppt_annual_stats[3]
+                outlist.append(gf.ppt_annual_mean)
 
-            if 'tmean_annual' in ds_dict:
-                prism_tmean_annual = np.ma.array(iolib.ds_getma(ds_dict['tmean_annual']), mask=glac_geom_mask)
-                prism_tmean_annual_stats = malib.get_stats(prism_tmean_annual)
-                prism_tmean_annual_mean = prism_tmean_annual_stats[3]
-                outlist.append(prism_tmean_annual_mean)
+                if 'tmean_annual' in ds_dict:
+                    gf.tmean_annual = np.ma.array(iolib.ds_getma(ds_dict['tmean_annual']), mask=glac_geom_mask)
+                    gf.tmean_annual_stats = malib.get_stats(gf.tmean_annual)
+                    gf.tmean_annual_mean = gf.tmean_annual_stats[3]
+                outlist.append(gf.tmean_annual_mean)
 
-            if 'ppt_summer' in ds_dict:
-                #This is mean monthly summer precip, need to multiply by nmonths to get cumulative
-                n_summer = 4
-                prism_ppt_summer = n_summer * np.ma.array(iolib.ds_getma(ds_dict['ppt_summer']), mask=glac_geom_mask)/1000.
-                prism_ppt_summer_stats = malib.get_stats(prism_ppt_summer)
-                prism_ppt_summer_mean = prism_ppt_summer_stats[3]
-                outlist.append(prism_ppt_summer_mean)
+                if 'ppt_summer' in ds_dict:
+                    #This is mean monthly summer precip, need to multiply by nmonths to get cumulative
+                    n_summer = 4
+                    gf.ppt_summer = n_summer * np.ma.array(iolib.ds_getma(ds_dict['ppt_summer']), mask=glac_geom_mask)/1000.
+                    gf.ppt_summer_stats = malib.get_stats(gf.ppt_summer)
+                    gf.ppt_summer_mean = gf.ppt_summer_stats[3]
+                outlist.append(gf.ppt_summer_mean)
 
-            if 'ppt_winter' in ds_dict:
-                n_winter = 8
-                prism_ppt_winter = n_winter * np.ma.array(iolib.ds_getma(ds_dict['ppt_winter']), mask=glac_geom_mask)/1000.
-                prism_ppt_winter_stats = malib.get_stats(prism_ppt_winter)
-                prism_ppt_winter_mean = prism_ppt_winter_stats[3]
-                outlist.append(prism_ppt_winter_mean)
+                if 'ppt_winter' in ds_dict:
+                    n_winter = 8
+                    gf.ppt_winter = n_winter * np.ma.array(iolib.ds_getma(ds_dict['ppt_winter']), mask=glac_geom_mask)/1000.
+                    gf.ppt_winter_stats = malib.get_stats(gf.ppt_winter)
+                    gf.ppt_winter_mean = gf.ppt_winter_stats[3]
+                outlist.append(gf.ppt_winter_mean)
 
-            if 'tmean_summer' in ds_dict:
-                prism_tmean_summer = np.ma.array(iolib.ds_getma(ds_dict['tmean_summer']), mask=glac_geom_mask)
-                prism_tmean_summer_stats = malib.get_stats(prism_tmean_summer)
-                prism_tmean_summer_mean = prism_tmean_summer_stats[3]
-                outlist.append(prism_tmean_summer_mean)
+                if 'tmean_summer' in ds_dict:
+                    gf.tmean_summer = np.ma.array(iolib.ds_getma(ds_dict['tmean_summer']), mask=glac_geom_mask)
+                    gf.tmean_summer_stats = malib.get_stats(gf.tmean_summer)
+                    gf.tmean_summer_mean = gf.tmean_summer_stats[3]
+                outlist.append(gf.tmean_summer_mean)
 
-            if 'tmean_winter' in ds_dict:
-                prism_tmean_winter = np.ma.array(iolib.ds_getma(ds_dict['tmean_winter']), mask=glac_geom_mask)
-                prism_tmean_winter_stats = malib.get_stats(prism_tmean_winter)
-                prism_tmean_winter_mean = prism_tmean_winter_stats[3]
-                outlist.append(prism_tmean_winter_mean)
+                if 'tmean_winter' in ds_dict:
+                    gf.tmean_winter = np.ma.array(iolib.ds_getma(ds_dict['tmean_winter']), mask=glac_geom_mask)
+                    gf.tmean_winter_stats = malib.get_stats(gf.tmean_winter)
+                    gf.tmean_winter_mean = gf.tmean_winter_stats[3]
+                outlist.append(gf.tmean_winter_mean)
 
-        if site == 'hma':
             if 'debris_thick' in ds_dict:
                 gf.debris_thick = np.ma.array(iolib.ds_getma(ds_dict['debris_thick']), mask=glac_geom_mask)
                 gf.debris_thick_mean = gf.debris_thick.mean()
@@ -1143,45 +1171,46 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
             #out_z1_date_fn = os.path.join(outdir, gf.feat_fn+'_ned_date.tif')
             #iolib.writeGTiff(z1_date, out_z1_date_fn, ds_dict['z1'])
 
-            if gf.H is not None:
-                temp_fn = os.path.join(outdir, gf.feat_fn+'_H.tif')
-                iolib.writeGTiff(gf.H, temp_fn, ds_dict['z1'])
+            if extra_layers:
+                if gf.ppt_annual is not None:
+                    temp_fn = os.path.join(outdir, gf.feat_fn+'_ppt_annual.tif')
+                    iolib.writeGTiff(gf.ppt_annual, temp_fn, ds_dict['z1'])
+                if gf.tmean_annual is not None:
+                    temp_fn = os.path.join(outdir, gf.feat_fn+'_tmean_annual.tif')
+                    iolib.writeGTiff(gf.tmean_annual, temp_fn, ds_dict['z1'])
+                if gf.ppt_summer is not None:
+                    temp_fn = os.path.join(outdir, gf.feat_fn+'_ppt_summer.tif')
+                    iolib.writeGTiff(gf.ppt_summer, temp_fn, ds_dict['z1'])
+                if gf.tmean_summer is not None:
+                    temp_fn = os.path.join(outdir, gf.feat_fn+'_tmean_summer.tif')
+                    iolib.writeGTiff(gf.tmean_summer, temp_fn, ds_dict['z1'])
+                if gf.ppt_winter is not None:
+                    temp_fn = os.path.join(outdir, gf.feat_fn+'_ppt_winter.tif')
+                    iolib.writeGTiff(gf.ppt_winter, temp_fn, ds_dict['z1'])
+                if gf.tmean_winter is not None:
+                    temp_fn = os.path.join(outdir, gf.feat_fn+'_tmean_winter.tif')
+                    iolib.writeGTiff(gf.tmean_winter, temp_fn, ds_dict['z1'])
 
-            if site == 'conus':
-                out_prism_ppt_annual_fn = os.path.join(outdir, gf.feat_fn+'_precip_annual.tif')
-                iolib.writeGTiff(prism_ppt_annual, out_prism_ppt_annual_fn, ds_dict['z1'])
-                out_prism_tmean_annual_fn = os.path.join(outdir, gf.feat_fn+'_tmean_annual.tif')
-                iolib.writeGTiff(prism_tmean_annual, out_prism_tmean_annual_fn, ds_dict['z1'])
+                if gf.debris_thick is not None:
+                    temp_fn = os.path.join(outdir, gf.feat_fn+'_debris_thick.tif')
+                    iolib.writeGTiff(gf.debris_thick, temp_fn, ds_dict['z1'])
+                if gf.debris_class is not None:
+                    temp_fn = os.path.join(outdir, gf.feat_fn+'_debris_class.tif')
+                    iolib.writeGTiff(gf.debris_class, temp_fn, ds_dict['z1'])
 
-                out_prism_ppt_summer_fn = os.path.join(outdir, gf.feat_fn+'_precip_summer.tif')
-                iolib.writeGTiff(prism_ppt_summer, out_prism_ppt_summer_fn, ds_dict['z1'])
-                out_prism_ppt_winter_fn = os.path.join(outdir, gf.feat_fn+'_precip_winter.tif')
-                iolib.writeGTiff(prism_ppt_winter, out_prism_ppt_winter_fn, ds_dict['z1'])
-
-                out_prism_tmean_summer_fn = os.path.join(outdir, gf.feat_fn+'_tmean_summer.tif')
-                iolib.writeGTiff(prism_tmean_summer, out_prism_tmean_summer_fn, ds_dict['z1'])
-                out_prism_tmean_winter_fn = os.path.join(outdir, gf.feat_fn+'_tmean_winter.tif')
-                iolib.writeGTiff(prism_tmean_winter, out_prism_tmean_winter_fn, ds_dict['z1'])
-
-            if gf.debris_thick is not None:
-                temp_fn = os.path.join(outdir, gf.feat_fn+'_debris_thick.tif')
-                iolib.writeGTiff(gf.debris_thick, temp_fn, ds_dict['z1'])
-
-            if gf.debris_class is not None:
-                temp_fn = os.path.join(outdir, gf.feat_fn+'_debris_class.tif')
-                iolib.writeGTiff(gf.debris_class, temp_fn, ds_dict['z1'])
-
-            if gf.vm is not None:
-                temp_fn = os.path.join(outdir, gf.feat_fn+'_vx.tif')
-                iolib.writeGTiff(gf.vx, temp_fn, ds_dict['z1'])
-                temp_fn = os.path.join(outdir, gf.feat_fn+'_vy.tif')
-                iolib.writeGTiff(gf.vy, temp_fn, ds_dict['z1'])
-                temp_fn = os.path.join(outdir, gf.feat_fn+'_vm.tif')
-                iolib.writeGTiff(gf.vm, temp_fn, ds_dict['z1'])
-
-            if gf.divQ is not None:
-                temp_fn = os.path.join(outdir, gf.feat_fn+'_divQ.tif')
-                iolib.writeGTiff(gf.divQ, temp_fn, ds_dict['z1'])
+                if gf.H is not None:
+                    temp_fn = os.path.join(outdir, gf.feat_fn+'_H.tif')
+                    iolib.writeGTiff(gf.H, temp_fn, ds_dict['z1'])
+                if gf.vm is not None:
+                    temp_fn = os.path.join(outdir, gf.feat_fn+'_vx.tif')
+                    iolib.writeGTiff(gf.vx, temp_fn, ds_dict['z1'])
+                    temp_fn = os.path.join(outdir, gf.feat_fn+'_vy.tif')
+                    iolib.writeGTiff(gf.vy, temp_fn, ds_dict['z1'])
+                    temp_fn = os.path.join(outdir, gf.feat_fn+'_vm.tif')
+                    iolib.writeGTiff(gf.vm, temp_fn, ds_dict['z1'])
+                if gf.divQ is not None:
+                    temp_fn = os.path.join(outdir, gf.feat_fn+'_divQ.tif')
+                    iolib.writeGTiff(gf.divQ, temp_fn, ds_dict['z1'])
 
         #Do AED for all
         #Compute mb using scaled AED vs. polygon
