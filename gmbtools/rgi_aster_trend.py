@@ -28,6 +28,8 @@ import sys
 from osgeo import ogr
 from pygeotools.lib import geolib, warplib, malib
 
+#Add proper argument parsing
+
 #aster_index_fn = os.path.join(asterdir, 'aster_align_index_aea.shp')
 aster_index_fn = sys.argv[1]
 
@@ -36,9 +38,18 @@ aster_index_fn = sys.argv[1]
 min_glac_area = sys.argv[2]
 max_glac_area = sys.argv[3]
 
+#Buffer this distance (m) around RGI polygon for stats
+buffer_m = 1000
+
+#Use 2 threads for the polygons with smaller area
+if min_glac_area >= 2.0: 
+    n_threads = 14 
+else:
+    n_threads = 2 
+
 #Most DEMs are 32 m
 #res='max'
-res=32
+res=30
 
 #Minimum number of samples
 min_aster_count = 5
@@ -110,7 +121,9 @@ for n, feat in enumerate(glac_shp_lyr):
     print(n, feat_fn)
     glac_geom = geolib.geom_dup(feat.GetGeometryRef())
     #Should buffer by ~1 km here, preserve surrounding pixels for uncertainty analysis
+    glac_geom = glac_geom.Buffer(buffer_m)
     glac_geom_extent = geolib.geom_extent(glac_geom)
+    #glac_geom_extent = geolib.pad_extent(glac_geom_extent, width=1000)
 
     #Spatial filter
     aster_index_lyr.SetSpatialFilter(glac_geom)
@@ -132,9 +145,10 @@ for n, feat in enumerate(glac_shp_lyr):
         stack_fn='%s_%s.npz' % (feat_fn[0:8], os.path.split(stackdir)[-1])
 
         #Create file with commands to make stacks
-        #Run later with GNU parallel `parallel < aster_stack_cmd.sh`
-        cmd='make_stack.py -outdir %s -stack_fn %s -tr %s -te "%s" -t_srs "%s" --med --trend --robust -min_n %i -min_dt_ptp %f %s \n' % \
-                (outdir, os.path.join(outdir, stack_fn), res, ' '.join(str(i) for i in glac_geom_extent), \
+        #Run this output file with GNU parallel `parallel < aster_stack_cmd.sh`
+        #For glaciers with smaller areas, use -j 28; For glaciers with larger areas, use -j 4
+        cmd='make_stack.py -n_cpu %i -outdir %s -stack_fn %s -tr %s -te "%s" -t_srs "%s" --med --trend --robust -min_n %i -min_dt_ptp %f %s \n' % \
+                (n_threads, outdir, os.path.join(outdir, stack_fn), res, ' '.join(str(i) for i in glac_geom_extent), \
                 aster_index_srs.ExportToProj4(), min_aster_count, min_dt_ptp, ' '.join(fn_list))
         f.write(cmd)
 
