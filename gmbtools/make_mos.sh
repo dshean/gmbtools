@@ -3,8 +3,7 @@
 set -e
 
 #If interrupted
-#for i in *lastindex.tif; do
-#if [ ! -e $i-log-dem_mosaic*txt ] ; then rm ${i}*; fi ; done
+#for i in *.tif; do if ! ls ${i}-log-dem_mosaic*txt 1> /dev/null 2>&1 ; then rm -v ${i}*; else if ! grep -q 'Number of valid' $(ls -t ${i}-log-dem_mosaic*txt | head -1); then rm -v ${i}* ; fi ; fi ; done
 
 #pbs_rfe --duration 0+6 --model bro
 #qsub -I -q devel -lselect=1:model=bro,walltime=2:00:00
@@ -29,8 +28,10 @@ trans=false
 
 #Output mosaic res
 #res=2
-res=8
+#res=8
 #res=32
+#ASTER
+res=30
 
 #If res is better than 32, make lowres products for faster browsing
 lowres=100
@@ -56,18 +57,21 @@ stripindex=false
 tileindex=false
 
 #Exclude Quickbird-2
-noQB=true
+noQB=false
 
 #Default computes union from input DEMs
 extent='union'
 
 #Hardcoded sitename, projection and extent (performance improvement)
-#site=hma
-#proj='+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
+site=hma
+proj='+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
+#WV/GE extent
 #extent='-1553632.99074 -1030104.4196 1727255.00926 1268847.5804'
-site=conus
-proj='+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
-extent='-684633.544035 -694442.824668 824774.455965 804533.175332'
+#ASTER extent
+extent='-1604981.73315 -1094260.0 1847978.26685 1161996.0'
+#site=conus
+#proj='+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
+#extent='-684633.544035 -694442.824668 824774.455965 804533.175332'
 #site=fuego
 #proj='EPSG:32615'
 
@@ -83,8 +87,10 @@ ncpu=$(cat /proc/cpuinfo | egrep "core id|physical id" | tr -d "\n" | sed s/phys
 #If res is 32, use all virtual cores
 #ncpu=$(python -c 'import multiprocessing as mp; print(mp.cpu_count())')
 threads=$((ncpu-1))
+threads=16
 
 ts=`date +%Y%m%d`
+#ts=20181003
 
 #Should add option to split annually
 echo "Identifying input DEMs"
@@ -102,7 +108,8 @@ else
     #Exclude 2008/2009 data
     #re='201[0-9]'
     #Include all
-    re='20[0-9]'
+    #re='20[0-9]'
+    re=''
 fi
     
 if $summer ; then
@@ -128,10 +135,9 @@ fi
 #ext="-DEM_${res}m_dem_align"
 #ext="-DEM_${res}m_dzfilt_-200_200"
 #WV/GE dem_align
-ext="-DEM_${res}m_dzfilt_-200_200_*align"
-
+#ext="-DEM_${res}m_dzfilt_-200_200_*align"
 #ASTER
-#ext="_align_dzfilt_-100_100"
+ext="_align_dzfilt_-100_100"
 
 echo $re
 echo $ext
@@ -141,10 +147,10 @@ echo $mos_ext
 #HMA alongtrack/crosstrack
 #list=$(ls *track/*00/dem*/${re}*${ext}.tif)
 #WV/GE dem_align
-list=$(ls *align/${re}*${ext}.tif)
+#list=$(ls *align/${re}*${ext}.tif)
 
 #ASTER
-#list=$(ls 2*/*cr_dem_align/*${re}*${ext}.tif)
+list=$(ls 2*/*cr_dem_align/*${re}*${ext}.tif)
 echo $list | wc -w
 
 if $noQB ; then
