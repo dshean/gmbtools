@@ -215,7 +215,11 @@ echo $statlist_todo
 if [[ ! -z "${statlist_todo// }" ]] ; then
     #Run dem_mosaic_validtiles for all stats
     #Define common dem_mosaic_validtiles arguments
-    mos_arg="--threads $threads --tr $res --t_srs \"$proj\" --t_projwin \"$extent\" --georef_tile_size=$tilesize -o $out $list"
+    #mos_arg="--threads $threads --tr $res --t_srs \"$proj\" --t_projwin \"$extent\" --georef_tile_size=$tilesize -o $out $list"
+    mos_arg="--threads $threads --tr $res --t_srs \"$proj\" --t_projwin \"$extent\" --georef_tile_size=$tilesize -o $out ${out}_input_DEM_list.txt"
+    echo
+    echo eval $mos --stat $statlist_todo $mos_arg
+    echo
     eval $mos --stat $statlist_todo $mos_arg
 fi
 
