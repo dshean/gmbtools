@@ -15,7 +15,7 @@ import pickle
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 
-from osgeo import gdal, ogr
+from osgeo import gdal, ogr, osr
 
 from pygeotools.lib import geolib, warplib, iolib
 
@@ -74,37 +74,11 @@ def main():
 
     #Sort?
 
-    print("Loading input datasets")
-    print("Note: this could take several minutes depending on number of inputs and I/O performance")
-    ds_list = []
-    for n, fn in enumerate(fn_list):
-        if (n % 100 == 0):
-            print('%i of %i done' % (n, len(fn_list)))
-        ds_list.append(gdal.Open(fn))
-
-    #Mosaic t_srs
-    print("\nParsing t_srs")
-    t_srs = warplib.parse_srs(args.t_srs, ds_list)
-    print(t_srs.ExportToProj4())
-
-    #Mosaic res
-    print("\nParsing tr")
-    tr = warplib.parse_res(args.tr, ds_list, t_srs=t_srs) 
-    print(tr)
-
-    #Mosaic extent 
-    #xmin, ymin, xmax, ymax
-    print("Determining t_projwin (bounding box for inputs)")
-    t_projwin = warplib.parse_extent(args.t_projwin, ds_list, t_srs=t_srs) 
-    print(t_projwin)
-    #This could trim off some fraction of a pixel around margins
-    t_projwin = geolib.extent_round(t_projwin, tr)
-    mos_xmin, mos_ymin, mos_xmax, mos_ymax = t_projwin
-
     #Create output directory
     o = args.o
     if o is None:
-        o = 'mos_%im/mos' % tr
+        #o = 'mos_%im/mos' % tr
+        o = 'mos/mos' % tr
     odir = os.path.dirname(o)
     #If dirname is empty, use prefix for new directory
     if not odir:
@@ -116,9 +90,42 @@ def main():
 
     out_pickle_fn = o+'_tile_dict.pkl'
     if os.path.exists(out_pickle_fn):
-        with open(out_pickle_fn, 'wb') as f:
+        print("Loading existing tile dictionary")
+        with open(out_pickle_fn, 'rb') as f:
             tile_dict = pickle.load(f)
+        dummy = list(tile_dict.values())[0]
+        tr = dummy['tr']
+        t_srs = osr.SpatialReference()
+        t_srs.ImportFromProj4(dummy['t_srs'])
+        t_projwin = dummy['t_projwin']
     else:
+        print("Loading input datasets")
+        print("Note: this could take several minutes depending on number of inputs and I/O performance")
+        ds_list = []
+        for n, fn in enumerate(fn_list):
+            if (n % 100 == 0):
+                print('%i of %i done' % (n, len(fn_list)))
+            ds_list.append(gdal.Open(fn))
+
+        #Mosaic t_srs
+        print("\nParsing t_srs")
+        t_srs = warplib.parse_srs(args.t_srs, ds_list)
+        print(t_srs.ExportToProj4())
+
+        #Mosaic res
+        print("\nParsing tr")
+        tr = warplib.parse_res(args.tr, ds_list, t_srs=t_srs) 
+        print(tr)
+
+        #Mosaic extent 
+        #xmin, ymin, xmax, ymax
+        print("Determining t_projwin (bounding box for inputs)")
+        t_projwin = warplib.parse_extent(args.t_projwin, ds_list, t_srs=t_srs) 
+        print(t_projwin)
+        #This could trim off some fraction of a pixel around margins
+        t_projwin = geolib.extent_round(t_projwin, tr)
+        mos_xmin, mos_ymin, mos_xmax, mos_ymax = t_projwin
+
         #Compute extent geom for all input datsets
         print("Computing extent geom for all input datasets")
         input_geom_dict = OrderedDict()
@@ -161,8 +168,12 @@ def main():
                 tile_dict[tilenum] = {}
                 tile_dict[tilenum]['geom'] = tile_geom
                 tile_dict[tilenum]['extent'] = [tile_xmin, tile_ymin, tile_xmax, tile_ymax]
+
+                #Add additional parameters that can be loaded at a later time without reprocessing all input datasets
                 tile_dict[tilenum]['tr'] = tr
-                tile_dict[tilenum]['t_srs'] = t_srs 
+                tile_dict[tilenum]['t_srs'] = t_srs.ExportToProj4() 
+                #This is full extent, but preserve here
+                tile_dict[tilenum]['t_projwin'] = t_projwin
 
         print("Computing valid intersections between input dataset geom and tile geom")
         for tilenum in sorted(tile_dict.keys()):
@@ -187,7 +198,6 @@ def main():
         print("%i valid output tiles" % len(out_tile_list))
         out_tile_list.sort()
         out_tile_list = list(set(out_tile_list))
-        ni = max([len(str(i)) for i in out_tile_list])
         out_tile_list_str = ' '.join(map(str, out_tile_list))
         print(out_tile_list_str)
 
@@ -205,6 +215,8 @@ def main():
     #Do tiles with smallest file count first
     #tile_dict = OrderedDict(sorted(tile_dict.items(), key=lambda item: len(item[1]['fn_list']), reverse=False))
     out_tile_list = tile_dict.keys()
+    #Number of integers to use for tile number
+    ni = max([len(str(i)) for i in out_tile_list])
 
     cmd_list = []
     out_cmd_fn = o+'_cmd.sh'
@@ -231,12 +243,13 @@ def main():
     import socket
     if 'nasa' in socket.getfqdn():
         #print("lfs setstripe -c 64 %s" % o)
-        cmd = ['lfs', 'setstripe', '-c', 64, o]
-        print(''.join(str(i) for i in cmd))
+        cmd = ['lfs', 'setstripe', '-c', '64', o]
+        print(' '.join(str(i) for i in cmd))
         subprocess.call(cmd)
-        cmd = ['qsub', '-v', 'cmdfn=%s' % out_cmd_fn, '~/src/pbs_scripts/dem_mosaic_parallel.pbs']
-        print(''.join(str(i) for i in cmd))
+        cmd = ['qsub', '-v', 'cmd_fn=%s' % out_cmd_fn, '/home1/deshean/src/pbs_scripts/dem_mosaic_parallel.pbs']
+        print(' '.join(str(i) for i in cmd))
         subprocess.call(cmd)
+        import ipdb; ipdb.set_trace()
         #print("qsub -v cmd_fn=%s ~/src/pbs_scripts/dem_mosaic_parallel.pbs" % out_cmd_fn)
         #Need to wait, maybe while qstat
     else:
@@ -257,14 +270,16 @@ def main():
         print("\nMosaic type: %s" % stat)
         #Convert dem_mosaic index files to timestamp arrays
         if stat in ['lastindex', 'firstindex', 'medianindex']:
-            print("Running dem_mosaic_index_ts in parallel with %i threads" % threads)
-            from multiprocessing import Pool
-            pool = Pool(processes=threads)
-            results = pool.map(make_dem_mosaic_index_ts, tile_fn_list)
-            pool.close()
-            #results.wait()
-            #Update filenames
+            #Update filenames with ts.tif extension
             tile_fn_list = [os.path.splitext(tile_fn)[0]+'_ts.tif' for tile_fn in tile_fn_list]
+            tile_fn_list_torun = [tile_fn if not os.path.exists(tile_fn) for tile_fn in tile_fn_list]
+            if tile_fn_list_torun:
+                print("Running dem_mosaic_index_ts in parallel with %i threads" % threads)
+                from multiprocessing import Pool
+                pool = Pool(processes=threads)
+                results = pool.map(make_dem_mosaic_index_ts, tile_fn_list_torun)
+                pool.close()
+                #results.wait()
 
         print("\nCreating vrt of valid tiles")
         #tile_fn_list = glob.glob(o+'-tile-*.tif')
