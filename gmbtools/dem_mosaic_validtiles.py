@@ -251,7 +251,7 @@ def main():
         subprocess.call(cmd)
         import ipdb; ipdb.set_trace()
         #print("qsub -v cmd_fn=%s ~/src/pbs_scripts/dem_mosaic_parallel.pbs" % out_cmd_fn)
-        #Need to wait, maybe while qstat
+        #Need to wait for job to finish, could get job id, then while qstat
     else:
         with ThreadPoolExecutor(max_workers=threads) as executor:
             print("Running dem_mosaic in parallel with %i threads" % threads)
@@ -272,7 +272,7 @@ def main():
         if stat in ['lastindex', 'firstindex', 'medianindex']:
             #Update filenames with ts.tif extension
             tile_fn_list = [os.path.splitext(tile_fn)[0]+'_ts.tif' for tile_fn in tile_fn_list]
-            tile_fn_list_torun = [tile_fn if not os.path.exists(tile_fn) for tile_fn in tile_fn_list]
+            tile_fn_list_torun = [tile_fn for tile_fn in tile_fn_list if not os.path.exists(tile_fn)]
             if tile_fn_list_torun:
                 print("Running dem_mosaic_index_ts in parallel with %i threads" % threads)
                 from multiprocessing import Pool
