@@ -220,6 +220,7 @@ def main():
 
     cmd_list = []
     out_cmd_fn = o+'_cmd.sh'
+    print("Creating text file of commands")
     with open(out_cmd_fn, 'w') as f_cmd:
         for n, tile in enumerate(out_tile_list):
             #print('%i of %i tiles: %i' % (n+1, len(out_tile_list), tile))
@@ -242,8 +243,8 @@ def main():
     #Hack with GNU parallel right now
     import socket
     if 'nasa' in socket.getfqdn():
-        #print("lfs setstripe -c 64 %s" % o)
-        cmd = ['lfs', 'setstripe', '-c', '64', o]
+        #This should already be set
+        #cmd = ['lfs', 'setstripe', '-c', '64', o]
         print(' '.join(str(i) for i in cmd))
         subprocess.call(cmd)
         cmd = ['qsub', '-v', 'cmd_fn=%s' % out_cmd_fn, '/home1/deshean/src/pbs_scripts/dem_mosaic_parallel.pbs']
