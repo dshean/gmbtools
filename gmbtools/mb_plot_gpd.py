@@ -33,7 +33,12 @@ min_area_m2 = 1E6
 outlier_removal = True
 outlier_perc = (0.001, 0.999)
 
+#Ocean area
+#3.625×108 km2 (Cogley et al., 2011)
+Gt2mm = 362.5
+
 plot = False
+map_plots = False
 
 #Default mb clim
 mb_clim = (-1.0, 1.0)
@@ -127,7 +132,7 @@ def aggregate(glac_df, glac_df_mb, agg_df, col):
     glac_df_mb_agg[('meltwater', 'count')] = glac_df_mb_agg_meltwater[('mb_mwea', 'size')].astype('int64') 
     glac_df_mb_agg[('meltwater', 'total_m3a')] = glac_df_mb_agg_meltwater[('mb_m3wea', 'sum')]
     glac_df_mb_agg[('meltwater', 'total_Gta')] = glac_df_mb_agg[('meltwater', 'total_m3a')]/1E9 
-    glac_df_mb_agg[('meltwater', 'total_mmSLEa')] = glac_df_mb_agg[('meltwater', 'total_Gta')]/374
+    glac_df_mb_agg[('meltwater', 'total_mmSLEa')] = glac_df_mb_agg[('meltwater', 'total_Gta')]/Gt2mm
     glac_df_mb_agg[('meltwater_cum', 'total_m3')] = glac_df_mb_agg[('meltwater', 'total_m3a')] * glac_df_mb_agg[('dt', 'mean')] 
     glac_df_mb_agg[('meltwater_cum', 'total_Gt')] = glac_df_mb_agg[('meltwater', 'total_Gta')] * glac_df_mb_agg[('dt', 'mean')] 
     glac_df_mb_agg[('meltwater_cum', 'total_mmSLE')] = glac_df_mb_agg[('meltwater', 'total_Gta')] * glac_df_mb_agg[('dt', 'mean')] 
@@ -474,8 +479,11 @@ out_fn = os.path.splitext(glac_shp_join_fn)[0]+'__%s_region_summary.pkl' % dt_st
 region_summary.to_pickle(out_fn)
 
 print("\nBasins")
-print(glac_df_mb_basin[[('meltwater', 'count'),('meltwater', 'total_m3a'),('meltwater', 'total_Gta'),('meltwater', 'total_mmSLEa')]].to_string())
+basin_summary = glac_df_mb_basin[[('meltwater', 'count'),('meltwater', 'total_m3a'),('meltwater', 'total_Gta'),('meltwater', 'total_mmSLEa')]]
+print(basin_summary.to_string())
 print(glac_df_mb_basin[[('meltwater', 'total_Gta'),('meltwater', 'total_mmSLEa')]].sum())
+out_fn = os.path.splitext(glac_shp_join_fn)[0]+'__%s_basin_summary.pkl' % dt_str
+basin_summary.to_pickle(out_fn)
 
 print("\nExorheic Basins (SLR contribution)")
 print(glac_df_mb_basin_exo[[('meltwater', 'count'),('meltwater', 'total_m3a'),('meltwater', 'total_Gta'),('meltwater', 'total_mmSLEa')]].to_string())
@@ -521,83 +529,84 @@ header = ('n_glaciers','mb_mwea_mean','mb_mwea_std','obs_glacier_area_km2','mb_G
 mascon_csv_fn = os.path.splitext(glac_shp_join_fn)[0]+'_mascon.csv'
 mascon_df_out.to_csv(mascon_csv_fn, float_format='%0.2f',header=header)
 
-if basin_shp_fn is not None:
-    basin_melt_gt_clim = (-5, 0)
-    basin_fig_fn = os.path.splitext(glac_shp_join_fn)[0]+'_basin_excess_Gt_fig.png'
-    print("Generating figure: %s" % basin_fig_fn)
-    if basin_col == 'HYBAS_ID':
-        title = suptitle + ": HydroBASINS level 4" 
-    else:
-        title = suptitle + ": Excess meltwater runoff from Glacier Mass Loss"
-    #minx, miny, maxx, maxy
-    basin_extent = [-2396534,-2619071, 3273634,2008000]
-    #basin_extent = basin_df.total_bounds
-    basin_fig = make_map(col=('meltwater', 'total_Gta'), mb_dissolve_df=glac_df_mb_basin, glac_df_mb=glac_df_mb, agg_df=basin_df, border_df=border_df, clim=basin_melt_gt_clim, crs=crs, extent=basin_extent, labels='name+val', title=title)
-    #basin_fig = make_map(col=('mb_Gta', 'sum'), mb_dissolve_df=glac_df_mb_basin, glac_df_mb=glac_df_mb, agg_df=basin_df, border_df=border_df, clim=None, crs=crs, extent=extent, labels='val', title=title)
-    print("Saving figure: %s" % basin_fig_fn)
-    #basin_fig.savefig(basin_fig_fn, dpi=300, bbox_inches='tight', pad_inches=0) 
-    basin_fig.savefig(basin_fig_fn, dpi=300, pad_inches=0) 
+if map_plots:
+    if basin_shp_fn is not None:
+        basin_melt_gt_clim = (-5, 0)
+        basin_fig_fn = os.path.splitext(glac_shp_join_fn)[0]+'_basin_excess_Gt_fig.png'
+        print("Generating figure: %s" % basin_fig_fn)
+        if basin_col == 'HYBAS_ID':
+            title = suptitle + ": HydroBASINS level 4" 
+        else:
+            title = suptitle + ": Excess meltwater runoff from Glacier Mass Loss"
+        #minx, miny, maxx, maxy
+        basin_extent = [-2396534,-2619071, 3273634,2008000]
+        #basin_extent = basin_df.total_bounds
+        basin_fig = make_map(col=('meltwater', 'total_Gta'), mb_dissolve_df=glac_df_mb_basin, glac_df_mb=glac_df_mb, agg_df=basin_df, border_df=border_df, clim=basin_melt_gt_clim, crs=crs, extent=basin_extent, labels='name+val', title=title)
+        #basin_fig = make_map(col=('mb_Gta', 'sum'), mb_dissolve_df=glac_df_mb_basin, glac_df_mb=glac_df_mb, agg_df=basin_df, border_df=border_df, clim=None, crs=crs, extent=extent, labels='val', title=title)
+        print("Saving figure: %s" % basin_fig_fn)
+        #basin_fig.savefig(basin_fig_fn, dpi=300, bbox_inches='tight', pad_inches=0) 
+        basin_fig.savefig(basin_fig_fn, dpi=300, pad_inches=0) 
 
-if basin_shp_fn is not None:
-    basin_mb_clim = (-0.5, 0.5)
-    basin_fig_fn = os.path.splitext(glac_shp_join_fn)[0]+'_basin_mwe_fig.png'
-    print("Generating figure: %s" % basin_fig_fn)
-    if basin_col == 'HYBAS_ID':
-        title = suptitle + ": HydroBASINS level 4" 
-    else:
-        title = suptitle + ": Basins"
-    #minx, miny, maxx, maxy
-    basin_extent = [-2396534,-2619071, 3273634,2008000]
-    basin_fig = make_map(col=('mb_mwea', 'mean'), mb_dissolve_df=glac_df_mb_basin, glac_df_mb=glac_df_mb, agg_df=basin_df, border_df=border_df, clim=basin_mb_clim, crs=crs, extent=basin_extent, labels='name+val', title=title)
-    print("Saving figure: %s" % basin_fig_fn)
-    #basin_fig.savefig(basin_fig_fn, dpi=300, bbox_inches='tight', pad_inches=0) 
-    basin_fig.savefig(basin_fig_fn, dpi=300, pad_inches=0) 
+    if basin_shp_fn is not None:
+        basin_mb_clim = (-0.5, 0.5)
+        basin_fig_fn = os.path.splitext(glac_shp_join_fn)[0]+'_basin_mwe_fig.png'
+        print("Generating figure: %s" % basin_fig_fn)
+        if basin_col == 'HYBAS_ID':
+            title = suptitle + ": HydroBASINS level 4" 
+        else:
+            title = suptitle + ": Basins"
+        #minx, miny, maxx, maxy
+        basin_extent = [-2396534,-2619071, 3273634,2008000]
+        basin_fig = make_map(col=('mb_mwea', 'mean'), mb_dissolve_df=glac_df_mb_basin, glac_df_mb=glac_df_mb, agg_df=basin_df, border_df=border_df, clim=basin_mb_clim, crs=crs, extent=basin_extent, labels='name+val', title=title)
+        print("Saving figure: %s" % basin_fig_fn)
+        #basin_fig.savefig(basin_fig_fn, dpi=300, bbox_inches='tight', pad_inches=0) 
+        basin_fig.savefig(basin_fig_fn, dpi=300, pad_inches=0) 
 
-if qdgc_shp_fn is not None:
-    qdgc_fig_fn = os.path.splitext(glac_shp_join_fn)[0]+'_qdgc_mwe_fig.png'
-    print("Generating figure: %s" % qdgc_fig_fn)
-    #To plot grid cells, pass agg_df=qdgc_df
-    title = suptitle + ": Quarter-degree Grid Cells"
-    qdgc_fig = make_map(col=('mb_mwea', 'mean'), mb_dissolve_df=glac_df_mb_qdgc, glac_df_mb=glac_df_mb, agg_df=None, border_df=border_df, clim=mb_clim, crs=crs, extent=extent, labels=None, title=title)
-    print("Saving figure: %s" % qdgc_fig_fn)
-    qdgc_fig.savefig(qdgc_fig_fn, dpi=300, bbox_inches='tight', pad_inches=0) 
+    if qdgc_shp_fn is not None:
+        qdgc_fig_fn = os.path.splitext(glac_shp_join_fn)[0]+'_qdgc_mwe_fig.png'
+        print("Generating figure: %s" % qdgc_fig_fn)
+        #To plot grid cells, pass agg_df=qdgc_df
+        title = suptitle + ": Quarter-degree Grid Cells"
+        qdgc_fig = make_map(col=('mb_mwea', 'mean'), mb_dissolve_df=glac_df_mb_qdgc, glac_df_mb=glac_df_mb, agg_df=None, border_df=border_df, clim=mb_clim, crs=crs, extent=extent, labels=None, title=title)
+        print("Saving figure: %s" % qdgc_fig_fn)
+        qdgc_fig.savefig(qdgc_fig_fn, dpi=300, bbox_inches='tight', pad_inches=0) 
 
-if region_shp_fn is not None:
-    region_gt_clim = (-3.0, 3.0)
-    region_fig_fn = os.path.splitext(glac_shp_join_fn)[0]+'_region_Gt_fig.png'
-    print("Generating figure: %s" % region_fig_fn)
-    title = suptitle + ": Kaab Regions"
-    #region_fig = make_map(col='mb_mwea', mb_dissolve_df=glac_df_mb_region, glac_df_mb=glac_df_mb, agg_df=region_df, border_df=border_df, clim=mb_clim, crs=crs, extent=extent, labels='name+val')
-    region_fig = make_map(col=('mb_Gta', 'sum'), mb_dissolve_df=glac_df_mb_region, glac_df_mb=glac_df_mb, agg_df=region_df, border_df=border_df, clim=region_gt_clim, crs=crs, extent=extent, labels='name+val', title=title)
-    print("Saving figure: %s" % region_fig_fn)
-    region_fig.savefig(region_fig_fn, dpi=300, bbox_inches='tight', pad_inches=0) 
+    if region_shp_fn is not None:
+        region_gt_clim = (-3.0, 3.0)
+        region_fig_fn = os.path.splitext(glac_shp_join_fn)[0]+'_region_Gt_fig.png'
+        print("Generating figure: %s" % region_fig_fn)
+        title = suptitle + ": Kaab Regions"
+        #region_fig = make_map(col='mb_mwea', mb_dissolve_df=glac_df_mb_region, glac_df_mb=glac_df_mb, agg_df=region_df, border_df=border_df, clim=mb_clim, crs=crs, extent=extent, labels='name+val')
+        region_fig = make_map(col=('mb_Gta', 'sum'), mb_dissolve_df=glac_df_mb_region, glac_df_mb=glac_df_mb, agg_df=region_df, border_df=border_df, clim=region_gt_clim, crs=crs, extent=extent, labels='name+val', title=title)
+        print("Saving figure: %s" % region_fig_fn)
+        region_fig.savefig(region_fig_fn, dpi=300, bbox_inches='tight', pad_inches=0) 
 
-if region_shp_fn is not None:
-    region_mb_clim=(-0.5, 0.5)
-    region_fig_fn = os.path.splitext(glac_shp_join_fn)[0]+'_region_mwe_fig.png'
-    print("Generating figure: %s" % region_fig_fn)
-    title = suptitle + ": Kaab Regions"
-    #region_fig = make_map(col='mb_mwea', mb_dissolve_df=glac_df_mb_region, glac_df_mb=glac_df_mb, agg_df=region_df, border_df=border_df, clim=mb_clim, crs=crs, extent=extent, labels='name+val')
-    region_fig = make_map(col=('mb_mwea', 'mean'), mb_dissolve_df=glac_df_mb_region, glac_df_mb=glac_df_mb, agg_df=region_df, border_df=border_df, clim=region_mb_clim, crs=crs, extent=extent, labels='name+val', title=title)
-    print("Saving figure: %s" % region_fig_fn)
-    region_fig.savefig(region_fig_fn, dpi=300, bbox_inches='tight', pad_inches=0) 
+    if region_shp_fn is not None:
+        region_mb_clim=(-0.5, 0.5)
+        region_fig_fn = os.path.splitext(glac_shp_join_fn)[0]+'_region_mwe_fig.png'
+        print("Generating figure: %s" % region_fig_fn)
+        title = suptitle + ": Kaab Regions"
+        #region_fig = make_map(col='mb_mwea', mb_dissolve_df=glac_df_mb_region, glac_df_mb=glac_df_mb, agg_df=region_df, border_df=border_df, clim=mb_clim, crs=crs, extent=extent, labels='name+val')
+        region_fig = make_map(col=('mb_mwea', 'mean'), mb_dissolve_df=glac_df_mb_region, glac_df_mb=glac_df_mb, agg_df=region_df, border_df=border_df, clim=region_mb_clim, crs=crs, extent=extent, labels='name+val', title=title)
+        print("Saving figure: %s" % region_fig_fn)
+        region_fig.savefig(region_fig_fn, dpi=300, bbox_inches='tight', pad_inches=0) 
 
-if mascon_shp_fn is not None:
-    mascon_fig_fn = os.path.splitext(glac_shp_join_fn)[0]+'_mascon_mwe_fig.png'
-    print("Generating figure: %s" % mascon_fig_fn)
-    #To plot grid cells, pass agg_df=mascon_df
-    title = suptitle + ": GSFC GRACE Mascons"
-    mascon_fig = make_map(col=('mb_mwea', 'mean'), mb_dissolve_df=glac_df_mb_mascon, glac_df_mb=glac_df_mb, agg_df=None, border_df=border_df, clim=mb_clim, crs=crs, extent=extent, labels=None, title=title)
-    print("Saving figure: %s" % mascon_fig_fn)
-    mascon_fig.savefig(mascon_fig_fn, dpi=300, bbox_inches='tight', pad_inches=0) 
+    if mascon_shp_fn is not None:
+        mascon_fig_fn = os.path.splitext(glac_shp_join_fn)[0]+'_mascon_mwe_fig.png'
+        print("Generating figure: %s" % mascon_fig_fn)
+        #To plot grid cells, pass agg_df=mascon_df
+        title = suptitle + ": GSFC GRACE Mascons"
+        mascon_fig = make_map(col=('mb_mwea', 'mean'), mb_dissolve_df=glac_df_mb_mascon, glac_df_mb=glac_df_mb, agg_df=None, border_df=border_df, clim=mb_clim, crs=crs, extent=extent, labels=None, title=title)
+        print("Saving figure: %s" % mascon_fig_fn)
+        mascon_fig.savefig(mascon_fig_fn, dpi=300, bbox_inches='tight', pad_inches=0) 
 
-if mascon_shp_fn is not None:
-    mascon_gt_clim = (-0.5, 0.5)
-    mascon_fig_fn = os.path.splitext(glac_shp_join_fn)[0]+'_mascon_Gt_fig.png'
-    print("Generating figure: %s" % mascon_fig_fn)
-    #To plot grid cells, pass agg_df=mascon_df
-    title = suptitle + ": GSFC GRACE Mascons"
-    mascon_fig = make_map(col=('mb_Gta', 'sum'), mb_dissolve_df=glac_df_mb_mascon, glac_df_mb=glac_df_mb, agg_df=None, border_df=border_df, clim=mascon_gt_clim, crs=crs, extent=extent, labels=None, title=title)
-    print("Saving figure: %s" % mascon_fig_fn)
-    mascon_fig.savefig(mascon_fig_fn, dpi=300, bbox_inches='tight', pad_inches=0) 
+    if mascon_shp_fn is not None:
+        mascon_gt_clim = (-0.5, 0.5)
+        mascon_fig_fn = os.path.splitext(glac_shp_join_fn)[0]+'_mascon_Gt_fig.png'
+        print("Generating figure: %s" % mascon_fig_fn)
+        #To plot grid cells, pass agg_df=mascon_df
+        title = suptitle + ": GSFC GRACE Mascons"
+        mascon_fig = make_map(col=('mb_Gta', 'sum'), mb_dissolve_df=glac_df_mb_mascon, glac_df_mb=glac_df_mb, agg_df=None, border_df=border_df, clim=mascon_gt_clim, crs=crs, extent=extent, labels=None, title=title)
+        print("Saving figure: %s" % mascon_fig_fn)
+        mascon_fig.savefig(mascon_fig_fn, dpi=300, bbox_inches='tight', pad_inches=0) 
 
