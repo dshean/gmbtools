@@ -1,21 +1,27 @@
 #! /usr/bin/env python
 
 """
-Script to create DEMStack objects from ASTER DEMs for RGI polygons
+Script to create DEMStack objects for list of DEMs over RGI polygons
 
 To do:
 Should run in parallel with multiprocessing, similar to mb_parallel
 
 After transfer, organize into annual subdir
 for y in `seq 2000 2018` ; do if [ ! -d $y ] ; then mkdir $y ; fi ; mv AST_${y}* $y/ done
+for y in `seq 2000 2018` ; do if [ ! -d years/$y ] ; then mkdir -pv years/$y ; fi ; cd years/$y ; for i in ../../${y}*align/*align.tif; do ln -s $i . ; done; cd ../../ ; done
 
 #Generate ASTER index
 ##gdaltindex -t_srs EPSG:4326 aster_align_index.shp 2*/*align/*align.tif
-parallel 'gdaltindex -t_srs EPSG:4326 {}/aster_align_index_{}.shp {}/*align/*align.tif' ::: {2000..2018}
-ogr_merge.sh aster_align_index.shp 2*/aster_align_index_*.shp
-ogr_merge.sh aster_align_index_2000-2009.shp 2*/aster_align_index_200[0-9].shp
-ogr_merge.sh aster_align_index_2009-2018.shp 2*/aster_align_index_2009.shp 2*/aster_align_index_201[0-9].shp
-for i in aster_align_index.shp aster_align_index_2000-2009.shp aster_align_index_2009-2018.shp
+#parallel 'gdaltindex -t_srs EPSG:4326 {}/aster_align_index_{}.shp {}/*align/*align.tif' ::: {2000..2018}
+#ogr_merge.sh aster_align_index.shp 2*/aster_align_index_*.shp
+#ogr_merge.sh aster_align_index_2000-2009.shp 2*/aster_align_index_200[0-9].shp
+#ogr_merge.sh aster_align_index_2009-2018.shp 2*/aster_align_index_2009.shp 2*/aster_align_index_201[0-9].shp
+
+parallel 'gdaltindex -t_srs EPSG:4326 years/{}/dem_index_{}.shp years/{}/*align.tif' ::: {2000..2018}
+ogr_merge.sh dem_index.shp years/2*/dem_index_*.shp
+shp_list="aster_align_index.shp aster_align_index_2000-2009.shp aster_align_index_2009-2018.shp"
+shp_list="dem_index.shp"
+for i in $shp_list
 do
 ogr2ogr -t_srs '+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs ' ${i%.*}_aea.shp $i
 rgi_aster_trend.py ${i%.*}_aea.shp
@@ -30,8 +36,7 @@ from pygeotools.lib import geolib, warplib, malib
 
 #Add proper argument parsing
 
-#aster_index_fn = os.path.join(asterdir, 'aster_align_index_aea.shp')
-aster_index_fn = sys.argv[1]
+dem_index_fn = sys.argv[1]
 
 #Minimum glacier area (km2)
 #min_glac_area = 0.1 
@@ -49,19 +54,24 @@ else:
 
 #Most DEMs are 32 m
 #res='max'
-res=30
+#res=30
+res=8
 
 #Minimum number of samples
-min_aster_count = 5
+#min_dem_count = 5
+min_dem_count = 3
 #Min to max timestamp difference (days)
 #5 years
-min_dt_ptp = 1825
+#min_dt_ptp = 1825
+min_dt_ptp = 1095
 
 topdir='/nobackup/deshean/'
-asterdir = os.path.join(topdir, 'hma/aster/dsm')
-os.chdir(asterdir)
-#stackdir = os.path.join(asterdir, 'stack')
-stackdir = os.path.splitext(aster_index_fn)[0]+'_stack'
+
+#demdir = os.path.join(topdir, 'hma/aster/dsm')
+demdir = os.path.join(topdir, 'hma/dem_coreg')
+
+os.chdir(demdir)
+stackdir = os.path.splitext(dem_index_fn)[0]+'_stack'
 if not os.path.exists(stackdir):
     os.makedirs(stackdir)
 
@@ -104,39 +114,48 @@ feat_count = glac_shp_lyr.GetFeatureCount()
 print("Min. Area filter glacier polygon count: %i" % feat_count)
 glac_shp_lyr.ResetReading()
 
-aster_index_ds = ogr.Open(aster_index_fn, 0)
-aster_index_lyr = aster_index_ds.GetLayer()
+dem_index_ds = ogr.Open(dem_index_fn, 0)
+dem_index_lyr = dem_index_ds.GetLayer()
 #This should be contained in features
-aster_index_srs = aster_index_lyr.GetSpatialRef()
-feat_count = aster_index_lyr.GetFeatureCount()
-print("Input ASTER count: %i" % feat_count)
+dem_index_srs = dem_index_lyr.GetSpatialRef()
+feat_count = dem_index_lyr.GetFeatureCount()
+print("Input dem count: %i" % feat_count)
 
-#cmd_fn = 'aster_stack_cmd.sh'
-cmd_fn = os.path.splitext(aster_index_fn)[0]+'_%s-%s_km2_stack_cmd.sh' % (min_glac_area, max_glac_area)
+#cmd_fn = 'dem_stack_cmd.sh'
+cmd_fn = os.path.splitext(dem_index_fn)[0]+'_%s-%s_km2_stack_cmd.sh' % (min_glac_area, max_glac_area)
 f = open(cmd_fn, "w") 
+
+glac_dict = None
+#glac_dict = ['15.03473', '15.03733', '15.10070', '15.09991']
 
 for n, feat in enumerate(glac_shp_lyr):
     #glac_geom_orig = geolib.geom_dup(feat.GetGeometryRef())
     feat_fn = rgi_name(feat)
+    if glac_dict is not None:
+        if not feat_fn in glac_dict:
+            continue
     print(n, feat_fn)
     glac_geom = geolib.geom_dup(feat.GetGeometryRef())
+    glac_geom_extent = geolib.geom_extent(glac_geom)
+    print(glac_geom_extent)
     #Should buffer by ~1 km here, preserve surrounding pixels for uncertainty analysis
     glac_geom = glac_geom.Buffer(buffer_m)
     glac_geom_extent = geolib.geom_extent(glac_geom)
+    print(glac_geom_extent)
     #glac_geom_extent = geolib.pad_extent(glac_geom_extent, width=1000)
 
     #Spatial filter
-    aster_index_lyr.SetSpatialFilter(glac_geom)
-    aster_count = aster_index_lyr.GetFeatureCount()
-    print("ASTER count after spatial filter: %i" % aster_count)
-    if aster_count > min_aster_count:
+    dem_index_lyr.SetSpatialFilter(glac_geom)
+    dem_count = dem_index_lyr.GetFeatureCount()
+    print("dem count after spatial filter: %i" % dem_count)
+    if dem_count > min_dem_count:
         fn_list = []
-        for aster_feat in aster_index_lyr:
+        for dem_feat in dem_index_lyr:
             #Only 1 field from gdaltindex, 'location'
             #Can have issues with commands that are too long with full path
-            #fn = os.path.join(asterdir, aster_feat.GetField(0))
+            #fn = os.path.join(demdir, dem_feat.GetField(0))
             #This is relative path, must be in correct directory when running make_stack.py
-            fn = aster_feat.GetField(0)
+            fn = dem_feat.GetField(0)
             fn_list.append(fn)
         fn_list.sort() 
         #Hack to deal with long filenames
@@ -145,24 +164,24 @@ for n, feat in enumerate(glac_shp_lyr):
         stack_fn='%s_%s.npz' % (feat_fn[0:8], os.path.split(stackdir)[-1])
 
         #Create file with commands to make stacks
-        #Run this output file with GNU parallel `parallel < aster_stack_cmd.sh`
+        #Run this output file with GNU parallel `parallel < dem_stack_cmd.sh`
         #For glaciers with smaller areas, use -j 28; For glaciers with larger areas, use -j 4
         cmd='make_stack.py -n_cpu %i -outdir %s -stack_fn %s -tr %s -te "%s" -t_srs "%s" --med --trend --robust -min_n %i -min_dt_ptp %f %s \n' % \
                 (n_threads, outdir, os.path.join(outdir, stack_fn), res, ' '.join(str(i) for i in glac_geom_extent), \
-                aster_index_srs.ExportToProj4(), min_aster_count, min_dt_ptp, ' '.join(fn_list))
+                dem_index_srs.ExportToProj4(), min_dem_count, min_dt_ptp, ' '.join(fn_list))
         f.write(cmd)
 
         #Generate stacks serially
         #stack = malib.DEMStack(fn_list, outdir=os.path.join(stackdir, feat_fn), \
-        #        res='max', extent=glac_geom_extent, srs=aster_index_srs, mask_geom=glac_geom, \
-        #        trend=True, robust=True, n_thresh=min_aster_count, min_dt_ptp=min_dt_ptp)
+        #        res='max', extent=glac_geom_extent, srs=dem_index_srs, mask_geom=glac_geom, \
+        #        trend=True, robust=True, n_thresh=min_dem_count, min_dt_ptp=min_dt_ptp)
 
         #if stack.ma_stack is not None:
             #sys.exit()
             #glac_geom_mask = geolib.geom2mask(glac_geom, stack.get_ds())
             #ds_list = warplib.memwarp_multi_fn(fn_list, res='max', extent=glac_geom_extent)
 
-    aster_index_lyr.ResetReading()
+    dem_index_lyr.ResetReading()
 
 f.close()
 
