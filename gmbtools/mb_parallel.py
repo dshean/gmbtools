@@ -606,7 +606,6 @@ elif site == 'hma':
     z2_sigma = 4.0
     z2_srtm_penetration_corr = True
     """
-
     """
     #SRTM
     #z1_fn = os.path.join(topdir,'rpcdem/hma/nasadem/srtmOnly/20000211_hma_nasadem_hgt_lt5m_err.vrt')
@@ -622,9 +621,9 @@ elif site == 'hma':
 
     #ASTER interp 2000
     #2000-2018
-    #z1_fn = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_2000-2018_aea_stack/aster_align_index_2000-2018_aea_mos_20000531.vrt'
+    z1_fn = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_2000-2018_aea_stack/aster_align_index_2000-2018_aea_mos_20000531.vrt'
     #2000-2009
-    z1_fn = '/nobackup/deshean/hma/aster/dsm/aster_align_index_2000-2009_aea_stack/aster_align_index_2000-2009_aea_mos_20000531.tif'
+    #z1_fn = '/nobackup/deshean/hma/aster/dsm/aster_align_index_2000-2009_aea_stack/aster_align_index_2000-2009_aea_mos_20000531.tif'
     z1_date = 2000.412
     z1_sigma = 4.0
     z1_srtm_penetration_corr = False
@@ -641,11 +640,15 @@ elif site == 'hma':
     #z2_fn = os.path.join(topdir,'hma/mos/%s/hma_mos_8m_dem_align/hma_mos_8m_dem_align.vrt' % mosdir)
     mosdir = 'latest'
     #z2_fn = os.path.join(topdir,'hma/dem_coreg/mos/%s/hma_mos_8m/hma_mos_8m.vrt' % mosdir)
-    z2_fn = os.path.join(topdir,'hma/dem_coreg/mos/%s/hma_mos_8m/hma_mos_8m_last.vrt' % mosdir)
+    #z2_fn = os.path.join(topdir,'hma/dem_coreg/mos/%s/hma_mos_8m/hma_mos_8m_last.vrt' % mosdir)
+    z2_fn = os.path.join(topdir,'hma/dem_coreg/mos/%s/hma_mos_8m/hma_mos_8m_median.vrt' % mosdir)
     #z2_date = datetime(2015, 1, 1)
     #z2_date = 2015.0
-    z2_date_fn = os.path.join(topdir,'hma/dem_coreg/mos/%s/hma_mos_8m/hma_mos_8m_lastindex_ts.vrt' % mosdir)
+    #z2_date_fn = os.path.join(topdir,'hma/dem_coreg/mos/%s/hma_mos_8m/hma_mos_8m_lastindex_ts.vrt' % mosdir)
+    z2_date_fn = os.path.join(topdir,'hma/dem_coreg/mos/%s/hma_mos_8m/hma_mos_8m_medianindex_ts.vrt' % mosdir)
     z2_sigma = 1.0
+    """
+
     """
     #ASTER interp 2009 
     #2000-2009
@@ -653,6 +656,7 @@ elif site == 'hma':
     z2_date = 2009.412
     z2_sigma = 4.0
     z2_srtm_penetration_corr = False
+    """
     """
     #ASTER interp 2009 
     #2009-2018
@@ -685,7 +689,7 @@ elif site == 'hma':
     aea_srs = geolib.hma_aea_srs
 
     #Only write out for larger glaciers
-    min_glac_area_writeout = 5.0
+    min_glac_area_writeout = 2.0
 
     #Surface velocity
     #Note: had to force srs on Amaury's original products 
@@ -732,7 +736,7 @@ else:
     sys.exit('Unrecognized glacier shp filename')
 
 #Set up output header
-out_header = '%s,x,y,z_med,z_p16,z_p84,z_slope,z_aspect,mb_mwea,mb_mwea_sigma,area_m2,mb_m3wea,mb_m3wea_sigma,t1,t2,dt' % glacnum_fieldname
+out_header = '%s,x,y,z_med,z_p16,z_p84,z_slope,z_aspect,mb_mwea,mb_mwea_sigma,area_m2,mb_m3wea,mb_m3wea_sigma,t1,t2,dt,valid_area_perc' % glacnum_fieldname
 if extra_layers:
     out_header += ',H_m'
     if site == 'conus':
@@ -852,6 +856,7 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
 
         if z1_date is None:
             #Rasterize source dates
+            #Note: need to clean this up, as glac_geom_mask is not defined
             if os.path.splitext(z1_date_fn)[1] == 'shp':
                 z1_date = get_date_a(ds_dict['z1'], z1_date_shp_lyr, glac_geom_mask, z1_datefield) 
                 gf.t1 = z1_date.mean()
@@ -921,12 +926,11 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
             rangelim = malib.calcperc(gf.dz, bad_perc)
             gf.dz = np.ma.masked_outside(gf.dz, *rangelim)
 
-        gf.res = geolib.get_res(ds_dict['z1'])
-        valid_area = gf.dz.count()*gf.res[0]*gf.res[1]
-        valid_area_perc = valid_area/gf.glac_area
-        if valid_area_perc < min_valid_area_perc:
+        gf.valid_area = gf.dz.count()*gf.res[0]*gf.res[1]
+        gf.valid_area_perc = 100*gf.valid_area/gf.glac_area
+        if gf.valid_area_perc < 100*min_valid_area_perc:
             if verbose:
-                print("Not enough valid pixels. %0.1f%% percent of glacier polygon area" % (100*valid_area_perc))
+                print("Not enough valid pixels. %0.1f%% percent of glacier polygon area" % (gf.valid_area_perc))
             return None
 
         #Filter dz - throw out abs differences >150 m
@@ -1045,7 +1049,7 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
 
         outlist = [gf.glacnum, gf.cx, gf.cy, z2_elev_med, z2_elev_p16, z2_elev_p84, z2_slope_med, z2_aspect_med, \
                 gf.mb_mean, gf.mb_mean_sigma, gf.glac_area, gf.mb_mean_totalarea, gf.mb_mean_totalarea_sigma, \
-                gf.t1_mean, gf.t2_mean, gf.dt_mean]
+                gf.t1_mean, gf.t2_mean, gf.dt_mean, gf.valid_area_perc]
 
         if extra_layers:
             if 'ice_thick' in ds_dict:
