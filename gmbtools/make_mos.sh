@@ -27,11 +27,11 @@ summer=false
 trans=false
 
 #Output mosaic res
-#res=2
+res=2
 #res=8
 #res=32
 #ASTER
-res=30
+#res=30
 
 #If res is better than 32, make lowres products for faster browsing
 lowres=100
@@ -39,16 +39,16 @@ lowres=100
 
 #Write out tif mosaics at full res
 fullres_tif=false
-lowres_tif=true
+lowres_tif=false
 
 #Specify the output types
 statlist=""
 statlist+="wmean"
-statlist+=" count"
+#statlist+=" count"
 statlist+=" stddev"
-statlist+=" median medianindex"
-statlist+=" nmad"
-statlist+=" last lastindex first firstindex"
+#statlist+=" median medianindex"
+#statlist+=" nmad"
+#statlist+=" last lastindex first firstindex"
 
 #Generate strip index shp
 stripindex=false
@@ -59,6 +59,9 @@ tileindex=false
 #Exclude Quickbird-2
 noQB=false
 
+#Exclude GeoEye-1
+noGE=false
+
 #Default computes union from input DEMs
 extent='union'
 
@@ -66,9 +69,10 @@ extent='union'
 site=hma
 proj='+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
 #WV/GE extent
-#extent='-1553632.99074 -1030104.4196 1727255.00926 1268847.5804'
+extent='-1553632.99074 -1030104.4196 1727255.00926 1268847.5804'
 #ASTER extent
-extent='-1604981.73315 -1094260.0 1847978.26685 1161996.0'
+#extent='-1604981.73315 -1094260.0 1847978.26685 1161996.0'
+#Should take union of these, so we have uniform tile boundaries
 #site=conus
 #proj='+proj=aea +lat_1=36 +lat_2=49 +lat_0=43 +lon_0=-115 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
 #extent='-684633.544035 -694442.824668 824774.455965 804533.175332'
@@ -76,8 +80,8 @@ extent='-1604981.73315 -1094260.0 1847978.26685 1161996.0'
 #proj='EPSG:32615'
 
 #Mosaic tile size in meters
-#tilesize=20000
-tilesize=100000
+tilesize=10000
+#tilesize=100000
 mos=~/src/gmbtools/gmbtools/dem_mosaic_validtiles.py
 #Simplify tolerance in decimal degrees
 tol=0.001
@@ -87,10 +91,11 @@ ncpu=$(cat /proc/cpuinfo | egrep "core id|physical id" | tr -d "\n" | sed s/phys
 #If res is 32, use all virtual cores
 #ncpu=$(python -c 'import multiprocessing as mp; print(mp.cpu_count())')
 threads=$((ncpu-1))
-threads=16
+#threads=16
 
 ts=`date +%Y%m%d`
 #ts=20181003
+#ts=20180830
 
 #Should add option to split annually
 echo "Identifying input DEMs"
@@ -133,11 +138,11 @@ fi
 
 #ext="-DEM_${res}m"
 #ext="-DEM_${res}m_dem_align"
-#ext="-DEM_${res}m_dzfilt_-200_200"
+ext="-DEM_${res}m_dzfilt_-200_200"
 #WV/GE dem_align
 #ext="-DEM_${res}m_dzfilt_-200_200_*align"
 #ASTER
-ext="_align_dzfilt_-100_100"
+#ext="_align_dzfilt_-100_100"
 
 echo $re
 echo $ext
@@ -145,12 +150,12 @@ echo $mos_ext
 
 #list=$(ls *00/dem*/${re}*${ext}.tif)
 #HMA alongtrack/crosstrack
-#list=$(ls *track/*00/dem*/${re}*${ext}.tif)
+list=$(ls *track/*00/dem*/${re}*${ext}.tif)
 #WV/GE dem_align
 #list=$(ls *align/${re}*${ext}.tif)
 
 #ASTER
-list=$(ls 2*/*cr_dem_align/*${re}*${ext}.tif)
+#list=$(ls 2*/*cr_dem_align/*${re}*${ext}.tif)
 echo $list | wc -w
 
 if $noQB ; then
@@ -160,17 +165,25 @@ if $noQB ; then
     echo $list | wc -w
 fi
 
+#GE1 can have nasty artifacts, should isolate and then merge GE01 composite with WV composite
+if $noGE ; then
+    echo "Removing GE01"
+    #list=$(echo $list | tr ' ' '\n' | grep -v QB02)
+    list=$(echo $list | tr ' ' '\n' | grep -v '_105[0-9A-Z]*_101')
+    echo $list | wc -w
+fi
+
 out=mos/${site}_${ts}_mos/${mos_ext}/${mos_ext}
 
 #Sort by date
 #NOTE: Need to update sort key with increased path depths
 #*align/*DEM.tif 
-list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 2)
+#list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 2)
 #*00/dem*/*DEM.tif
 #list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 3)
 #*track/*00/dem*/*DEM.tif
 #*00/dem*/*align/*DEM.tif
-#list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 4)
+list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 4)
 #list=$(echo $list | tr ' ' '\n' | sort -n -t'/' -k 5)
 
 echo
@@ -255,7 +268,7 @@ export lowres
 export -f stat_vrt2tif
 #Run tif generation and lowres in parallel for all stat mosaics
 statlist=$(echo $statlist | sed -e 's/lastindex/lastindex_ts/' -e 's/firstindex/firstindex_ts/' -e 's/medianindex/medianindex_ts/')
-parallel --env _ stat_vrt2tif ::: $statlist 
+parallel --progress --env _ stat_vrt2tif ::: $statlist 
 
 #Generate lowres products
 if (( "$res" == "32" )) ; then
