@@ -220,24 +220,25 @@ def main():
 
     cmd_list = []
     out_cmd_fn = o+'_cmd.sh'
-    print("Creating text file of commands")
-    with open(out_cmd_fn, 'w') as f_cmd:
-        for n, tile in enumerate(out_tile_list):
-            #print('%i of %i tiles: %i' % (n+1, len(out_tile_list), tile))
-            tile_fn_base = '%s-tile-%0*i.tif' % (o, ni, tile)
-            tile_fn_list_txt = os.path.splitext(tile_fn_base)[0]+'_fn_list.txt'
-            #Write out DEM file list for the tile
-            with open(tile_fn_list_txt, 'w') as f_fn_list:
-                f_fn_list.write('\n'.join(tile_dict[tile]['fn_list']))
-            for stat in stat_list:
-                tile_fn = os.path.splitext(tile_fn_base)[0]+'-%s.tif' % stat
-                dem_mosaic_args = {'fn_list':tile_dict[tile]['fn_list'], 'o':tile_fn, 'fn_list_txt':tile_fn_list_txt, \
-                        'tr':tr, 't_srs':t_srs, 't_projwin':tile_dict[tile]['extent'], 'threads':1, 'stat':stat}
-                if not os.path.exists(tile_fn):
-                    cmd = geolib.get_dem_mosaic_cmd(**dem_mosaic_args)
-                    cmd_list.append(cmd)
-                    #Write out command to file
-                    f_cmd.write('%s\n' % ' '.join(str(i) for i in cmd))
+    if not os.path.exists(out_cmd_fn):
+        print("Creating text file of commands")
+        with open(out_cmd_fn, 'w') as f_cmd:
+            for n, tile in enumerate(out_tile_list):
+                #print('%i of %i tiles: %i' % (n+1, len(out_tile_list), tile))
+                tile_fn_base = '%s-tile-%0*i.tif' % (o, ni, tile)
+                tile_fn_list_txt = os.path.splitext(tile_fn_base)[0]+'_fn_list.txt'
+                #Write out DEM file list for the tile
+                with open(tile_fn_list_txt, 'w') as f_fn_list:
+                    f_fn_list.write('\n'.join(tile_dict[tile]['fn_list']))
+                for stat in stat_list:
+                    tile_fn = os.path.splitext(tile_fn_base)[0]+'-%s.tif' % stat
+                    dem_mosaic_args = {'fn_list':tile_dict[tile]['fn_list'], 'o':tile_fn, 'fn_list_txt':tile_fn_list_txt, \
+                            'tr':tr, 't_srs':t_srs, 't_projwin':tile_dict[tile]['extent'], 'threads':1, 'stat':stat}
+                    if not os.path.exists(tile_fn):
+                        cmd = geolib.get_dem_mosaic_cmd(**dem_mosaic_args)
+                        cmd_list.append(cmd)
+                        #Write out command to file
+                        f_cmd.write('%s\n' % ' '.join(str(i) for i in cmd))
 
     #If we're on Pleiades, split across multiple nodes
     #Hack with GNU parallel right now
