@@ -37,8 +37,8 @@ outlier_perc = (0.001, 0.999)
 #3.625×108 km2 (Cogley et al., 2011)
 Gt2mm = 362.5
 
-plot = False
-map_plots = False
+plot = True 
+map_plots = True 
 
 #Default mb clim
 mb_clim = (-1.0, 1.0)
@@ -71,7 +71,7 @@ if site == 'hma':
     #glac_shp_fn = '/Users/dshean/data/rgi60/regions/rgi60_merge_HMA_aea_1km.shp'
     border_shp_fn = '/Users/dshean/data/NaturalEarth/10m_cultural/10m_cultural/ne_10m_admin_0_countries_lakes.shp'
     #basin_shp_fn = '/Users/dshean/data/HydroBASINS/hybas_lake_as_lev01-12_v1c/hybas_lake_as_lev04_v1c.shp'
-    basin_shp_fn = '/Users/dshean/data/HydroBASINS/HiMAT_full_210_IDs_subset_merged_clip_names.gpkg'
+    basin_shp_fn = '/Users/dshean/data/HydroBASINS/HiMAT_full_210_IDs_subset_merged_clip_names_update.gpkg'
     region_shp_fn = '/Users/dshean/Documents/UW/HMA/Kaab_regions/regions_from_kaab2015_merged_clean.shp'
     #http://www.mindland.com/wp/download-qdgc-continents/
     qdgc_shp_fn = '/Users/dshean/data/qdgc/qdgc_asia/qdgc_01_asia.shp'
