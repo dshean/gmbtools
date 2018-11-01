@@ -12,6 +12,7 @@ import time
 import subprocess
 import tarfile
 import pickle
+import copy
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 
@@ -180,7 +181,7 @@ def main():
             print('%i of %i' % (tilenum, len(tile_dict.keys())))
             tile_geom = tile_dict[tilenum]['geom']
             tile_dict_fn = []
-            for ds_fn, ds_geom in input_geom_dict.iteritems():
+            for ds_fn, ds_geom in input_geom_dict.items():
                 if tile_geom.Intersects(ds_geom):
                     tile_dict_fn.append(ds_fn)
                     #Write out shp for debugging
@@ -189,7 +190,8 @@ def main():
                 tile_dict[tilenum]['fn_list'] = tile_dict_fn
         
         out_tile_list = []
-        for tilenum in tile_dict.keys():
+        tile_dict_copy = copy.deepcopy(tile_dict)
+        for tilenum in tile_dict_copy.keys():
             if 'fn_list' in tile_dict[tilenum]:
                 out_tile_list.append(tilenum)
             else:
@@ -246,8 +248,8 @@ def main():
     if 'nasa' in socket.getfqdn():
         #This should already be set
         #cmd = ['lfs', 'setstripe', '-c', '64', o]
-        print(' '.join(str(i) for i in cmd))
-        subprocess.call(cmd)
+        #print(' '.join(str(i) for i in cmd))
+        #subprocess.call(cmd)
         cmd = ['qsub', '-v', 'cmd_fn=%s' % out_cmd_fn, '/home1/deshean/src/pbs_scripts/dem_mosaic_parallel.pbs']
         print(' '.join(str(i) for i in cmd))
         subprocess.call(cmd)
