@@ -213,9 +213,9 @@ def main():
     #outf = open('%s-log-dem_mosaic-tile-%i.log' % (o, tile), 'w')
 
     #Should run the tiles with the largest file count first, as they will likely take longer
-    tile_dict = OrderedDict(sorted(tile_dict.items(), key=lambda item: len(item[1]['fn_list']), reverse=True))
+    #tile_dict = OrderedDict(sorted(tile_dict.items(), key=lambda item: len(item[1]['fn_list']), reverse=True))
     #Do tiles with smallest file count first
-    #tile_dict = OrderedDict(sorted(tile_dict.items(), key=lambda item: len(item[1]['fn_list']), reverse=False))
+    tile_dict = OrderedDict(sorted(tile_dict.items(), key=lambda item: len(item[1]['fn_list']), reverse=False))
     out_tile_list = tile_dict.keys()
     #Number of integers to use for tile number
     ni = max([len(str(i)) for i in out_tile_list])
@@ -250,11 +250,15 @@ def main():
         #cmd = ['lfs', 'setstripe', '-c', '64', o]
         #print(' '.join(str(i) for i in cmd))
         #subprocess.call(cmd)
+        stripecount = 64
+        iolib.setstripe(odir, stripecount)
         cmd = ['qsub', '-v', 'cmd_fn=%s' % out_cmd_fn, '/home1/deshean/src/pbs_scripts/dem_mosaic_parallel.pbs']
         print(' '.join(str(i) for i in cmd))
         subprocess.call(cmd)
         import ipdb; ipdb.set_trace()
         #print("qsub -v cmd_fn=%s ~/src/pbs_scripts/dem_mosaic_parallel.pbs" % out_cmd_fn)
+        #qtop_cmd = ['qtop_deshean.sh', '|', 'grep', 'dem_mos']
+        #while qtop_cmd has output
         #Need to wait for job to finish, could get job id, then while qstat
     else:
         with ThreadPoolExecutor(max_workers=threads) as executor:
@@ -275,8 +279,7 @@ def main():
         #Convert dem_mosaic index files to timestamp arrays
         if stat in ['lastindex', 'firstindex', 'medianindex']:
             #Update filenames with ts.tif extension
-            tile_fn_list = [os.path.splitext(tile_fn)[0]+'_ts.tif' for tile_fn in tile_fn_list]
-            tile_fn_list_torun = [tile_fn for tile_fn in tile_fn_list if not os.path.exists(tile_fn)]
+            tile_fn_list_torun = [tile_fn for tile_fn in tile_fn_list if not os.path.exists(os.path.splitext(tile_fn)[0]+'_ts.tif')]
             if tile_fn_list_torun:
                 print("Running dem_mosaic_index_ts in parallel with %i threads" % threads)
                 from multiprocessing import Pool
@@ -284,6 +287,7 @@ def main():
                 results = pool.map(make_dem_mosaic_index_ts, tile_fn_list_torun)
                 pool.close()
                 #results.wait()
+            tile_fn_list = [os.path.splitext(tile_fn)[0]+'_ts.tif' for tile_fn in tile_fn_list]
 
         print("\nCreating vrt of valid tiles")
         #tile_fn_list = glob.glob(o+'-tile-*.tif')
