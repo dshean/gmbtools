@@ -1,0 +1,205 @@
+#PBS -S /bin/bash
+#PBS -V
+### Note for higher res products, need more memory, use fewer cpus
+### Note: parallel cannot efficiently spawn jobs to many nodes if they finish in <30 sec, scale accordingly
+##PBS -lselect=64:model=ivy
+#PBS -lselect=24:model=has
+##PBS -lselect=64:model=bro
+#PBS -lwalltime=2:00:00
+#PBS -q devel 
+
+#To submit:
+#qsub ~/src/pbs_scripts/dem_post_parallel.pbs
+
+#To check progress
+#ssh $(qstat -u deshean -W o=+rank0 | tail -n 1 | awk '{print $NF}')
+#cd /PBS/spool
+
+#Jobs can fail if stdout or stderr are >200MB
+#Turn off automatic ls after cd
+unset -f cd
+
+#Set resource limits for max open files, no core dumps
+ulimit -S -n 65536 -c 0
+
+export GDAL_MAX_DATASET_POOL_SIZE=32768
+
+#The ls -H here dereferences links
+#Can shuffle sizes with `shuf` utility
+
+#HMA
+#rpcdem=/nobackup/deshean/rpcdem/hma/srtm1/hma_srtm_gl1.vrt
+#rpcdem=/nobackup/deshean/data/nasadem/hma/hgt_srtmOnly_R4/srtmOnly.hgt/hma_nasadem_hgt_srtmOnly_R4_srtmOnly.hgt.vrt
+#rpcdem=/nobackup/deshean/data/nasadem/hma/hgt_srtmOnly_R4/srtmOnly.hgt/hma_nasadem_hgt_srtmOnly_R4_srtmOnly.hgt_shift.vrt
+#rpcdem=/nobackup/deshean/data/nasadem/hma/hgt_srtmOnly_R4/srtmOnly.hgt/hma_nasadem_hgt_srtmOnly_R4_srtmOnly.hgt_aea.tif
+#rpcdem=/nobackup/deshean/data/nasadem/hma/hgt_srtmOnly_R4/srtmOnly.hgt/hma_nasadem_hgt_srtmOnly_R4_srtmOnly.hgt_lt5m_err_aea.tif
+#rpcdem=/nobackup/deshean/data/nasadem/hma/hgt_merge/hgt/hma_nasadem_hgt_merge_hgt_adj_aea.tif
+#rpcdem=/nobackup/deshean/data/nasadem/hma/hgt_merge/hgt/hma_nasadem_hgt_merge_hgt_adj.vrt
+#rpcdem=/nobackup/deshean/data/tandemx/hma/TDM1_DEM_90m_hma_DEM.vrt
+rpcdem=/nobackup/deshean/data/tandemx/hma/TDM1_DEM_90m_hma_DEM_lt1.5m_err.vrt
+#rpcdem=/nobackup/deshean/data/tandemx/hma/TDM1_DEM_90m_hma_DEM_aea.tif
+#topdir=/nobackup/deshean/hma/dem_coreg
+topdir=/nobackup/deshean/hma/aster/dsm
+
+#CONUS
+#rpcdem=/nobackup/deshean/data/nasadem/conus/hgt_merge/hgt/conus_nasadem_hgt_merge_hgt_adj.vrt
+#topdir=/nobackup/deshean/conus_combined/dem_coreg_nasadem
+
+cd $topdir
+#mkdir $topdir/log
+
+#Filter
+#max_dz=100
+max_dz=200
+
+#max_offset=10
+max_offset=100
+
+###
+### Filtering
+###
+
+#done=$(ls -Sr *00/dem*/*dzfilt*tif)
+#fn_list=$(ls -Sr *00/dem*/*DEM_*m.tif)
+#notdone=""; for i in $fn_list ; do if ! echo $done | grep -q $(dirname $i) ; then notdone+=" $i" ; fi ; done
+#parallel -j 10 --sshloginfile $PBS_NODEFILE "cd $topdir; ~/src/dgtools/dgtools/filter.py {} -filt dz -param $rpcdem -${max_dz} ${max_dz}" ::: $notdone
+
+#fn_list=$(ls -Sr *00/dem*/*DEM_{32,8,2}m.tif)
+#fn_list=$(ls -S *00/dem*/*DEM_2m.tif)
+##parallel -j 10 --delay 0.1 --verbose --sshloginfile $PBS_NODEFILE "cd $topdir; if [ ! -e {.}_dzfilt_-${max_dz}_${max_dz}.tif ] ; then ~/src/pygeotools/pygeotools/filter.py {} -filt dz -param $rpcdem -${max_dz} ${max_dz} ; fi " ::: $fn_list
+#parallel -j 6 --sshloginfile $PBS_NODEFILE "unset -f cd; cd $topdir; ~/src/pygeotools/pygeotools/filter.py {} -filt dz -param $rpcdem -${max_dz} ${max_dz}" ::: $fn_list
+
+#fn_list=$(ls -S *00/dem*/*DEM_8m.tif)
+#parallel -j 20 --sshloginfile $PBS_NODEFILE "unset -f cd; cd $topdir; ~/src/pygeotools/pygeotools/filter.py {} -filt dz -param $rpcdem -${max_dz} ${max_dz}" ::: $fn_list
+
+#fn_list=$(ls -S *00/dem*/*DEM_32m.tif)
+#parallel --sshloginfile $PBS_NODEFILE "unset -f cd; cd $topdir; ~/src/pygeotools/pygeotools/filter.py {} -filt dz -param $rpcdem -${max_dz} ${max_dz}" ::: $fn_list
+
+###
+### Co-registration
+###
+
+#fn_list=$(cat wv3_at_list.txt)
+#fn_list=$(ls -H -S *DEM_8m_dzfilt*.tif | shuf)
+
+#fn_list=$(ls -S 2*/*DEM_cr.tif | shuf)
+#parallel -j 20 --sshloginfile $PBS_NODEFILE "unset -f cd; cd $topdir; if [ ! -e {.}*align_lt*err/*align.tif ] ; then ~/src/demcoreg/demcoreg/dem_align.py $rpcdem {} -max_offset $max_offset -filter 'none'; fi" ::: $fn_list
+
+#For ASTER, now run abs_dz filter after co-registration
+#fn_list=$(ls -S 2*/*align/*align.tif)
+#parallel -j 28 --workdir $topdir --sshloginfile $PBS_NODEFILE "~/src/pygeotools/pygeotools/filter.py {} -filt dz -param $rpcdem -${max_dz} ${max_dz}" ::: $fn_list
+
+###
+### Prepare stacks for each RGI polygon
+###
+
+#See rgi_dem_trend.py notes on generating shp
+aster_shp_list='aster_align_index_2000-2018_aea.shp'
+#aster_shp_list+=' aster_align_index_2000-2009_aea.shp aster_align_index_2009-2018_aea.shp'
+
+#Prepare cmd files up front, in parallel
+a1=0.0
+a2=2.0
+a3=9999.0
+#parallel --delay 1.0 "rgi_dem_trend.py {1} {2} {3}" ::: $aster_shp_list ::: $a1 $a2 :::+ $a2 $a3
+
+for shp in $aster_shp_list
+do
+    #Smaller glaciers
+    cmd_fn=${shp%.*}_${a1}-${a2}_km2_stack_cmd.sh
+    #if [ ! -e $cmd_fn ] ; then
+    #    rgi_dem_trend.py $shp $a1 $a2
+    #fi
+
+    ##Remove lines longer than 32762 - not an issue for shorter periods
+    #longlines=$(awk '{ if ( length($0) > 32762 ) { print NR } }' $cmd_fn)
+    #longlines_sed=$(echo $longlines | sed -e 's/ /d;/g' -e 's/$/d/')
+    #echo -n > ${cmd_fn%.*}_longlines.sh
+    #for i in $longlines; do sed -n "${i}p" $cmd_fn >> ${cmd_fn%.*}_longlines.sh ; done 
+    #sed -i.bak -e "$longlines_sed" $cmd_fn
+
+    #If recovering from unfinished
+    first=$(head -1 $cmd_fn | awk -F'stack_fn' '{print $2}' | awk '{print $1}')
+    if [ -e $first ] ; then 
+        #for i in ${shp%.*}_stack/*/*_trend.tif; do if [ ! -e $(echo $i | sed 's/_trend.tif/.npz/') ] ; then rm -v $i; fi; done
+        missing=${cmd_fn%.*}_missing.sh
+        echo -n > $missing
+        #for i in $(awk -F'stack_fn' '{print $2}' $cmd_fn | awk '{print $1}') ; do if [ ! -e $i ] ; then grep $i $cmd_fn >> $missing; fi ; done
+    else
+        missing=$cmd_fn
+    fi
+   
+    #If missing is not empty
+    if [ -s $missing ] ; then 
+        parallel --workdir $topdir -j 28 --sshloginfile $PBS_NODEFILE < $missing
+        #tac $cmd_fn > temp
+        #parallel --workdir $topdir -j 14 --sshloginfile $PBS_NODEFILE < temp
+    fi
+
+    #Larger glaciers
+    cmd_fn=${shp%.*}_${a2}-${a3}_km2_stack_cmd.sh
+    #if [ ! -e $cmd_fn ] ; then
+    #    rgi_dem_trend.py $shp $a2 $a3
+    #fi
+
+    first=$(head -1 $cmd_fn | awk -F'stack_fn' '{print $2}' | awk '{print $1}')
+    if [ -e $first ] ; then
+        missing=${cmd_fn%.*}_missing.sh
+        #echo -n > $missing
+        #for i in $(awk -F'stack_fn' '{print $2}' $cmd_fn | awk '{print $1}') ; do if [ ! -e $i ] ; then grep $i $cmd_fn >> $missing; fi ; done
+    else
+        missing=$cmd_fn
+    fi
+
+    if [ -s $missing ] ; then 
+        parallel --workdir $topdir -j 4 --sshloginfile $PBS_NODEFILE < $missing
+    fi
+
+    #If interrupted
+    #echo -n > ${shp%.*}_stack/missing_trend.txt
+    #for i in ${shp%.*}_stack/*/*mean.tif; do if [ ! -e $(echo $i | sed 's/_mean.tif/.npz/') ] ; then echo $i >> ${shp%.*}_stack/missing_trend.txt; fi; done
+    #list=$(cat ${shp%.*}_stack/missing_trend.txt | awk -F'/' '{print $2}')
+    #echo -n > ${cmd_fn%.*}_missing.sh
+    #for i in $list; do grep "${shp%.*}_stack/$i" $cmd_fn >> ${cmd_fn%.*}_missing.sh ; done
+    #cmd_fn=${cmd_fn%.*}_missing.sh
+    #parallel --workdir $topdir -j 2 --sshloginfile $PBS_NODEFILE < $cmd_fn
+
+    #cd ${shp%.*}_stack
+    #Clip trend to RGI polygons
+    #parallel --workdir $topdir/${shp%.*}_stack --sshloginfile $PBS_NODEFILE 'if [ ! -e {.}_shpclip.tif ] ; then ~/src/pygeotools/pygeotools/clip_raster_by_shp.py -extent raster {} rgi ; fi' ::: 15.*/*trend.tif
+    #parallel --workdir $topdir/${shp%.*}_stack --sshloginfile $PBS_NODEFILE '~/src/pygeotools/pygeotools/clip_raster_by_shp.py -extent raster {} rgi' ::: [0-9]*/*trend.tif
+    
+    #Generate products for consistent dates
+    #These take <1s, inefficient for sshd on large block, just check out single node and chug
+    #qsub -I -q devel -lselect=1:model=bro
+    #find . -name '*.npz' > npz_fn_list.txt
+    #parallel --arg-file npz_fn_list.txt '~/src/gmbtools/gmbtools/stack_interp.py {}'
+    #parallel --workdir $topdir/${shp%.*}_stack --sshloginfile $PBS_NODEFILE 'if [ ! -e {.}_20180531.tif ] ; then ~/src/gmbtools/gmbtools/stack_interp.py {}; fi' ::: [0-9]*/*npz
+
+    #difference SRTM and 20000211 grid
+    #parallel --workdir $topdir/${shp%.*}_stack --sshloginfile $PBS_NODEFILE "compute_dz.py {} $rpcdem" ::: [0-9]*/*20000211.tif
+
+    #find . -name '*eul.tif' | parallel --workdir $topdir/${shp%.*}_stack --sshloginfile $PBS_NODEFILE 'if [ ! -e {.}_shpclip.tif ] ; then ~/src/pygeotools/pygeotools/clip_raster_by_shp.py -extent raster {} rgi ; fi'
+
+    #Run on dedicated node
+    #Build vrt mosaics
+    #parallel --workdir $topdir/${shp%.*}_stack --sshloginfile $PBS_NODEFILE "gdalbuildvrt ${shp%.*}_stack/${shp%.*}_mos_{}.vrt ${shp%.*}_stack/[0-9]*/*{}.tif" ::: 20000211 20000531 20090531 20180531 nmad trend trend_shpclip intercept eul eul_shpclip
+    #cd ${shp%.*}_stack
+    #parallel "find . -name *{}.tif > {}_fn_list.txt; gdalbuildvrt -input_file_list {}_fn_list.txt ${shp%.*}_mos_{}.vrt" ::: 20000211 20000531 20090531 20180531 nmad trend 
+    #Export tif
+    #gdal_opt='-co COMPRESS=LZW -co TILED=YES -co BIGTIFF=IF_SAFER'
+    #Regenerate tiles, much more efficient than large vrt
+    #parallel "mkdir {.}; gdal_retile.py -r cubic $gdal_opt -ps 2048 2048 -targetDir {.} {}" ::: *vrt
+    #ndv=-9999
+    #parallel "gdalbuildvrt -srcnodata $ndv -vrtnodata $ndv {.}_tiled.vrt ${shp%.*}_mos_{}/*.tif" :::  20000211  20000531 20090531 20180531 nmad trend
+    #Set nodata
+    #parallel --workdir $topdir/${shp%.*}_stack --sshloginfile $PBS_NODEFILE "gdalwarp -r cubic $gdal_opt ${shp%.*}_mos_{}.vrt ${shp%.*}_mos_trend.tif; gdaladdo_ro.sh ${shp%.*}_mos_{}.tif" ::: trend trend_shpclip eul eul_shpclip
+done
+
+#shp=aster_align_index_2009-2018_aea.shp
+#parallel '~/src/gmbtools/gmbtools/stack_interp.py {}' ::: */*.npz
+#parallel "find . -name 1[345].*_${shp%.*}_stack_{}.tif > ${shp%.*}_mos_{}_fn_list.txt; gdalbuildvrt -r cubic -input_file_list ${shp%.*}_mos_{}_fn_list.txt ${shp%.*}_mos_{}.vrt; gdal_translate -r cubic $gdal_opt ${shp%.*}_mos_{}.vrt ${shp%.*}_mos_{}.tif" ::: 20090531 20180531 trend
+#20000531 
+
+#Now mb_parallel.py
+#make_mos.sh
