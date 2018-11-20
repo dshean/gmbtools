@@ -252,11 +252,13 @@ def main():
         #subprocess.call(cmd)
         stripecount = 64
         iolib.setstripe(odir, stripecount)
-        cmd = ['qsub', '-v', 'cmd_fn=%s' % out_cmd_fn, '/home1/deshean/src/pbs_scripts/dem_mosaic_parallel.pbs']
+        pbs_script = os.path.join(os.path.split(os.path.realpath(__file__))[0], 'dem_mosaic_parallel.pbs')
+        cmd = ['qsub', '-v', 'cmd_fn=%s' % out_cmd_fn, pbs_script]
         print(' '.join(str(i) for i in cmd))
         subprocess.call(cmd)
+        #This is currently the hack to interrupt and wait for pbs to finish, then 'continue' in ipdb
         import ipdb; ipdb.set_trace()
-        #print("qsub -v cmd_fn=%s ~/src/pbs_scripts/dem_mosaic_parallel.pbs" % out_cmd_fn)
+        #print("qsub -v cmd_fn=%s %s" % (out_cmd_fn, pbs_script))
         #qtop_cmd = ['qtop_deshean.sh', '|', 'grep', 'dem_mos']
         #while qtop_cmd has output
         #Need to wait for job to finish, could get job id, then while qstat
@@ -268,6 +270,7 @@ def main():
             time.sleep(delay)
 
     #Now aggegate into stats
+    #Could do this in parallel
     for stat in stat_list:
         tile_fn_list = []
         for n, tile in enumerate(out_tile_list):
