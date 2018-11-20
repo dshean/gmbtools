@@ -18,6 +18,7 @@ Better penetration correction
 
 import sys
 import os
+import re
 import subprocess
 from datetime import datetime, timedelta
 import time
@@ -47,7 +48,9 @@ class GlacFeat:
             self.glacname = ""
         else:
             #RGI has some nonstandard characters
-            self.glacname = self.glacname.decode('unicode_escape').encode('ascii','ignore')
+            #self.glacname = self.glacname.decode('unicode_escape').encode('ascii','ignore')
+            #glacname = re.sub(r'[^\x00-\x7f]',r'', glacname)
+            self.glacname = re.sub(r'\W+', '', self.glacname)
             self.glacname = self.glacname.replace(" ", "")
             self.glacname = self.glacname.replace("_", "")
             self.glacname = self.glacname.replace("/", "")
@@ -383,7 +386,8 @@ def hist_plot(gf, outdir, bin_width=50.0, dz_clim=(-2.0, 2.0)):
     plt.subplots_adjust(top=0.95, wspace=0.1)
     #print("Saving aed plot")
     fig_fn = os.path.join(outdir, gf.feat_fn+'_mb_aed.png')
-    plt.savefig(fig_fn, bbox_inches='tight', dpi=300)
+    #plt.savefig(fig_fn, bbox_inches='tight', dpi=300)
+    plt.savefig(fig_fn, dpi=300)
     plt.close(f)
     return z_bin_edges
 
@@ -428,7 +432,7 @@ def map_plot(gf, z_bin_edges, outdir, hs=True, dz_clim=(-2.0, 2.0)):
     #plt.subplots_adjust(top=0.90)
     #print("Saving map plot")
     fig_fn = os.path.join(outdir, gf.feat_fn+'_mb_map.png')
-    plt.savefig(fig_fn, bbox_inches='tight', dpi=300)
+    plt.savefig(fig_fn, dpi=300)
     plt.close(f)
 
 def get_date_a(ds, date_shp_lyr, glac_geom_mask, datefield):
@@ -460,14 +464,16 @@ setup['site'] = site
 #site='other'
 
 #Filter glacier poly - let's stick with big glaciers for now
-min_glac_area = 0.1 #km^2
+#min_glac_area = 0.0 #km^2
+#min_glac_area = 0.1 #km^2
 #min_glac_area = 1. #km^2
+min_glac_area = 2. #km^2
 #Minimum percentage of glacier poly covered by valid dz
 min_valid_area_perc = 0.80
 #Process thickness, velocity, etc
 extra_layers = True 
 #Write out DEMs and dz map
-writeout = True 
+writeout = False 
 #Generate figures
 mb_plot = True 
 #Run in parallel, set to False for serial loop
@@ -671,7 +677,7 @@ elif site == 'hma':
 
     #ASTER interp 2000
     #2000-2018
-    z1_fn = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_2000-2018_aea_stack/aster_align_index_2000-2018_aea_mos_20000531.vrt'
+    z1_fn = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_2000-2018_aea_stack/aster_align_index_2000-2018_aea_mos_20000531_tiled.vrt'
     #2000-2009
     #z1_fn = '/nobackup/deshean/hma/aster/dsm/aster_align_index_2000-2009_aea_stack/aster_align_index_2000-2009_aea_mos_20000531.tif'
     z1_date = 2000.412
@@ -717,7 +723,7 @@ elif site == 'hma':
     """
     #ASTER interp 2018
     #2000-2018
-    z2_fn = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_2000-2018_aea_stack/aster_align_index_2000-2018_aea_mos_20180531.tif'
+    z2_fn = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_2000-2018_aea_stack/aster_align_index_2000-2018_aea_mos_20180531_tiled.vrt'
     #2009-2018
     #z2_fn = '/nobackup/deshean/hma/aster/dsm/aster_align_index_2009-2018_aea_stack/aster_align_index_2009-2018_aea_mos_20180531.tif'
     z2_date = 2018.412
@@ -828,8 +834,9 @@ if not os.path.exists(outdir):
     os.makedirs(outdir)
 
 #Set higher stripe count so we're not thrashing one disk
-cmd = ['lfs', 'setstripe', '-c', str(nproc), outdir]
-subprocess.call(cmd)
+#cmd = ['lfs', 'setstripe', '-c', str(nproc), outdir]
+#subprocess.call(cmd)
+iolib.setstripe(outdir, nproc)
 
 #Create a list of glacfeat objects (contains geom) - safe for multiprocessing, while OGR layer is not
 if os.path.exists(glacfeat_fn) and use_existing_glacfeat:
