@@ -6,14 +6,21 @@
 #dem=rainier_stack_all-tile-0.tif
 
 dem=$1
+mos_32m=$(echo $dem | sed 's/_8m/_32m/')
+
+#Get final extent, pad to avoid issues with mapproject edges
+pad=5000
+dem_extent=$(get_extent.py -pad $pad $dem)
 
 #ref_src=/nobackup/deshean/rpcdem/hma/srtm1/hma_srtm_gl1.vrt
 #ref_src=/nobackup/deshean/hma/mos/latest/mos_8m/*mos_8m.vrt
 #mos_32m=/nobackup/deshean/hma/mos/latest/mos_32m/*mos_32m.vrt
 
-ref_src=/nobackup/deshean/rpcdem/ned13/ned13_tiles_glac24k_115kmbuff.vrt 
-ref_8m=/nobackup/deshean/conus_combined/mos/conus_20171021_mos/conus_mos_8m_all.vrt
-ref_32m=/nobackup/deshean/conus_combined/mos/latest/conus_mos_32m/conus_mos_32m.vrt
+#ref_src=/nobackup/deshean/rpcdem/ned13/ned13_tiles_glac24k_115kmbuff.vrt 
+#ref_src=/nobackup/deshean/fuego/fuego_nasadem_hgt_merge_hgt_adj_proj.tif
+ref_src=/nobackup/deshean/data/tandemx/conus/TDM1_DEM_90m_conus_DEM_aea.tif
+#ref_8m=/nobackup/deshean/conus_combined/mos/conus_20171021_mos/conus_mos_8m_all.vrt
+#ref_32m=/nobackup/deshean/conus_combined/mos/latest/conus_mos_32m/conus_mos_32m.vrt
 
 max_dz=200
 
@@ -21,7 +28,7 @@ max_dz=200
 ref_bn=$(basename $ref_src)
 ref=$(dirname $dem)/${ref_bn%.*}_warp.tif
 if [ ! -e $ref ] ; then 
-    warptool.py -outdir $(dirname $dem) -te $dem -tr $dem -t_srs $dem $ref_src
+    warptool.py -outdir $(dirname $dem) -te "$dem_extent" -tr $dem -t_srs $dem $ref_src
 fi
 
 dz_filt=false
