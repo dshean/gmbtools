@@ -3,13 +3,13 @@
 ### Note for higher res products, need more memory, use fewer cpus
 ### Note: parallel cannot efficiently spawn jobs to many nodes if they finish in <30 sec, scale accordingly
 ##PBS -lselect=64:model=ivy
-#PBS -lselect=24:model=has
-##PBS -lselect=64:model=bro
+##PBS -lselect=24:model=has
+#PBS -lselect=40:model=bro
 #PBS -lwalltime=2:00:00
 #PBS -q devel 
 
 #To submit:
-#qsub ~/src/pbs_scripts/dem_post_parallel.pbs
+#qsub ~/src/gmbtools/gmbtools/dem_post_parallel.pbs
 
 #To check progress
 #ssh $(qstat -u deshean -W o=+rank0 | tail -n 1 | awk '{print $NF}')
@@ -38,8 +38,8 @@ export GDAL_MAX_DATASET_POOL_SIZE=32768
 #rpcdem=/nobackup/deshean/data/tandemx/hma/TDM1_DEM_90m_hma_DEM.vrt
 rpcdem=/nobackup/deshean/data/tandemx/hma/TDM1_DEM_90m_hma_DEM_lt1.5m_err.vrt
 #rpcdem=/nobackup/deshean/data/tandemx/hma/TDM1_DEM_90m_hma_DEM_aea.tif
-#topdir=/nobackup/deshean/hma/dem_coreg
-topdir=/nobackup/deshean/hma/aster/dsm
+topdir=/nobackup/deshean/hma/dem_coreg
+#topdir=/nobackup/deshean/hma/aster/dsm
 
 #CONUS
 #rpcdem=/nobackup/deshean/data/nasadem/conus/hgt_merge/hgt/conus_nasadem_hgt_merge_hgt_adj.vrt
@@ -94,22 +94,28 @@ max_offset=100
 ###
 
 #See rgi_dem_trend.py notes on generating shp
-aster_shp_list='aster_align_index_2000-2018_aea.shp'
-#aster_shp_list+=' aster_align_index_2000-2009_aea.shp aster_align_index_2009-2018_aea.shp'
+dem_shp_list='dem_align_noqb_index_2007-2017_aea.shp'
+#dem_shp_list='aster_align_index_2000-2018_aea.shp'
+#dem_shp_list+=' aster_align_index_2000-2009_aea.shp aster_align_index_2009-2018_aea.shp'
 
 #Prepare cmd files up front, in parallel
 a1=0.0
 a2=2.0
 a3=9999.0
-#parallel --delay 1.0 "rgi_dem_trend.py {1} {2} {3}" ::: $aster_shp_list ::: $a1 $a2 :::+ $a2 $a3
+#parallel --delay 1.0 "rgi_dem_trend.py {1} {2} {3}" ::: $dem_shp_list ::: $a1 $a2 :::+ $a2 $a3
 
-for shp in $aster_shp_list
+for shp in $dem_shp_list
 do
+    if [ ! -d ${shp%.*}_stack ] ; then
+        mkdir -pv ${shp%.*}_stack
+        mkdir -pv ${shp%.*}_stack/log
+    fi
+
     #Smaller glaciers
     cmd_fn=${shp%.*}_${a1}-${a2}_km2_stack_cmd.sh
-    #if [ ! -e $cmd_fn ] ; then
-    #    rgi_dem_trend.py $shp $a1 $a2
-    #fi
+    if [ ! -e $cmd_fn ] ; then
+        rgi_dem_trend.py $shp $a1 $a2
+    fi
 
     ##Remove lines longer than 32762 - not an issue for shorter periods
     #longlines=$(awk '{ if ( length($0) > 32762 ) { print NR } }' $cmd_fn)
@@ -138,9 +144,9 @@ do
 
     #Larger glaciers
     cmd_fn=${shp%.*}_${a2}-${a3}_km2_stack_cmd.sh
-    #if [ ! -e $cmd_fn ] ; then
-    #    rgi_dem_trend.py $shp $a2 $a3
-    #fi
+    if [ ! -e $cmd_fn ] ; then
+        rgi_dem_trend.py $shp $a2 $a3
+    fi
 
     first=$(head -1 $cmd_fn | awk -F'stack_fn' '{print $2}' | awk '{print $1}')
     if [ -e $first ] ; then
@@ -168,38 +174,5 @@ do
     #Clip trend to RGI polygons
     #parallel --workdir $topdir/${shp%.*}_stack --sshloginfile $PBS_NODEFILE 'if [ ! -e {.}_shpclip.tif ] ; then ~/src/pygeotools/pygeotools/clip_raster_by_shp.py -extent raster {} rgi ; fi' ::: 15.*/*trend.tif
     #parallel --workdir $topdir/${shp%.*}_stack --sshloginfile $PBS_NODEFILE '~/src/pygeotools/pygeotools/clip_raster_by_shp.py -extent raster {} rgi' ::: [0-9]*/*trend.tif
-    
-    #Generate products for consistent dates
-    #These take <1s, inefficient for sshd on large block, just check out single node and chug
-    #qsub -I -q devel -lselect=1:model=bro
-    #find . -name '*.npz' > npz_fn_list.txt
-    #parallel --arg-file npz_fn_list.txt '~/src/gmbtools/gmbtools/stack_interp.py {}'
-    #parallel --workdir $topdir/${shp%.*}_stack --sshloginfile $PBS_NODEFILE 'if [ ! -e {.}_20180531.tif ] ; then ~/src/gmbtools/gmbtools/stack_interp.py {}; fi' ::: [0-9]*/*npz
 
-    #difference SRTM and 20000211 grid
-    #parallel --workdir $topdir/${shp%.*}_stack --sshloginfile $PBS_NODEFILE "compute_dz.py {} $rpcdem" ::: [0-9]*/*20000211.tif
-
-    #find . -name '*eul.tif' | parallel --workdir $topdir/${shp%.*}_stack --sshloginfile $PBS_NODEFILE 'if [ ! -e {.}_shpclip.tif ] ; then ~/src/pygeotools/pygeotools/clip_raster_by_shp.py -extent raster {} rgi ; fi'
-
-    #Run on dedicated node
-    #Build vrt mosaics
-    #parallel --workdir $topdir/${shp%.*}_stack --sshloginfile $PBS_NODEFILE "gdalbuildvrt ${shp%.*}_stack/${shp%.*}_mos_{}.vrt ${shp%.*}_stack/[0-9]*/*{}.tif" ::: 20000211 20000531 20090531 20180531 nmad trend trend_shpclip intercept eul eul_shpclip
-    #cd ${shp%.*}_stack
-    #parallel "find . -name *{}.tif > {}_fn_list.txt; gdalbuildvrt -input_file_list {}_fn_list.txt ${shp%.*}_mos_{}.vrt" ::: 20000211 20000531 20090531 20180531 nmad trend 
-    #Export tif
-    #gdal_opt='-co COMPRESS=LZW -co TILED=YES -co BIGTIFF=IF_SAFER'
-    #Regenerate tiles, much more efficient than large vrt
-    #parallel "mkdir {.}; gdal_retile.py -r cubic $gdal_opt -ps 2048 2048 -targetDir {.} {}" ::: *vrt
-    #ndv=-9999
-    #parallel "gdalbuildvrt -srcnodata $ndv -vrtnodata $ndv {.}_tiled.vrt ${shp%.*}_mos_{}/*.tif" :::  20000211  20000531 20090531 20180531 nmad trend
-    #Set nodata
-    #parallel --workdir $topdir/${shp%.*}_stack --sshloginfile $PBS_NODEFILE "gdalwarp -r cubic $gdal_opt ${shp%.*}_mos_{}.vrt ${shp%.*}_mos_trend.tif; gdaladdo_ro.sh ${shp%.*}_mos_{}.tif" ::: trend trend_shpclip eul eul_shpclip
 done
-
-#shp=aster_align_index_2009-2018_aea.shp
-#parallel '~/src/gmbtools/gmbtools/stack_interp.py {}' ::: */*.npz
-#parallel "find . -name 1[345].*_${shp%.*}_stack_{}.tif > ${shp%.*}_mos_{}_fn_list.txt; gdalbuildvrt -r cubic -input_file_list ${shp%.*}_mos_{}_fn_list.txt ${shp%.*}_mos_{}.vrt; gdal_translate -r cubic $gdal_opt ${shp%.*}_mos_{}.vrt ${shp%.*}_mos_{}.tif" ::: 20090531 20180531 trend
-#20000531 
-
-#Now mb_parallel.py
-#make_mos.sh
