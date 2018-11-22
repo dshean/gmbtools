@@ -3,26 +3,10 @@
 """
 Script to create DEMStack objects for list of DEMs over RGI polygons
 
+Run dem_align_post.py and rgi_dem_trend_prep.sh first
+
 To do:
 Should run in parallel with multiprocessing, similar to mb_parallel
-
-After transfer, organize into annual subdir
-for y in `seq 2000 2018` ; do if [ ! -d $y ] ; then mkdir $y ; fi ; mv AST_${y}* $y/ done
-for y in `seq 2000 2018` ; do if [ ! -d years/$y ] ; then mkdir -pv years/$y ; fi ; cd years/$y ; for i in ../../${y}*align/*align.tif; do ln -s $i . ; done; cd ../../ ; done
-
-#Generate ASTER index
-#After running dem_align_post.py
-#Throw out outliers
-#mkdir bad_align; for i in $(cat dem_align_aster_bad_fn.txt); do mv $(echo $i | awk -F'/' '{print $1 "/" $2}') bad_align/; done
-#parallel 'gdaltindex -t_srs EPSG:4326 {}/aster_align_index_{}.shp {}/*align/*align.tif' ::: {2000..2018}
-#ogr_merge.sh aster_align_index_2000-2018.shp 2*/aster_align_index_*.shp
-#ogr_merge.sh aster_align_index_2000-2009.shp 2*/aster_align_index_200[0-9].shp
-#ogr_merge.sh aster_align_index_2009-2018.shp 2*/aster_align_index_2009.shp 2*/aster_align_index_201[0-9].shp
-#Now convert to aea projection
-shp_list="aster_align_index_2000-2018.shp aster_align_index_2000-2009.shp aster_align_index_2009-2018.shp"
-parallel "ogr2ogr -t_srs '+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs ' {.}_aea.shp {}" ::: $shp_list 
-
-Now run dem_post_parallel.pbs
 
 """
 
@@ -52,8 +36,8 @@ else:
 
 #Most DEMs are 32 m
 #res='max'
-res=30
-#res=8
+#res=30
+res=8
 
 #Minimum number of samples
 min_dem_count = 5
@@ -65,8 +49,8 @@ min_dt_ptp = 1825
 
 topdir='/nobackup/deshean/'
 
-demdir = os.path.join(topdir, 'hma/aster/dsm')
-#demdir = os.path.join(topdir, 'hma/dem_coreg')
+#demdir = os.path.join(topdir, 'hma/aster/dsm')
+demdir = os.path.join(topdir, 'hma/dem_coreg')
 
 os.chdir(demdir)
 stackdir = os.path.splitext(dem_index_fn)[0]+'_stack'
