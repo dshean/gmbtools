@@ -23,8 +23,8 @@ for y in $valid_years ; do if [ ! -d years/$y ] ; then mkdir -pv years/$y ; fi ;
 
 #Generate DEM index
 #parallel 'gdaltindex -t_srs EPSG:4326 {}/${prefix}_index_{}.shp {}/*align/*align.tif' ::: $valid_years
-parallel "gdaltindex -t_srs EPSG:4326 {}/${prefix}_index_{}.shp {}/*align.tif" ::: $valid_years
-ogr_merge.sh ${prefix}_index_$yr1-$yr2.shp 2*/${prefix}_index_*.shp
+parallel "gdaltindex -t_srs EPSG:4326 years/{}/${prefix}_index_{}.shp years/{}/*align.tif" ::: $valid_years
+ogr_merge.sh ${prefix}_index_$yr1-$yr2.shp years/2*/${prefix}_index_*.shp
 #ogr_merge.sh ${prefix}_index_$yr1-$yr_mid.shp 2*/${prefix}_index_200[0-9].shp
 #ogr_merge.sh ${prefix}_index_2009-2018.shp 2*/${prefix}_index_2009.shp 2*/${prefix}_index_201[0-9].shp
 
