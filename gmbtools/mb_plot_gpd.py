@@ -31,7 +31,6 @@ area_filter = False
 min_area_m2 = 1E6
 
 outlier_removal = True
-outlier_perc = (0.001, 0.999)
 
 #Ocean area
 #3.625×108 km2 (Cogley et al., 2011)
@@ -72,7 +71,8 @@ if site == 'hma':
     border_shp_fn = '/Users/dshean/data/NaturalEarth/10m_cultural/10m_cultural/ne_10m_admin_0_countries_lakes.shp'
     #basin_shp_fn = '/Users/dshean/data/HydroBASINS/hybas_lake_as_lev01-12_v1c/hybas_lake_as_lev04_v1c.shp'
     basin_shp_fn = '/Users/dshean/data/HydroBASINS/HiMAT_full_210_IDs_subset_merged_clip_names_update.gpkg'
-    region_shp_fn = '/Users/dshean/Documents/UW/HMA/Kaab_regions/regions_from_kaab2015_merged_clean.shp'
+    #region_shp_fn = '/Users/dshean/Documents/UW/HMA/Kaab_regions/regions_from_kaab2015_merged_clean.shp'
+    region_shp_fn = '/Users/dshean/Documents/UW/HMA/Kaab_regions/regions_from_kaab2015_merged_clean_20181111.gpkg'
     #http://www.mindland.com/wp/download-qdgc-continents/
     qdgc_shp_fn = '/Users/dshean/data/qdgc/qdgc_asia/qdgc_01_asia.shp'
     mascon_shp_fn = '/Users/dshean/data/grace_mascons/GSFC.glb.200301_201607_v02.4_clip.gpkg'
@@ -417,7 +417,6 @@ if area_filter:
 
 if outlier_removal:
     print("Removing outliers")
-    outlier_clim = (glac_df_mb['mb_mwea'].quantile(outlier_perc[0]), glac_df_mb['mb_mwea'].quantile(outlier_perc[1]))
 
     if plot:
         plt.figure()
@@ -426,11 +425,24 @@ if outlier_removal:
         ax.set_ylabel('Number of glaciers')
         hist_clim = (-1.0, 1.0)
         ax.set_xlim(*hist_clim)
-        print("%i records before outlier removal" % (glac_df_mb.shape[0]))
         glac_df_mb['mb_mwea'].hist(range=hist_clim, bins=256, label='Before outlier filter')
-        inlier_idx = np.abs(glac_df_mb['mb_mwea'] - glac_df_mb['mb_mwea'].mean()) <= (3*glac_df_mb['mb_mwea'].std())
-        glac_df_mb = glac_df_mb[inlier_idx]
-        print("%i records after outlier removal" % (glac_df_mb.shape[0]))
+
+    outlier_perc = (0.01, 0.99)
+    #outlier_perc = (0.001, 0.999)
+    #outlier_clim = (glac_df_mb['mb_mwea'].quantile(outlier_perc[0]), glac_df_mb['mb_mwea'].quantile(outlier_perc[1]))
+    std_f = 3.0
+    #outlier_clim = glac_df_mb['mb_mwea'].mean() - std_f*glac_df_mb['mb_mwea'].std()
+    outlier_clim = glac_df_mb['mb_mwea'].median() - std_f*malib.mad(glac_df_mb['mb_mwea'].values)
+    outlier_clim = (outlier_clim, -outlier_clim)
+    print("Removing outliers (%0.2f, %0.2f)" % (outlier_clim))
+    #inlier_idx = np.abs(glac_df_mb['mb_mwea'] - glac_df_mb['mb_mwea'].mean()) <= (3*glac_df_mb['mb_mwea'].std())
+    inlier_idx = (glac_df_mb['mb_mwea'] >= outlier_clim[0]) & (glac_df_mb['mb_mwea'] <= outlier_clim[1])
+
+    print("%i records before outlier removal" % (glac_df_mb.shape[0]))
+    glac_df_mb = glac_df_mb[inlier_idx]
+    print("%i records after outlier removal" % (glac_df_mb.shape[0]))
+
+    if plot:
         glac_df_mb['mb_mwea'].hist(range=hist_clim, bins=256, label='After outlier filter')
         ax.axvline(0, linewidth=0.5, color='k')
         ax.legend()
@@ -449,8 +461,9 @@ if basin_shp_fn is not None:
     glac_df_mb_basin_exo = glac_df_mb_basin[glac_df_mb_basin['ENDO'] == 0]
 
 #Compile stats for all glaciers
-all_stats = glac_df_mb[['mb_mwea','mb_m3wea']].mean()
-#all_stats = glac_df_mb[['mb_mwea','mb_m3wea']].median()
+#specific mass balance rate and total mass change  
+#all_stats = glac_df_mb[['mb_mwea','mb_m3wea']].mean()
+all_stats = glac_df_mb[['mb_mwea','mb_m3wea']].median()
 all_stats['mb_mwea_std'] = glac_df_mb[['mb_mwea','mb_mwea']].std()
 all_stats['mb_m3wea_std'] = glac_df_mb[['mb_mwea','mb_m3wea']].std()
 #glac_df_mb[['mb_mwea','mb_m3wea']].apply(malib.mad, axis=0)
