@@ -44,8 +44,8 @@ if [ ! -e ${i%.*}_32610_32m_hs_az315.tif ] ; then
 fi
 
 #ned=/Volumes/d/ned/NED_2003_1arcsec/ned1_2003_adj.vrt
-#if [ ! -e ned_diff/$(basename ${ned%.*})_$(basename ${i}_32610_32m_dz_eul.tif) ] ; then 
-#    compute_dz.py -outdir ned_diff $ned ${i}_32610_32m.tif
+#if [ ! -e ned_diff/$(basename ${ned%.*})_$(basename ${i}_32610_32m_diff.tif) ] ; then 
+#    compute_diff.py -outdir ned_diff $ned ${i}_32610_32m.tif
 #fi
 
 #Now build supermosaic

@@ -225,24 +225,24 @@ for n,site_feat in enumerate(site_shp_lyr):
                     for y in validyears:
                         if (y, 'spring') in mos_fn_dict:
                             if (y, 'summer') in mos_fn_dict:
-                                dz_fn = '%s_%s_dz_eul.tif' % (mos_fn_dict[(y, 'spring')], mos_fn_dict[(y, 'summer')])
+                                dz_fn = '%s_%s_diff.tif' % (mos_fn_dict[(y, 'spring')], mos_fn_dict[(y, 'summer')])
                                 if not os.path.exists(dz_fn):
-                                    dz_cmd_list.append(['compute_dz.py', '-outdir', os.path.join(stackdir, 'dz'), mos_fn_dict[(y, 'spring')], mos_fn_dict[(y, 'summer')]])
+                                    dz_cmd_list.append(['compute_diff.py', '-outdir', os.path.join(stackdir, 'dz'), mos_fn_dict[(y, 'spring')], mos_fn_dict[(y, 'summer')]])
                         if (y, 'summer') in mos_fn_dict:
                             if (y+1, 'spring') in mos_fn_dict:
-                                dz_fn = '%s_%s_dz_eul.tif' % (mos_fn_dict[(y, 'summer')], mos_fn_dict[(y+1, 'spring')])
+                                dz_fn = '%s_%s_diff.tif' % (mos_fn_dict[(y, 'summer')], mos_fn_dict[(y+1, 'spring')])
                                 if not os.path.exists(dz_fn):
-                                    dz_cmd_list.append(['compute_dz.py', '-outdir', os.path.join(stackdir, 'dz'), mos_fn_dict[(y, 'summer')], mos_fn_dict[(y+1, 'spring')]])
+                                    dz_cmd_list.append(['compute_diff.py', '-outdir', os.path.join(stackdir, 'dz'), mos_fn_dict[(y, 'summer')], mos_fn_dict[(y+1, 'spring')]])
                         if (y, 'summer') in mos_fn_dict:
                             if (y+1, 'summer') in mos_fn_dict:
-                                dz_fn = '%s_%s_dz_eul.tif' % (mos_fn_dict[(y, 'summer')], mos_fn_dict[(y+1, 'summer')])
+                                dz_fn = '%s_%s_diff.tif' % (mos_fn_dict[(y, 'summer')], mos_fn_dict[(y+1, 'summer')])
                                 if not os.path.exists(dz_fn):
-                                    dz_cmd_list.append(['compute_dz.py', '-outdir', os.path.join(stackdir, 'dz'), mos_fn_dict[(y, 'summer')], mos_fn_dict[(y+1, 'summer')]])
+                                    dz_cmd_list.append(['compute_diff.py', '-outdir', os.path.join(stackdir, 'dz'), mos_fn_dict[(y, 'summer')], mos_fn_dict[(y+1, 'summer')]])
                         if (y, 'spring') in mos_fn_dict:
                             if (y+1, 'spring') in mos_fn_dict:
-                                dz_fn = '%s_%s_dz_eul.tif' % (mos_fn_dict[(y, 'spring')], mos_fn_dict[(y+1, 'spring')])
+                                dz_fn = '%s_%s_diff.tif' % (mos_fn_dict[(y, 'spring')], mos_fn_dict[(y+1, 'spring')])
                                 if not os.path.exists(dz_fn):
-                                    dz_cmd_list.append(['compute_dz.py', '-outdir', os.path.join(stackdir, 'dz'), mos_fn_dict[(y, 'spring')], mos_fn_dict[(y+1, 'spring')]])
+                                    dz_cmd_list.append(['compute_diff.py', '-outdir', os.path.join(stackdir, 'dz'), mos_fn_dict[(y, 'spring')], mos_fn_dict[(y+1, 'spring')]])
 
             #Make stack of all year/season products 
             if True:
@@ -309,11 +309,11 @@ if make_stacks:
     outf = None
 
 #Want to mask stack output to rock+ice
-#parallel -j 32 'dem_mask.py --no_icemask {}' ::: */*tile-0-stddev.tif */*eul.tif */stack*/*trend.tif */stack*/*std.tif
+#parallel -j 32 'dem_mask.py --no_icemask {}' ::: */*tile-0-stddev.tif */*diff.tif */stack*/*trend.tif */stack*/*std.tif
 
 #cd sites
 #parallel 'compute_dh.py {}/{}_ned13_warp.tif {}/{}_summer-tile-0.tif' ::: *
-#parallel 'clip_raster_by_shp.sh {} RGI' ::: */*eul.tif
+#parallel 'clip_raster_by_shp.sh {} RGI' ::: */*diff.tif
 #hs.sh */*tile-0.tif
 #parallel 'imview.py {}/*clip.tif -overlay {}/*az315.tif -of png -cmap inferno_r -clim -50 0' ::: *
 #parallel 'imview.py {}/*clip.tif -overlay {}/*az315.tif -of png -cmap RdYlBu -alpha 0.7 -clim -80 80' ::: *
