@@ -1,8 +1,8 @@
 #PBS -S /bin/bash
 #PBS -V
 ##PBS -lselect=12:model=ivy
-#PBS -lselect=64:model=bro
-##PBS -lselect=2:model=bro
+#PBS -lselect=20:model=bro
+##PBS -lselect=1:model=bro
 #PBS -lwalltime=2:00:00
 #PBS -q devel 
 
@@ -27,7 +27,7 @@ cd $PBS_O_WORKDIR
 #sed -i.bak -e "$longlines_sed" $cmd_fn
 
 #If interrupted
-#for i in *.tif; do if ! ls ${i}-log-dem_mosaic*txt 1> /dev/null 2>&1 ; then rm -v ${i}*; else if ! grep -q 'Number of valid' $(ls -t ${i}-log-dem_mosaic*txt | head -1); then rm -v ${i}* ; fi ; fi ; done
+#for i in *-tile-[0-9]*-*.tif; do if ! ls ${i}-log-dem_mosaic*txt 1> /dev/null 2>&1 ; then rm -v ${i}*; else if ! grep -q 'Number of valid' $(ls -t ${i}-log-dem_mosaic*txt | head -1); then rm -v ${i}* ; fi ; fi ; done
 
 echo "Original cmd count:" $(wc -l $cmd_fn)
 echo "Checking for finished tiles"
@@ -36,4 +36,5 @@ echo -n > ${cmd_fn%.*}_missing.sh
 for fn in $fn_list ; do if [ ! -e $fn ] ; then grep $fn $cmd_fn >> ${cmd_fn%.*}_missing.sh ; fi done
 echo "Final cmd count:" $(wc -l ${cmd_fn%.*}_missing.sh)
 
+#Some dem_mosaic runs require >10 GB of RAM for brief periods, limit number of jobs
 parallel --workdir $PBS_O_WORKDIR -j 14 --sshloginfile $PBS_NODEFILE < ${cmd_fn%.*}_missing.sh
