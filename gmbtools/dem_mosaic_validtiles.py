@@ -123,6 +123,7 @@ def main():
         print("Determining t_projwin (bounding box for inputs)")
         t_projwin = warplib.parse_extent(args.t_projwin, ds_list, t_srs=t_srs) 
         print(t_projwin)
+        #Ensure that our extent is whole integer multiples of the mosaic res
         #This could trim off some fraction of a pixel around margins
         t_projwin = geolib.extent_round(t_projwin, tr)
         mos_xmin, mos_ymin, mos_xmax, mos_ymax = t_projwin
@@ -220,44 +221,59 @@ def main():
     #Number of integers to use for tile number
     ni = max([len(str(i)) for i in out_tile_list])
 
-    cmd_list = []
-    out_cmd_fn = o+'_cmd.sh'
-    if not os.path.exists(out_cmd_fn):
-        print("Creating text file of commands")
-        with open(out_cmd_fn, 'w') as f_cmd:
-            for n, tile in enumerate(out_tile_list):
-                #print('%i of %i tiles: %i' % (n+1, len(out_tile_list), tile))
-                tile_fn_base = '%s-tile-%0*i.tif' % (o, ni, tile)
-                tile_fn_list_txt = os.path.splitext(tile_fn_base)[0]+'_fn_list.txt'
-                #Write out DEM file list for the tile
-                with open(tile_fn_list_txt, 'w') as f_fn_list:
-                    f_fn_list.write('\n'.join(tile_dict[tile]['fn_list']))
-                for stat in stat_list:
-                    tile_fn = os.path.splitext(tile_fn_base)[0]+'-%s.tif' % stat
-                    dem_mosaic_args = {'fn_list':tile_dict[tile]['fn_list'], 'o':tile_fn, 'fn_list_txt':tile_fn_list_txt, \
-                            'tr':tr, 't_srs':t_srs, 't_projwin':tile_dict[tile]['extent'], 'threads':1, 'stat':stat}
-                    if not os.path.exists(tile_fn):
-                        cmd = geolib.get_dem_mosaic_cmd(**dem_mosaic_args)
-                        cmd_list.append(cmd)
-                        #Write out command to file
-                        f_cmd.write('%s\n' % ' '.join(str(i) for i in cmd))
-
     #If we're on Pleiades, split across multiple nodes
     #Hack with GNU parallel right now
+    pbs = False
     import socket
     if 'nasa' in socket.getfqdn():
-        #This should already be set
-        #cmd = ['lfs', 'setstripe', '-c', '64', o]
-        #print(' '.join(str(i) for i in cmd))
-        #subprocess.call(cmd)
-        stripecount = 64
+        pbs = True
+
+    cmd_list = []
+    f_cmd = None
+
+    if pbs:
+        out_cmd_fn = o+'_cmd.sh'
+        if not os.path.exists(out_cmd_fn):
+            print("Creating text file of commands")
+            f_cmd = open(out_cmd_fn, 'w')
+
+    for n, tile in enumerate(out_tile_list):
+        #print('%i of %i tiles: %i' % (n+1, len(out_tile_list), tile))
+        tile_fn_base = '%s-tile-%0*i.tif' % (o, ni, tile)
+        tile_fn_list_txt = os.path.splitext(tile_fn_base)[0]+'_fn_list.txt'
+        #Write out DEM file list for the tile
+        with open(tile_fn_list_txt, 'w') as f_fn_list:
+            f_fn_list.write('\n'.join(tile_dict[tile]['fn_list']))
+        for stat in stat_list:
+            tile_fn = os.path.splitext(tile_fn_base)[0]+'-%s.tif' % stat
+            dem_mos_threads = 1
+            #Use more threads for tiles with many inputs, will take much longer to finish
+            #Should do some analysis of totals for all fn_list
+            if len(tile_dict[tile]['fn_list']) > 80:
+                dem_mos_threads = 2
+            dem_mosaic_args = {'fn_list':tile_dict[tile]['fn_list'], 'o':tile_fn, 'fn_list_txt':tile_fn_list_txt, \
+                    'tr':tr, 't_srs':t_srs, 't_projwin':tile_dict[tile]['extent'], 'threads':dem_mos_threads, 'stat':stat}
+            if not os.path.exists(tile_fn):
+                cmd = geolib.get_dem_mosaic_cmd(**dem_mosaic_args)
+                #Hack to clean up extra quotes around proj4 string here '""'
+                cmd_list.append([s.replace('\"','') for s in cmd])
+            if f_cmd is not None:
+                #Write out command to file
+                f_cmd.write('%s\n' % ' '.join(str(i) for i in cmd))
+
+    f_cmd = None
+
+    if pbs:
+        stripecount = 28 
         iolib.setstripe(odir, stripecount)
+        #Get number of available devel nodes, submit with 
+        #$(node_stats.sh | grep -A 4 'devel' | grep Broadwell | awk '{print $NF}')
         pbs_script = os.path.join(os.path.split(os.path.realpath(__file__))[0], 'dem_mosaic_parallel.pbs')
         cmd = ['qsub', '-v', 'cmd_fn=%s' % out_cmd_fn, pbs_script]
         print(' '.join(str(i) for i in cmd))
-        subprocess.call(cmd)
+        #subprocess.call(cmd)
         #This is currently the hack to interrupt and wait for pbs to finish, then 'continue' in ipdb
-        import ipdb; ipdb.set_trace()
+        #import ipdb; ipdb.set_trace()
         #print("qsub -v cmd_fn=%s %s" % (out_cmd_fn, pbs_script))
         #qtop_cmd = ['qtop_deshean.sh', '|', 'grep', 'dem_mos']
         #while qtop_cmd has output
@@ -299,14 +315,17 @@ def main():
             vrt_fn = os.path.splitext(vrt_fn)[0]+'_%s.vrt' % stat
             if stat in ['lastindex', 'firstindex', 'medianindex']:
                 vrt_fn = os.path.splitext(vrt_fn)[0]+'_ts.vrt'
-        cmd = ['gdalbuildvrt', vrt_fn] 
+        cmd = ['gdalbuildvrt'] 
+        cmd.extend(['-r', 'cubic'])
+        #cmd.append('-tap')
+        cmd.append(vrt_fn)
         vrt_fn_list = []
         for tile_fn in tile_fn_list:
             if os.path.exists(tile_fn):
                 vrt_fn_list.append(tile_fn)
             else:
                 print("Missing file: %s" % tile_fn)
-        cmd.extend(vrt_fn_list)
+        cmd.extend(sorted(vrt_fn_list))
         print(cmd)
         subprocess.call(cmd)
 
