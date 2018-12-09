@@ -4,7 +4,7 @@
 ### Note: parallel cannot efficiently spawn jobs to many nodes if they finish in <30 sec, scale accordingly
 ##PBS -lselect=64:model=ivy
 ##PBS -lselect=24:model=has
-#PBS -lselect=40:model=bro
+#PBS -lselect=64:model=bro
 #PBS -lwalltime=2:00:00
 #PBS -q devel 
 
@@ -27,8 +27,14 @@ export GDAL_MAX_DATASET_POOL_SIZE=32768
 #The ls -H here dereferences links
 #Can shuffle sizes with `shuf` utility
 
-topdir=/nobackup/deshean/hma/dem_coreg
-#topdir=/nobackup/deshean/hma/aster/dsm
+#WVGE
+#topdir=/nobackup/deshean/hma/dem_coreg
+#ASTER
+topdir=/nobackup/deshean/hma/aster/dsm
+
+#CONUS
+#refdem=/nobackup/deshean/data/nasadem/conus/hgt_merge/hgt/conus_nasadem_hgt_merge_hgt_adj.vrt
+#topdir=/nobackup/deshean/conus_combined/dem_coreg_nasadem
 
 cd $topdir
 
@@ -37,9 +43,9 @@ cd $topdir
 ###
 
 #See rgi_dem_trend.py notes on generating shp
-dem_shp_list='dem_align_noqb_index_2007-2017_aea.shp'
-#dem_shp_list='aster_align_index_2000-2018_aea.shp'
-#dem_shp_list+=' aster_align_index_2000-2009_aea.shp aster_align_index_2009-2018_aea.shp'
+#dem_shp_list='dem_align_noqb_index_2007-2017_aea.shp'
+dem_shp_list='dem_align_ASTER_round2_index_2000-2018_aea.shp'
+#dem_shp_list+='dem_align_ASTER_round2_index_2000-2009_aea.shp dem_align_ASTER_round2_index_2000-2009_aea.shp'
 
 #Prepare cmd files up front, in parallel
 a1=0.0
@@ -70,10 +76,10 @@ do
     #If recovering from unfinished
     first=$(head -1 $cmd_fn | awk -F'stack_fn' '{print $2}' | awk '{print $1}')
     if [ -e $first ] ; then 
-        #for i in ${shp%.*}_stack/*/*_trend.tif; do if [ ! -e $(echo $i | sed 's/_trend.tif/.npz/') ] ; then rm -v $i; fi; done
+        ##for i in ${shp%.*}_stack/*/*_trend.tif; do if [ ! -e $(echo $i | sed 's/_trend.tif/.npz/') ] ; then rm -v $i; fi; done
         missing=${cmd_fn%.*}_missing.sh
         echo -n > $missing
-        #for i in $(awk -F'stack_fn' '{print $2}' $cmd_fn | awk '{print $1}') ; do if [ ! -e $i ] ; then grep $i $cmd_fn >> $missing; fi ; done
+        ##for i in $(awk -F'stack_fn' '{print $2}' $cmd_fn | awk '{print $1}') ; do if [ ! -e $i ] ; then grep $i $cmd_fn >> $missing; fi ; done
     else
         missing=$cmd_fn
     fi
@@ -81,8 +87,8 @@ do
     #If missing is not empty
     if [ -s $missing ] ; then 
         parallel --workdir $topdir -j 28 --sshloginfile $PBS_NODEFILE < $missing
-        #tac $cmd_fn > temp
-        #parallel --workdir $topdir -j 14 --sshloginfile $PBS_NODEFILE < temp
+        ##tac $cmd_fn > temp
+        ##parallel --workdir $topdir -j 14 --sshloginfile $PBS_NODEFILE < temp
     fi
 
     #Larger glaciers
