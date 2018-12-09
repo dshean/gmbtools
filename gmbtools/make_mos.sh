@@ -3,6 +3,7 @@
 set -e
 
 #If interrupted
+#Only if tar.gz have not been generated
 #for i in *-tile-[0-9]*-*.tif; do if ! ls ${i}-log-dem_mosaic*txt 1> /dev/null 2>&1 ; then rm -v ${i}*; else if ! grep -q 'Number of valid' $(ls -t ${i}-log-dem_mosaic*txt | head -1); then rm -v ${i}* ; fi ; fi ; done
 
 #pbs_rfe --duration 0+6 --model bro
@@ -29,9 +30,10 @@ trans=false
 #Output mosaic res
 #res=2
 #res=8
+res=10
 #res=32
 #ASTER
-res=30
+#res=30
 
 #If res is better than 32, make lowres products for faster browsing
 #lowres=100
@@ -70,13 +72,20 @@ extent='union'
 #Hardcoded sitename, projection and extent (performance improvement)
 site=hma
 #proj='+proj=aea +lat_1=25 +lat_2=47 +lat_0=36 +lon_0=85 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs '
+
+#Export 1x1 deg tiles
 proj='EPSG:4326'
 extent='64 24 109 45'
-#1 arcsec
-res=0.002777777777778
-#1/3 arcsec
-res=0.000925925925926
+
+#1 arcsec = 1/3600 of deg = 30 m
+#res=0.0002777777777778
+#1/3 arcsec = 1/3600/3 = 10 m
+res=0.0000925925925926
+#1/9 arcsec = 1/3600/9 = 3 m
+#res=0.000030864197531
+
 lowres=$(python -c "print($res*3.*3.)")
+
 #WV/GE extent
 #extent='-1553632.99074 -1030104.4196 1727255.00926 1268847.5804'
 #ASTER extent
@@ -114,7 +123,8 @@ ts=`date +%Y%m%d`
 echo "Identifying input DEMs"
 
 #mos_ext="${site}_mos_${res}m"
-mos_ext="${site}_mos_13"
+#mos_ext="${site}_mos_1arcsec"
+mos_ext="${site}_wvge_mos_13arcsec"
 
 if $latest ; then
     #Note: CONUS is only current through June 2016, missing 
@@ -146,18 +156,18 @@ fi
 #list=$(ls *track/*00/dem*/${re}*${ext}.tif)
 
 #WV/GE dem_align
-#ext="-DEM_8m_dzfilt_-200_200_*align"
+ext="-DEM_8m_dzfilt_-200_200_*align"
 #ext="-DEM_${res}m_dzfilt_-200_200_*align"
 #Reference products (masked to remove outliers)
 #ext="-DEM_${res}m_dzfilt_-200_200_*align_filt.tif"
-#list=$(ls *track/2*align/${re}*${ext}.tif)
+list=$(ls *track/2*align/${re}*${ext}.tif)
 
 #ASTER
 #ext="_align_dzfilt_-100_100"
-ext='_align'
+#ext='_align'
 #list=$(ls 2*/AST*_dem_align/*${re}*${ext}.tif)
 #Round2
-list=$(ls 2*/AST*_dem_align/AST*_dem_align/*${re}*${ext}.tif)
+#list=$(ls 2*/AST*_dem_align/AST*_dem_align/*${re}*${ext}.tif)
 
 echo $list | wc -w
 
@@ -252,7 +262,7 @@ for stat in $statlist_tomask
 do
     fn_list=$(ls ${out}*-${stat}.tif)
     fn_list_todo=""
-    for fn in fn_list
+    for fn in $fn_list
     do
         if [ ! -e ${fn%.*}_masked.tif ] ; then 
            fn_list_todo+=" $fn"
