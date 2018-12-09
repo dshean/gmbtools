@@ -175,11 +175,14 @@ def main():
                 tile_dict[tilenum]['geom'] = tile_geom
                 tile_dict[tilenum]['extent'] = [tile_xmin, tile_ymin, tile_xmax, tile_ymax]
                 #Add center coord tile name
-                cx, cy = tile_geom.centroid()
+                cx = tile_geom.Centroid().GetX()
+                cy = tile_geom.Centroid().GetY()
+                #These round down
+                #TanDEM-X uses lower left corner as name
                 if latlon:
-                    tilename = cy.map('{:,.0f}N'.format) + mascon_df.cx.map('{:,.0f}E'.format)
+                    tilename = '{:.0f}N'.format(cy) + '{:03.0f}E'.format(cx)
                 else:
-                    tilename = cy.map('{:,.0f}'.format) + '_' + mascon_df.cx.map('{:,.0f}'.format)
+                    tilename = '{:.0f}'.format(cy) + '_' + '{:.0f}'.format(cx) 
                 tile_dict[tilenum]['tilename'] = tilename
 
                 #Add additional parameters that can be loaded at a later time without reprocessing all input datasets
@@ -200,7 +203,8 @@ def main():
                     #geolib.geom2shp(tile_geom, 'tile_%03i.shp' % tilenum)
             if tile_dict_fn:
                 tile_dict[tilenum]['fn_list'] = tile_dict_fn
-        
+       
+        #This needs to be cleaned up, just create a new tile_dict, don't need list
         out_tile_list = []
         tile_dict_copy = copy.deepcopy(tile_dict)
         for tilenum in tile_dict_copy.keys():
@@ -225,9 +229,9 @@ def main():
     #outf = open('%s-log-dem_mosaic-tile-%i.log' % (o, tile), 'w')
 
     #Should run the tiles with the largest file count first, as they will likely take longer
-    #tile_dict = OrderedDict(sorted(tile_dict.items(), key=lambda item: len(item[1]['fn_list']), reverse=True))
+    tile_dict = OrderedDict(sorted(tile_dict.items(), key=lambda item: len(item[1]['fn_list']), reverse=True))
     #Do tiles with smallest file count first
-    tile_dict = OrderedDict(sorted(tile_dict.items(), key=lambda item: len(item[1]['fn_list']), reverse=False))
+    #tile_dict = OrderedDict(sorted(tile_dict.items(), key=lambda item: len(item[1]['fn_list']), reverse=False))
     out_tile_list = tile_dict.keys()
     #Number of integers to use for tile number
     ni = max([len(str(i)) for i in out_tile_list])
@@ -261,9 +265,11 @@ def main():
             #Use more threads for tiles with many inputs, will take much longer to finish
             #Should do some analysis of totals for all fn_list
             if len(tile_dict[tile]['fn_list']) > 80:
-                dem_mos_threads = 2
-            dem_mosaic_args = {'fn_list':tile_dict[tile]['fn_list'], 'o':tile_fn, 'fn_list_txt':tile_fn_list_txt, \
-                    'tr':tr, 't_srs':t_srs, 't_projwin':tile_dict[tile]['extent'], 'threads':dem_mos_threads, 'stat':stat}
+                dem_mos_threads = 4
+            dem_mosaic_args = {'fn_list':tile_dict[tile]['fn_list'], 'o':tile_fn, \
+                    'fn_list_txt':tile_fn_list_txt, \
+                    'tr':tr, 't_srs':t_srs, 't_projwin':tile_dict[tile]['extent'], \
+                    'threads':dem_mos_threads, 'stat':stat}
             if not os.path.exists(tile_fn):
                 cmd = geolib.get_dem_mosaic_cmd(**dem_mosaic_args)
                 #Hack to clean up extra quotes around proj4 string here '""'
