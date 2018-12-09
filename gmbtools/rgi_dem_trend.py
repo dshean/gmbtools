@@ -36,8 +36,8 @@ else:
 
 #Most DEMs are 32 m
 #res='max'
-#res=30
-res=8
+res=30
+#res=8
 
 #Minimum number of samples
 min_dem_count = 5
@@ -49,8 +49,8 @@ min_dt_ptp = 1825
 
 topdir='/nobackup/deshean/'
 
-#demdir = os.path.join(topdir, 'hma/aster/dsm')
-demdir = os.path.join(topdir, 'hma/dem_coreg')
+demdir = os.path.join(topdir, 'hma/aster/dsm')
+#demdir = os.path.join(topdir, 'hma/dem_coreg')
 
 os.chdir(demdir)
 stackdir = os.path.splitext(dem_index_fn)[0]+'_stack'
@@ -119,7 +119,6 @@ f = open(cmd_fn, "w")
 
 glac_dict = None
 #glac_dict = ['15.03473', '15.03733', '15.10070', '15.09991']
-
 
 for n, feat in enumerate(glac_shp_lyr):
     #glac_geom_orig = geolib.geom_dup(feat.GetGeometryRef())
