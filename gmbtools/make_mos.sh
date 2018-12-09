@@ -28,10 +28,10 @@ trans=false
 
 #Output mosaic res
 #res=2
-res=8
+#res=8
 #res=32
 #ASTER
-#res=30
+res=30
 
 #If res is better than 32, make lowres products for faster browsing
 #lowres=100
@@ -108,7 +108,7 @@ ts=`date +%Y%m%d`
 #ts=20180830
 #ts=20181127_GEonly
 #ts=20181130_aster
-ts=20181205
+#ts=20181205
 
 #Should add option to split annually
 echo "Identifying input DEMs"
@@ -146,16 +146,18 @@ fi
 #list=$(ls *track/*00/dem*/${re}*${ext}.tif)
 
 #WV/GE dem_align
-ext="-DEM_8m_dzfilt_-200_200_*align"
+#ext="-DEM_8m_dzfilt_-200_200_*align"
 #ext="-DEM_${res}m_dzfilt_-200_200_*align"
 #Reference products (masked to remove outliers)
 #ext="-DEM_${res}m_dzfilt_-200_200_*align_filt.tif"
-list=$(ls *track/2*align/${re}*${ext}.tif)
+#list=$(ls *track/2*align/${re}*${ext}.tif)
 
 #ASTER
 #ext="_align_dzfilt_-100_100"
-#ext='_align'
+ext='_align'
 #list=$(ls 2*/AST*_dem_align/*${re}*${ext}.tif)
+#Round2
+list=$(ls 2*/AST*_dem_align/AST*_dem_align/*${re}*${ext}.tif)
 
 echo $list | wc -w
 
