@@ -1132,13 +1132,21 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
         gf.mb_mean = gf.mb_stats[3]
 
         #Calculate uncertainty of total elevation change
-        #TODO: Better spatial distribution characterization
-        #Add slope-dependent component here
+        #decorrelation length
+        L = 500
+        Acor = np.pi*L**2
+        if gf.glac_area < Acor:
+            #Correction factor for sample size area
+            Acorf = np.sqrt(Acor/(5*gf.glac_area))
+        else:
+            Acorf = 1.0
+
+        #Std or NMAD of elevation change on stable ground
         #dz_sigma = np.sqrt(z1_sigma**2 + z2_sigma**2)
         #This is NMAD of static pixels within buffer
-        dz_sigma = gf.dz_static_stats[6]
+        dh_sigma = gf.dz_static_stats[6]
         #Uncertainty of dh/dt
-        gf.dhdt_sigma = dz_sigma/gf.dt
+        gf.dhdt_sigma = Acorf * (dh_sigma/gf.dt)
 
         #This is mb uncertainty map
         gf.mb_sigma = np.ma.abs(gf.mb) * np.sqrt((rho_sigma/rho_is)**2 + (gf.dhdt_sigma/gf.dhdt)**2)
