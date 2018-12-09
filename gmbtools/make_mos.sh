@@ -246,11 +246,24 @@ if [[ ! -z "${statlist_todo// }" ]] ; then
 fi
 
 #Mask output median or wmean to preserve pixels with count > 2, nmad < 3.0
+#Should probably move this to dem_mosaic_validtiles
 statlist_tomask="median wmean"
 for stat in $statlist_tomask
 do
-    #parallel 'dem_mosaic_mask.py {}' ::: ${out}*-${stat}.tif
-    gdalbuildvrt -r cubic ${out}_${stat}_masked.vrt ${out}*-${stat}_masked.tif
+    fn_list=$(ls ${out}*-${stat}.tif)
+    fn_list_todo=""
+    for fn in fn_list
+    do
+        if [ ! -e ${fn%.*}_masked.tif ] ; then 
+           fn_list_todo+=" $fn"
+        fi
+    done 
+    if [ ! -z $fn_list_todo ] ; then 
+        parallel 'dem_mosaic_mask.py {}' ::: $fn_list_todo
+    fi
+    if [ ! -e ${out}_${stat}_masked.vrt ] ; then 
+        gdalbuildvrt -r cubic ${out}_${stat}_masked.vrt ${out}*-${stat}_masked.tif
+    fi
     statlist+=" ${stat}_masked"
 done
 

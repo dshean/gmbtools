@@ -112,6 +112,10 @@ def main():
         print("\nParsing t_srs")
         t_srs = warplib.parse_srs(args.t_srs, ds_list)
         print(t_srs.ExportToProj4())
+        #Output file names will contain coordinate string
+        latlon = False
+        if t_srs.IsGeographic():
+            latlon = True
 
         #Mosaic res
         print("\nParsing tr")
@@ -170,6 +174,13 @@ def main():
                 tile_dict[tilenum] = {}
                 tile_dict[tilenum]['geom'] = tile_geom
                 tile_dict[tilenum]['extent'] = [tile_xmin, tile_ymin, tile_xmax, tile_ymax]
+                #Add center coord tile name
+                cx, cy = tile_geom.centroid()
+                if latlon:
+                    tilename = cy.map('{:,.0f}N'.format) + mascon_df.cx.map('{:,.0f}E'.format)
+                else:
+                    tilename = cy.map('{:,.0f}'.format) + '_' + mascon_df.cx.map('{:,.0f}'.format)
+                tile_dict[tilenum]['tilename'] = tilename
 
                 #Add additional parameters that can be loaded at a later time without reprocessing all input datasets
                 tile_dict[tilenum]['tr'] = tr
@@ -271,9 +282,9 @@ def main():
         pbs_script = os.path.join(os.path.split(os.path.realpath(__file__))[0], 'dem_mosaic_parallel.pbs')
         cmd = ['qsub', '-v', 'cmd_fn=%s' % out_cmd_fn, pbs_script]
         print(' '.join(str(i) for i in cmd))
-        #subprocess.call(cmd)
+        subprocess.call(cmd)
         #This is currently the hack to interrupt and wait for pbs to finish, then 'continue' in ipdb
-        #import ipdb; ipdb.set_trace()
+        import ipdb; ipdb.set_trace()
         #print("qsub -v cmd_fn=%s %s" % (out_cmd_fn, pbs_script))
         #qtop_cmd = ['qtop_deshean.sh', '|', 'grep', 'dem_mos']
         #while qtop_cmd has output
