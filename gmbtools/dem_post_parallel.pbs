@@ -4,9 +4,11 @@
 ### Note: parallel cannot efficiently spawn jobs to many nodes if they finish in <30 sec, scale accordingly
 ##PBS -lselect=64:model=ivy
 ##PBS -lselect=24:model=has
-#PBS -lselect=64:model=bro
+##PBS -lselect=64:model=bro
+#PBS -lselect=4:model=bro
 #PBS -lwalltime=2:00:00
-#PBS -q devel 
+##PBS -q devel 
+#PBS -q normal 
 
 #To submit:
 #qsub ~/src/gmbtools/gmbtools/dem_post_parallel.pbs
@@ -43,15 +45,16 @@ cd $topdir
 ###
 
 #See rgi_dem_trend.py notes on generating shp
-#dem_shp_list='dem_align_noqb_index_2007-2017_aea.shp'
-dem_shp_list='dem_align_ASTER_round2_index_2000-2018_aea.shp'
-#dem_shp_list+='dem_align_ASTER_round2_index_2000-2009_aea.shp dem_align_ASTER_round2_index_2000-2009_aea.shp'
+dem_shp_list=""
+dem_shp_list+='dem_align_ASTER_round2_index_2000-2018_aea.shp'
+dem_shp_list+=' dem_align_ASTER_round2_index_2000-2009_aea.shp'
+dem_shp_list+=' dem_align_ASTER_round2_index_2009-2018_aea.shp'
 
-#Prepare cmd files up front, in parallel
+#dem_shp_list+='dem_align_noqb_index_2007-2017_aea.shp'
+
 a1=0.0
 a2=2.0
 a3=9999.0
-#parallel --delay 1.0 "rgi_dem_trend.py {1} {2} {3}" ::: $dem_shp_list ::: $a1 $a2 :::+ $a2 $a3
 
 for shp in $dem_shp_list
 do
@@ -76,10 +79,11 @@ do
     #If recovering from unfinished
     first=$(head -1 $cmd_fn | awk -F'stack_fn' '{print $2}' | awk '{print $1}')
     if [ -e $first ] ; then 
-        ##for i in ${shp%.*}_stack/*/*_trend.tif; do if [ ! -e $(echo $i | sed 's/_trend.tif/.npz/') ] ; then rm -v $i; fi; done
         missing=${cmd_fn%.*}_missing.sh
         echo -n > $missing
-        ##for i in $(awk -F'stack_fn' '{print $2}' $cmd_fn | awk '{print $1}') ; do if [ ! -e $i ] ; then grep $i $cmd_fn >> $missing; fi ; done
+        #This will isolate npz filenames from cmd_fn
+        ##parallel "if ! ls -U {}/*npz >/dev/null 2>&1 ; then rm -v {}; grep {} $cmd_fn >> $missing ; fi" ::: ${shp%.*}_stack/1*
+        awk -F'stack_fn' '{print $2}' $cmd_fn | awk '{print $1}' | parallel "if ! ls -U {} > /dev/null 2>&1 ; then grep {} $cmd_fn >> $missing ; fi"
     else
         missing=$cmd_fn
     fi
@@ -87,8 +91,6 @@ do
     #If missing is not empty
     if [ -s $missing ] ; then 
         parallel --workdir $topdir -j 28 --sshloginfile $PBS_NODEFILE < $missing
-        ##tac $cmd_fn > temp
-        ##parallel --workdir $topdir -j 14 --sshloginfile $PBS_NODEFILE < temp
     fi
 
     #Larger glaciers
@@ -100,8 +102,8 @@ do
     first=$(head -1 $cmd_fn | awk -F'stack_fn' '{print $2}' | awk '{print $1}')
     if [ -e $first ] ; then
         missing=${cmd_fn%.*}_missing.sh
-        #echo -n > $missing
-        #for i in $(awk -F'stack_fn' '{print $2}' $cmd_fn | awk '{print $1}') ; do if [ ! -e $i ] ; then grep $i $cmd_fn >> $missing; fi ; done
+        echo -n > $missing
+        awk -F'stack_fn' '{print $2}' $cmd_fn | awk '{print $1}' | parallel "if ! ls -U {} > /dev/null 2>&1 ; then grep {} $cmd_fn >> $missing ; fi"
     else
         missing=$cmd_fn
     fi
