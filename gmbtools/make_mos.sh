@@ -268,10 +268,13 @@ do
            fn_list_todo+=" $fn"
         fi
     done 
-    if [ ! -z $fn_list_todo ] ; then 
-        parallel 'dem_mosaic_mask.py {}' ::: $fn_list_todo
+    if [ ! -z "$fn_list_todo" ] ; then 
+        echo "Running dem_mosaic_mask for $stat"
+        #These can be large, quickly fill up memory
+        parallel --progress -j 16 --delay 0.1 'dem_mosaic_mask.py {}' ::: $fn_list_todo
     fi
     if [ ! -e ${out}_${stat}_masked.vrt ] ; then 
+        echo "Building vrt for $stat"
         gdalbuildvrt -r cubic ${out}_${stat}_masked.vrt ${out}*-${stat}_masked.tif
     fi
     statlist+=" ${stat}_masked"
