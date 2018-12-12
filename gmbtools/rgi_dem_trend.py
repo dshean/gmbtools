@@ -49,8 +49,9 @@ min_dt_ptp = 1825
 
 topdir='/nobackup/deshean/'
 
-demdir = os.path.join(topdir, 'hma/aster/dsm')
+#demdir = os.path.join(topdir, 'hma/aster/dsm')
 #demdir = os.path.join(topdir, 'hma/dem_coreg')
+demdir = os.path.join(topdir, 'hma/combined_aster_wv')
 
 os.chdir(demdir)
 stackdir = os.path.splitext(dem_index_fn)[0]+'_stack'
