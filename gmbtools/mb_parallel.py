@@ -227,7 +227,7 @@ def hist_plot(gf, outdir, bin_width=50.0, dz_clim=(-2.0, 2.0)):
     #Loop through each bin and extract stats
     idx = np.digitize(gf.z1, z_bin_edges)
     for bin_n in range(z_bin_centers.size):
-        mb_bin_samp = gf.mb[(idx == bin_n+1)]
+        mb_bin_samp = gf.mb_map[(idx == bin_n+1)]
         if mb_bin_samp.count() > min_bin_samp_count:
             mb_bin_med[bin_n] = malib.fast_median(mb_bin_samp)
             mb_bin_mad[bin_n] = malib.mad(mb_bin_samp)
@@ -464,20 +464,20 @@ setup['site'] = site
 #site='other'
 
 #Filter glacier poly - let's stick with big glaciers for now
-#min_glac_area = 0.0 #km^2
+min_glac_area = 0.0 #km^2
 #min_glac_area = 0.1 #km^2
 #min_glac_area = 1. #km^2
-min_glac_area = 2. #km^2
+#min_glac_area = 2. #km^2
 #Minimum percentage of glacier poly covered by valid dz
-min_valid_area_perc = 0.80
+min_valid_area_perc = 0.85
 #Process thickness, velocity, etc
 extra_layers = True 
 #Write out DEMs and dz map
-writeout = False 
+writeout = True 
 #Generate figures
 mb_plot = True 
 #Run in parallel, set to False for serial loop
-parallel = True 
+parallel = True
 #Verbose for debugging
 verbose = False 
 #Number of parallel processes
@@ -503,9 +503,13 @@ rho_is = 0.85
 rho_sigma = 0.06
 
 #If breaking down into accumulation vs. ablation area
-rho_i = 0.91
-rho_s = 0.50
-rho_f = 0.60
+#rho_i = 0.91
+#rho_s = 0.50
+#rho_f = 0.60
+
+#Fountain
+#Other sources Kaab et al (2012) use 0.1
+area_sigma_perc = 0.09 
 
 global z1_date
 global z2_date
@@ -675,11 +679,20 @@ elif site == 'hma':
     z1_srtm_penetration_corr = True
     """
 
+    """
     #ASTER interp 2000
     #2000-2018
-    z1_fn = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_2000-2018_aea_stack/aster_align_index_2000-2018_aea_mos_20000531_tiled.vrt'
+    #z1_fn = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_2000-2018_aea_stack/aster_align_index_2000-2018_aea_mos_20000531_tiled.vrt'
+    z1_fn = '/nobackup/deshean/hma/aster/dsm/dem_align_ASTER_round2_index_2000-2018_aea_stack/dem_align_ASTER_round2_index_2000-2018_aea_20000531_mos_retile.vrt'
     #2000-2009
     #z1_fn = '/nobackup/deshean/hma/aster/dsm/aster_align_index_2000-2009_aea_stack/aster_align_index_2000-2009_aea_mos_20000531.tif'
+    z1_date = 2000.412
+    z1_sigma = 4.0
+    z1_srtm_penetration_corr = False
+    """
+
+    #ASTER+WV trend interp 2008
+    z1_fn = '/nobackupp8/deshean/hma/combined_aster_wv/dem_align_ASTER_WV_index_2000-2018_aea_stack/dem_align_ASTER_WV_index_2000-2018_aea_20000531_mos_retile.vrt'
     z1_date = 2000.412
     z1_sigma = 4.0
     z1_srtm_penetration_corr = False
@@ -721,18 +734,27 @@ elif site == 'hma':
     z1_sigma = 4.0
     z1_srtm_penetration_corr = False
     """
+
+    """
     #ASTER interp 2018
     #2000-2018
-    z2_fn = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_2000-2018_aea_stack/aster_align_index_2000-2018_aea_mos_20180531_tiled.vrt'
+    #z2_fn = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_2000-2018_aea_stack/aster_align_index_2000-2018_aea_mos_20180531_tiled.vrt'
+    z2_fn = '/nobackup/deshean/hma/aster/dsm/dem_align_ASTER_round2_index_2000-2018_aea_stack/dem_align_ASTER_round2_index_2000-2018_aea_20180531_mos_retile.vrt'
     #2009-2018
     #z2_fn = '/nobackup/deshean/hma/aster/dsm/aster_align_index_2009-2018_aea_stack/aster_align_index_2009-2018_aea_mos_20180531.tif'
+    z2_date = 2018.412
+    z2_sigma = 4.0
+    z2_srtm_penetration_corr = False
+    """
+    #WV trend interp 2018
+    z2_fn = '/nobackupp8/deshean/hma/combined_aster_wv/dem_align_ASTER_WV_index_2000-2018_aea_stack/dem_align_ASTER_WV_index_2000-2018_aea_20180531_mos_retile.vrt'
     z2_date = 2018.412
     z2_sigma = 4.0
     z2_srtm_penetration_corr = False
 
     #Output directory
     #outdir = os.path.join(topdir,'hma/dem_coreg/mos/%s/mb_last' % mosdir)
-    outdir = os.path.join(os.path.split(z2_fn)[0], 'mb_update')
+    outdir = os.path.join(os.path.split(z2_fn)[0], 'mb_combined_20181211')
     #outdir = '/nobackup/deshean/hma/aster/dsm/aster_align_index_2000-2018_aea_stack/mb'
     #outdir = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_2000-2009_aea_stack/mb'
     #outdir = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_aea_stack/mb'
@@ -1004,7 +1026,7 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
         #Should add better filtering here
         #Elevation dependent abs. threshold filter?
 
-        filter_outliers = True 
+        filter_outliers = False 
         #Remove clearly bogus pixels
         if filter_outliers:
             bad_perc = (0.1, 99.9)
@@ -1012,9 +1034,13 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
             rangelim = malib.calcperc(gf.dz, bad_perc)
             gf.dz = np.ma.masked_outside(gf.dz, *rangelim)
 
+        #Preserve full dz map
+        gf.dz_full = gf.dz
+
         #Comput stats for "static" surfaces (non-glacier)
         gf.dz_static = np.ma.array(gf.dz, mask=~glac_shp_lyr_mask)
         gf.dz_static_stats = malib.get_stats(gf.dz_static)
+
         #Should isolate slopes similar to glacier surface slopes
 
         #Now apply glacier mask
@@ -1024,10 +1050,11 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
 
         gf.res = geolib.get_res(ds_dict['z1'])
         #Compute area covered by valid pixels in m2
+
         gf.valid_area = gf.dz.count() * gf.res[0] * gf.res[1]
         #Compute percentage covered by total area of polygon
-        gf.valid_area_perc = 100 * (gf.valid_area / gf.glac_area)
-        if gf.valid_area_perc < (100 * min_valid_area_perc):
+        gf.valid_area_perc = 100. * (gf.valid_area / gf.glac_area)
+        if gf.valid_area_perc < (100. * min_valid_area_perc):
             if verbose:
                 print("Not enough valid pixels. %0.1f%% percent of glacier polygon area" % (gf.valid_area_perc))
             return None
@@ -1078,11 +1105,20 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
         gf.dt_mean = np.mean(gf.dt)
         #if isinstance(gf.dt, timedelta):
         #    gf.dt = gf.dt.total_seconds()/timelib.spy
+
         #Calculate dh/dt, in m/yr
         gf.dhdt = gf.dz/gf.dt
-        gf.dhdt_stats = malib.get_stats(gf.dhdt)
-        gf.dhdt_mean = gf.dhdt_stats[3]
-        gf.dhdt_med = gf.dhdt_stats[5]
+        gf.dhdt_sum = gf.dhdt.sum()
+        gf.dhdt_stats = malib.get_stats_dict(gf.dhdt)
+        gf.dhdt_mean = gf.dhdt_stats['mean']
+        gf.dhdt_med = gf.dhdt_stats['med']
+        gf.dhdt_nmad = gf.dhdt_stats['nmad']
+
+        gf.dhdt_static = gf.dz_static/gf.dt
+        gf.dhdt_static_stats = malib.get_stats_dict(gf.dhdt_static)
+        gf.dhdt_static_mean = gf.dhdt_static_stats['mean']
+        gf.dhdt_static_med = gf.dhdt_static_stats['med']
+        gf.dhdt_static_nmad = gf.dhdt_static_stats['nmad']
 
         #Can estimate ELA values computed from hypsometry and typical AAR
         #For now, assume ELA is mean
@@ -1102,8 +1138,58 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
             min_ela = gf.z1_ela
             max_ela = gf.z2_ela
 
-        #Calculate mass balance map from dhdt
-        gf.mb = gf.dhdt * rho_is
+        #Calculate uncertainty of total elevation change
+        #decorrelation length
+        L = 500
+        Acor = np.pi*L**2
+        if gf.glac_area < Acor:
+            #Correction factor for sample size area
+            Acorf = np.sqrt(Acor/(5*gf.glac_area))
+        else:
+            Acorf = 1.0
+
+        #Std or NMAD of elevation change on stable ground, assuming we know a priori uncertainty for z1 and z2
+        #dz_sigma = np.sqrt(z1_sigma**2 + z2_sigma**2)
+        #dhdt_sigma = dz_sigma/gf.dt
+
+        #This is NMAD of static pixels within buffer
+        dhdt_sigma = gf.dhdt_static_nmad
+        #Uncertainty of dh/dt
+        gf.dhdt_sigma = Acorf * (dhdt_sigma)
+
+        #This is percentage of valid pixels, 0-1
+        #p = min(gf.valid_area_perc/100., 1.0)
+        #From Brun et al, multiply uncertainty for nodata by 5x
+        #p_factor = (p + 5*(1-p))
+        p_factor = 1.0
+
+        #Calculate volume change (m3/a)
+        gf.dv = gf.dhdt_mean * gf.glac_area
+        #gf.dv = gf.dhdt_med * gf.glac_area
+        gf.dv_sum = gf.dhdt_sum*gf.res[0]*gf.res[1]
+        #print(gf.dv, gf.dv_sum, (gf.dv - gf.dv_sum))
+
+        #Volume change uncertainty (m3/a)
+        gf.dv_sigma = np.sqrt((gf.dhdt_sigma*p_factor*gf.glac_area)**2 + (area_sigma_perc * gf.glac_area)**2)
+
+        #Mass balance in mwe/a for each pixel
+        gf.mb_map = gf.dhdt * rho_is
+        gf.mb_map_sum = gf.mb_map.sum()
+        gf.mb_map_stats = malib.get_stats_dict(gf.mb_map)
+        gf.mb_map_sigma = np.ma.abs(gf.mb_map) * np.sqrt((rho_sigma/rho_is)**2 + (gf.dhdt_sigma/gf.dhdt)**2)
+        gf.mb_map_sigma_stats = malib.get_stats_dict(gf.mb_map_sigma)
+
+        #This is estimate for polygon mb in mwea
+        gf.mb_mean = gf.mb_map_stats['mean']
+        #This is average mb uncertainty, does not include area uncertainty
+        gf.mb_mean_sigma = gf.mb_map_sigma_stats['mean']
+        gf.mb_med = gf.mb_map_stats['med']
+        gf.mb_med_sigma = gf.mb_map_sigma_stats['med']
+
+        #Total mass balance for polygon in m3wea
+        #previously gf.mb_mean_totalarea
+        gf.mb_total = gf.dv * rho_is
+        gf.mb_total_sigma = np.sqrt((gf.dv_sigma*rho_is)**2 + (rho_sigma*gf.dv)**2)
 
         """
         # This attempted to assign different densities above and below ELA
@@ -1125,42 +1211,17 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
             #mb = np.where(dhdt < ela, dhdt*rho_i, dhdt*rho_s)
         """
 
-        #Use this for winter balance
-        #mb = dhdt * rho_s
-
-        gf.mb_stats = malib.get_stats(gf.mb)
-        gf.mb_mean = gf.mb_stats[3]
-
-        #Calculate uncertainty of total elevation change
-        #decorrelation length
-        L = 500
-        Acor = np.pi*L**2
-        if gf.glac_area < Acor:
-            #Correction factor for sample size area
-            Acorf = np.sqrt(Acor/(5*gf.glac_area))
-        else:
-            Acorf = 1.0
-
-        #Std or NMAD of elevation change on stable ground
-        #dz_sigma = np.sqrt(z1_sigma**2 + z2_sigma**2)
-        #This is NMAD of static pixels within buffer
-        dh_sigma = gf.dz_static_stats[6]
-        #Uncertainty of dh/dt
-        gf.dhdt_sigma = Acorf * (dh_sigma/gf.dt)
-
+        #Old approach
         #This is mb uncertainty map
-        gf.mb_sigma = np.ma.abs(gf.mb) * np.sqrt((rho_sigma/rho_is)**2 + (gf.dhdt_sigma/gf.dhdt)**2)
-        gf.mb_sigma_stats = malib.get_stats(gf.mb_sigma)
+        #gf.mb_sigma = np.ma.abs(gf.mb) * np.sqrt((rho_sigma/rho_is)**2 + (gf.dhdt_sigma/gf.dhdt)**2)
+        #gf.mb_sigma_stats = malib.get_stats(gf.mb_sigma)
         #This is average mb uncertainty
-        gf.mb_mean_sigma = gf.mb_sigma_stats[3]
+        #gf.mb_mean_sigma = gf.mb_sigma_stats[3]
 
         #Now calculate mb for entire polygon
-        area_sigma_perc = 0.09 
-        gf.mb_mean_totalarea = gf.mb_mean * gf.glac_area
+        #gf.mb_mean_totalarea = gf.mb_mean * gf.glac_area
         #Already have area uncertainty as percentage, just use directly
-        gf.mb_mean_totalarea_sigma = np.ma.abs(gf.mb_mean_totalarea) * np.sqrt((gf.mb_mean_sigma/gf.mb_mean)**2 + area_sigma_perc**2)
-
-        mb_sum = np.sum(gf.mb)*gf.res[0]*gf.res[1]
+        #gf.mb_mean_totalarea_sigma = np.ma.abs(gf.mb_mean_totalarea) * np.sqrt((gf.mb_mean_sigma/gf.mb_mean)**2 + area_sigma_perc**2)
 
         #z2_elev_med, z2_elev_min, z2_elev_max, z2_elev_p16, z2_elev_p84, \
         outlist = [gf.glacnum, gf.cx, gf.cy, \
@@ -1168,7 +1229,7 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
                 z2_slope_med, z2_aspect_med, \
                 gf.dhdt_mean, gf.dhdt_sigma, \
                 gf.mb_mean, gf.mb_mean_sigma, \
-                gf.glac_area, gf.mb_mean_totalarea, gf.mb_mean_totalarea_sigma, \
+                gf.glac_area, gf.mb_total, gf.mb_total_sigma, \
                 gf.t1_mean, gf.t2_mean, gf.dt_mean, gf.valid_area_perc]
 
         if extra_layers and (gf.glac_area_km2 > min_glac_area_writeout):
@@ -1259,7 +1320,7 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
         if verbose:
             print('Mean mb: %0.2f +/- %0.2f mwe/yr' % (gf.mb_mean, gf.mb_mean_sigma))
             print('Sum/Area mb: %0.2f mwe/yr' % (mb_sum/gf.glac_area))
-            print('Mean mb * Area: %0.2f +/- %0.2f mwe/yr' % (gf.mb_mean_totalarea, gf.mb_mean_totalarea_sigma))
+            print('Mean mb * Area: %0.2f +/- %0.2f mwe/yr' % (gf.mb_total, gf.mb_total_sigma))
             print('Sum mb: %0.2f mwe/yr' % mb_sum)
             #print('-------------------------------')
 
@@ -1346,7 +1407,7 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
         if mb_plot and (gf.glac_area_km2 > min_glac_area_writeout):
             dz_clim = (-2.0, 2.0)
             if site == 'hma':
-                dz_clim = (-5.0, 5.0)
+                dz_clim = (-3.0, 3.0)
             z_bin_edges = hist_plot(gf, outdir, bin_width=bin_width, dz_clim=dz_clim)
             gf.z1_hs = geolib.gdaldem_mem_ds(ds_dict['z1'], processing='hillshade', returnma=True)
             gf.z2_hs = geolib.gdaldem_mem_ds(ds_dict['z2'], processing='hillshade', returnma=True)
@@ -1433,6 +1494,7 @@ for i in out:
         mb_list.append(i)
         #mb_list.append(i[0])
         #glacfeat_list_out.append(i[1])
+import ipdb; ipdb.set_trace()
 out = np.array(mb_list, dtype=float)
 
 #Sort by area
