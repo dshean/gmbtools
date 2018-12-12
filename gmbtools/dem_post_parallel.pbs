@@ -4,11 +4,11 @@
 ### Note: parallel cannot efficiently spawn jobs to many nodes if they finish in <30 sec, scale accordingly
 ##PBS -lselect=64:model=ivy
 ##PBS -lselect=24:model=has
-##PBS -lselect=64:model=bro
-#PBS -lselect=4:model=bro
+#PBS -lselect=64:model=bro
+##PBS -lselect=4:model=bro
 #PBS -lwalltime=2:00:00
-##PBS -q devel 
-#PBS -q normal 
+#PBS -q devel 
+##PBS -q normal 
 
 #To submit:
 #qsub ~/src/gmbtools/gmbtools/dem_post_parallel.pbs
@@ -32,7 +32,9 @@ export GDAL_MAX_DATASET_POOL_SIZE=32768
 #WVGE
 #topdir=/nobackup/deshean/hma/dem_coreg
 #ASTER
-topdir=/nobackup/deshean/hma/aster/dsm
+#topdir=/nobackup/deshean/hma/aster/dsm
+#Combined
+topdir=/nobackup/deshean/hma/combined_aster_wv
 
 #CONUS
 #refdem=/nobackup/deshean/data/nasadem/conus/hgt_merge/hgt/conus_nasadem_hgt_merge_hgt_adj.vrt
@@ -46,11 +48,17 @@ cd $topdir
 
 #See rgi_dem_trend.py notes on generating shp
 dem_shp_list=""
-dem_shp_list+='dem_align_ASTER_round2_index_2000-2018_aea.shp'
-dem_shp_list+=' dem_align_ASTER_round2_index_2000-2009_aea.shp'
-dem_shp_list+=' dem_align_ASTER_round2_index_2009-2018_aea.shp'
 
-#dem_shp_list+='dem_align_noqb_index_2007-2017_aea.shp'
+#ASTER
+#dem_shp_list+='dem_align_ASTER_round2_index_2000-2018_aea.shp'
+#dem_shp_list+=' dem_align_ASTER_round2_index_2000-2009_aea.shp'
+#dem_shp_list+=' dem_align_ASTER_round2_index_2009-2018_aea.shp'
+#WV
+#dem_shp_list+='dem_align_WV_index_2007-2018_aea.shp'
+#Combined
+#dem_shp_list+='dem_align_ASTER_WV_index_2000-2018_aea.shp'
+dem_shp_list+=' dem_align_ASTER_WV_index_2000-2009_aea.shp'
+dem_shp_list+=' dem_align_ASTER_WV_index_2009-2018_aea.shp'
 
 a1=0.0
 a2=2.0
