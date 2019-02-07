@@ -10,6 +10,10 @@
 #topdir=/nobackup/deshean/hma/aster/dsm
 topdir=/nobackup/deshean/hma/combined_aster_wv
 
+if [ ! -d $topdir ] ; then 
+    mkdir -pv $topdir
+fi
+
 cd $topdir
 
 #prefix=dem_align_ASTER_round2
@@ -82,6 +86,6 @@ shp_list=$(echo $shp_list | sed 's/.shp/_aea.shp/g')
 a1=0.0
 a2=2.0
 a3=9999.0
-parallel --delay 1.0 "rgi_dem_trend.py {1} {2} {3}" ::: $shp_list ::: $a1 $a2 :::+ $a2 $a3
+parallel --delay 3.0 "rgi_dem_trend.py {1} {2} {3}" ::: $shp_list ::: $a1 $a2 :::+ $a2 $a3
 
 #Now run dem_post_parallel.pbs
