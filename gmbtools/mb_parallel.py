@@ -217,9 +217,9 @@ def hist_plot(gf, outdir, bin_width=50.0, dz_clim=(-2.0, 2.0)):
         dhdt_debris_bin_med = np.ma.masked_all_like(mb_bin_med)
         dhdt_pond_bin_med = np.ma.masked_all_like(mb_bin_med)
 
-    gf.dhdt_clean = np.ma.array(gf.dhdt, mask=~((gf.debris_class == 1).data))
-    gf.dhdt_debris = np.ma.array(gf.dhdt, mask=~((gf.debris_class == 2).data))
-    gf.dhdt_pond = np.ma.array(gf.dhdt, mask=~((gf.debris_class == 3).data))
+        gf.dhdt_clean = np.ma.array(gf.dhdt, mask=~((gf.debris_class == 1).data))
+        gf.dhdt_debris = np.ma.array(gf.dhdt, mask=~((gf.debris_class == 2).data))
+        gf.dhdt_pond = np.ma.array(gf.dhdt, mask=~((gf.debris_class == 3).data))
 
     #Bin sample count must be greater than this value
     min_bin_samp_count = 9
@@ -754,7 +754,7 @@ elif site == 'hma':
 
     #Output directory
     #outdir = os.path.join(topdir,'hma/dem_coreg/mos/%s/mb_last' % mosdir)
-    outdir = os.path.join(os.path.split(z2_fn)[0], 'mb_combined_20181211')
+    outdir = os.path.join(os.path.split(z2_fn)[0], 'mb_combined_20190206')
     #outdir = '/nobackup/deshean/hma/aster/dsm/aster_align_index_2000-2018_aea_stack/mb'
     #outdir = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_2000-2009_aea_stack/mb'
     #outdir = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_aea_stack/mb'
@@ -1494,6 +1494,7 @@ for i in out:
         mb_list.append(i)
         #mb_list.append(i[0])
         #glacfeat_list_out.append(i[1])
+
 import ipdb; ipdb.set_trace()
 out = np.array(mb_list, dtype=float)
 
