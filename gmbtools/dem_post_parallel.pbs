@@ -4,11 +4,11 @@
 ### Note: parallel cannot efficiently spawn jobs to many nodes if they finish in <30 sec, scale accordingly
 ##PBS -lselect=64:model=ivy
 ##PBS -lselect=24:model=has
-#PBS -lselect=64:model=bro
+#PBS -lselect=24:model=bro
 ##PBS -lselect=4:model=bro
-#PBS -lwalltime=2:00:00
-#PBS -q devel 
-##PBS -q normal 
+#PBS -lwalltime=8:00:00
+##PBS -q devel 
+#PBS -q long 
 
 #To submit:
 #qsub ~/src/gmbtools/gmbtools/dem_post_parallel.pbs
@@ -56,7 +56,7 @@ dem_shp_list=""
 #WV
 #dem_shp_list+='dem_align_WV_index_2007-2018_aea.shp'
 #Combined
-#dem_shp_list+='dem_align_ASTER_WV_index_2000-2018_aea.shp'
+dem_shp_list+='dem_align_ASTER_WV_index_2000-2018_aea.shp'
 dem_shp_list+=' dem_align_ASTER_WV_index_2000-2009_aea.shp'
 dem_shp_list+=' dem_align_ASTER_WV_index_2009-2018_aea.shp'
 
@@ -73,9 +73,10 @@ do
 
     #Smaller glaciers
     cmd_fn=${shp%.*}_${a1}-${a2}_km2_stack_cmd.sh
-    if [ ! -e $cmd_fn ] ; then
-        rgi_dem_trend.py $shp $a1 $a2
-    fi
+    #This rgi_dem_trend.py is now run before pbs script
+    #if [ ! -e $cmd_fn ] ; then
+    #    rgi_dem_trend.py $shp $a1 $a2
+    #fi
 
     ##Remove lines longer than 32762 - not an issue for shorter periods
     #longlines=$(awk '{ if ( length($0) > 32762 ) { print NR } }' $cmd_fn)
@@ -103,9 +104,9 @@ do
 
     #Larger glaciers
     cmd_fn=${shp%.*}_${a2}-${a3}_km2_stack_cmd.sh
-    if [ ! -e $cmd_fn ] ; then
-        rgi_dem_trend.py $shp $a2 $a3
-    fi
+    #if [ ! -e $cmd_fn ] ; then
+    #    rgi_dem_trend.py $shp $a2 $a3
+    #fi
 
     first=$(head -1 $cmd_fn | awk -F'stack_fn' '{print $2}' | awk '{print $1}')
     if [ -e $first ] ; then
