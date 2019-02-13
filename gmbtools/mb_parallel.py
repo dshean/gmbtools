@@ -1142,64 +1142,64 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
         #decorrelation length
         L = 500
         Acor = np.pi*L**2
-        if gf.glac_area < Acor:
-            #Correction factor for sample size area
-            Acorf = np.sqrt(Acor/(5*gf.glac_area))
-        else:
-            Acorf = 1.0
+            if gf.glac_area > Acor:
+                #Correction factor for sample size area
+                Acorf = np.sqrt(Acor/(5*gf.glac_area))
+            else:
+                Acorf = 1.0
 
-        #Std or NMAD of elevation change on stable ground, assuming we know a priori uncertainty for z1 and z2
-        #dz_sigma = np.sqrt(z1_sigma**2 + z2_sigma**2)
-        #dhdt_sigma = dz_sigma/gf.dt
+            #Std or NMAD of elevation change on stable ground, assuming we know a priori uncertainty for z1 and z2
+            #dz_sigma = np.sqrt(z1_sigma**2 + z2_sigma**2)
+            #dhdt_sigma = dz_sigma/gf.dt
 
-        #This is NMAD of static pixels within buffer
-        dhdt_sigma = gf.dhdt_static_nmad
-        #Uncertainty of dh/dt
-        gf.dhdt_sigma = Acorf * (dhdt_sigma)
+            #This is NMAD of static pixels within buffer
+            dhdt_sigma = gf.dhdt_static_nmad
+            #Uncertainty of dh/dt
+            gf.dhdt_sigma = Acorf * (dhdt_sigma)
 
-        #This is percentage of valid pixels, 0-1
-        #p = min(gf.valid_area_perc/100., 1.0)
-        #From Brun et al, multiply uncertainty for nodata by 5x
-        #p_factor = (p + 5*(1-p))
-        p_factor = 1.0
+            #This is percentage of valid pixels, 0-1
+            #p = min(gf.valid_area_perc/100., 1.0)
+            #From Brun et al, multiply uncertainty for nodata by 5x
+            #p_factor = (p + 5*(1-p))
+            p_factor = 1.0
 
-        #Calculate volume change (m3/a)
-        gf.dv = gf.dhdt_mean * gf.glac_area
-        #gf.dv = gf.dhdt_med * gf.glac_area
-        gf.dv_sum = gf.dhdt_sum*gf.res[0]*gf.res[1]
-        #print(gf.dv, gf.dv_sum, (gf.dv - gf.dv_sum))
+            #Calculate volume change (m3/a)
+            gf.dv = gf.dhdt_mean * gf.glac_area
+            #gf.dv = gf.dhdt_med * gf.glac_area
+            gf.dv_sum = gf.dhdt_sum*gf.res[0]*gf.res[1]
+            #print(gf.dv, gf.dv_sum, (gf.dv - gf.dv_sum))
 
-        #Volume change uncertainty (m3/a)
-        gf.dv_sigma = np.sqrt((gf.dhdt_sigma*p_factor*gf.glac_area)**2 + (area_sigma_perc * gf.glac_area)**2)
+            #Volume change uncertainty (m3/a)
+            gf.dv_sigma = np.sqrt((gf.dhdt_sigma*p_factor*gf.glac_area)**2 + (area_sigma_perc * gf.glac_area)**2)
 
-        #Mass balance in mwe/a for each pixel
-        gf.mb_map = gf.dhdt * rho_is
-        gf.mb_map_sum = gf.mb_map.sum()
-        gf.mb_map_stats = malib.get_stats_dict(gf.mb_map)
-        gf.mb_map_sigma = np.ma.abs(gf.mb_map) * np.sqrt((rho_sigma/rho_is)**2 + (gf.dhdt_sigma/gf.dhdt)**2)
-        gf.mb_map_sigma_stats = malib.get_stats_dict(gf.mb_map_sigma)
+            #Mass balance in mwe/a for each pixel
+            gf.mb_map = gf.dhdt * rho_is
+            gf.mb_map_sum = gf.mb_map.sum()
+            gf.mb_map_stats = malib.get_stats_dict(gf.mb_map)
+            gf.mb_map_sigma = np.ma.abs(gf.mb_map) * np.sqrt((rho_sigma/rho_is)**2 + (gf.dhdt_sigma/gf.dhdt)**2)
+            gf.mb_map_sigma_stats = malib.get_stats_dict(gf.mb_map_sigma)
 
-        #This is estimate for polygon mb in mwea
-        gf.mb_mean = gf.mb_map_stats['mean']
-        #This is average mb uncertainty, does not include area uncertainty
-        gf.mb_mean_sigma = gf.mb_map_sigma_stats['mean']
-        gf.mb_med = gf.mb_map_stats['med']
-        gf.mb_med_sigma = gf.mb_map_sigma_stats['med']
+            #This is estimate for polygon mb in mwea
+            gf.mb_mean = gf.mb_map_stats['mean']
+            #This is average mb uncertainty, does not include area uncertainty
+            gf.mb_mean_sigma = gf.mb_map_sigma_stats['mean']
+            gf.mb_med = gf.mb_map_stats['med']
+            gf.mb_med_sigma = gf.mb_map_sigma_stats['med']
 
-        #Total mass balance for polygon in m3wea
-        #previously gf.mb_mean_totalarea
-        gf.mb_total = gf.dv * rho_is
-        gf.mb_total_sigma = np.sqrt((gf.dv_sigma*rho_is)**2 + (rho_sigma*gf.dv)**2)
+            #Total mass balance for polygon in m3wea
+            #previously gf.mb_mean_totalarea
+            gf.mb_total = gf.dv * rho_is
+            gf.mb_total_sigma = np.sqrt((gf.dv_sigma*rho_is)**2 + (rho_sigma*gf.dv)**2)
 
-        """
-        # This attempted to assign different densities above and below ELA
-        if gf.z1_ela is None:
-            gf.mb = gf.dhdt * rho_is
-        else:
-            #Initiate with average density
-            gf.mb = gf.dhdt*(rho_is + rho_f)/2.
-            #Everything that is above ELA at t2 is elevation change over firn, use firn density
-            accum_mask = (gf.z2 > gf.z2_ela).filled(0).astype(bool)
+            """
+            # This attempted to assign different densities above and below ELA
+            if gf.z1_ela is None:
+                gf.mb = gf.dhdt * rho_is
+            else:
+                #Initiate with average density
+                gf.mb = gf.dhdt*(rho_is + rho_f)/2.
+                #Everything that is above ELA at t2 is elevation change over firn, use firn density
+                accum_mask = (gf.z2 > gf.z2_ela).filled(0).astype(bool)
             gf.mb[accum_mask] = (gf.dhdt*rho_f)[accum_mask]
             #Everything that is below ELA at t1 is elevation change over ice, use ice density
             abl_mask = (gf.z1 <= gf.z1_ela).filled(0).astype(bool)
