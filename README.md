@@ -1,3 +1,4 @@
+[![DOI](https://zenodo.org/badge/72886193.svg)](https://zenodo.org/badge/latestdoi/72886193)
 # gmbtools
 Utilities for DEM processing/analysis, calculating geodetic mass balance, and plotting
 
