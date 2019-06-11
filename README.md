@@ -3,8 +3,8 @@
 [![DOI](https://zenodo.org/badge/73152366.svg)](https://zenodo.org/badge/latestdoi/73152366)
 
 
-# gmbtools
-Utilities for DEM processing/analysis, calculating geodetic mass balance, and plotting
+# gmbtools - glacier mass balance tools
+Utilities for DEM processing/analysis, calculating geodetic mass balance, analysis and visualization
 
 Developed for the [NASA High-mountain Asia Team (HiMAT)](http://himat.org/) and [USGS](https://www2.usgs.gov/climate_landuse/clu_rd/glacierstudies/)/[NPS](https://science.nature.nps.gov/im/units/nccn/monitor/glaciers.cfm) CONUS glacier programs. Scripts are in various stages of development, and many still have hardcoded paths that need to be cleaned up.
 
