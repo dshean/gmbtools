@@ -34,11 +34,11 @@ qsub ~/src/demcoreg/demcoreg/dem_align_parallel.pbs
 #Interpolate to end dates for each stack using stack_interp.py, generates vrt and retiles
 #stack_interp also filters outliers, cleans up trend maps 
 #Review/edit stack_interp.py
-#Can run stack_interp on single node or parallel qsub ~/src/gmbtools/stack_interp_parallel.pbs
+#Can run stack_interp on single node or parallel qsub ~/src/gmbtools/gmbtools/stack_interp_parallel.pbs
 ~/src/gmbtools/gmbtools/dem_post_mb_prep.sh
 
 #Compute mass balance
-#Update filenames
+#Update input filenames, output directory
 ~/src/gmbtools/gmbtools/mb_parallel.py
 
 #Generate plots and run mb analysis

@@ -18,6 +18,8 @@ from pygeotools.lib import malib, timelib, iolib, filtlib
 zlim = (-200,8388)
 zlim_pad = 150
 
+filter=False
+
 #Window size for median and gauss filters (px)
 size=3
 
@@ -58,8 +60,6 @@ med = None
 #Can vectorize
 #dt_list_o = timelib.dt2o(dt_list)
 #z_list = trend*dt_list_o[:,None,None]+intercept
-
-filter=True
 
 if filter:
     #Could remove outliers in trend at this phase

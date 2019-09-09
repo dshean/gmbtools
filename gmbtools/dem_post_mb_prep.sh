@@ -20,15 +20,27 @@ topdir=/nobackupp8/deshean/hma/combined_aster_wv
 shp=dem_align_ASTER_WV_index_2000-2018_aea.shp
 dt_list="20000211 20000531 20090531 20180531"
 
-dt_list="$(echo $dt_list | tr ' ' '\n' | sort -n)"
-last_dt=$(echo $dt_list | awk '{print $NF}')
-echo $dt_list
-
 #Filter size (px) for stack_interp.py
 s=3
 
-mos_list+="$dt_list trend trend_${s}px_filt nmad"
-#mos_list+="diff"
+dt_list="$(echo $dt_list | tr ' ' '\n' | sort -n)"
+
+#Create full list of dt extensions for trend and trend_filt products
+ext_dt_list=""
+for dt in $dt_list
+do
+    ext_dt_list+=" trend_${dt}"
+    #ext_dt_list+=" trend_${s}px_filt_${dt}"
+done
+
+last_dt=$(echo $ext_dt_list | awk '{print $NF}')
+echo $dt_list
+echo $ext_dt_list
+
+#Output mosaic list
+mos_list=""
+mos_list+=" $ext_dt_list" 
+#mos_list+=" trend trend_${s}px_filt nmad"
 #mos_list+=" trend_shpclip intercept diff diff_shpclip"
 
 echo "Processing the following layers:"
@@ -45,7 +57,7 @@ fi
 echo "Running stack_interp.py for all npz"
 #Can now run across multiple nodes (potentially makes sense with more expensive filtering, not 3x3), keep number of nodes small
 #qsub ~/src/gmbtools/stack_interp_parallel.pbs
-#cat ${shp%.*}_npz_fn_list.txt | parallel --progress "if [ ! -e {.}_$last_dt.tif ] ; then ~/src/gmbtools/gmbtools/stack_interp.py {} "$dt_list" ; fi"
+cat ${shp%.*}_npz_fn_list.txt | parallel --progress "if [ ! -e {.}_$last_dt.tif ] ; then ~/src/gmbtools/gmbtools/stack_interp.py {} "$dt_list" ; fi"
 #Overwrite
 #cat ${shp%.*}_npz_fn_list.txt | parallel --progress "~/src/gmbtools/gmbtools/stack_interp.py {} "$dt_list""
 
@@ -76,6 +88,8 @@ echo "Generating new vrt for retile"
 ndv=$(gdalinfo ${shp%.*}_${last_dt}_mos.vrt | grep NoData | awk -F'=' '{print $NF}')
 #Shouldn't need -r cubic here, as these are regular grid
 parallel --progress "gdalbuildvrt -srcnodata $ndv -vrtnodata $ndv ${shp%.*}_{}_mos_retile.vrt ${shp%.*}_{}_mos_retile/*.tif" ::: $mos_list 
+
+exit
 
 echo "Converting to tif"
 parallel --progress "gdalwarp $gdal_opt ${shp%.*}_{}_mos_retile.vrt ${shp%.*}_{}_mos_retile.tif; gdaladdo_ro.sh ${shp%.*}_{}_mos_retile.tif" ::: trend trend_${s}px_filt nmad 

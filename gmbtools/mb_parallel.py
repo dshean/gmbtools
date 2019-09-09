@@ -470,10 +470,10 @@ min_glac_area = 0.0 #km^2
 #min_glac_area = 2. #km^2
 #Minimum percentage of glacier poly covered by valid dz
 min_valid_glacier_area_perc = 0.85
-#Minimum percentage of glacier poly covered by valid dz
+#Minimum percentage of static areas around glacier poly covered by valid dz
 min_valid_static_area_perc = 0.2
 #Process thickness, velocity, etc
-extra_layers = True 
+extra_layers = False
 #Write out DEMs and dz map
 writeout = True 
 #Generate figures
@@ -489,7 +489,7 @@ verbose = False
 nproc = iolib.cpu_count(logical=False) - 1
 #nproc = 12
 #Shortcut to use existing glacfeat_list.p if found
-use_existing_glacfeat = True 
+use_existing_glacfeat = False 
 
 #Pad by this distance (meters) around glacier polygon for uncertainty estimates over surrounding surfaces
 #buff_dist = 1000
@@ -696,7 +696,7 @@ elif site == 'hma':
     """
 
     #ASTER+WV trend interp 2008
-    z1_fn = '/nobackupp8/deshean/hma/combined_aster_wv/dem_align_ASTER_WV_index_2000-2018_aea_stack/dem_align_ASTER_WV_index_2000-2018_aea_20000531_mos_retile.vrt'
+    z1_fn = '/nobackupp8/deshean/hma/combined_aster_wv/dem_align_ASTER_WV_index_2000-2018_aea_stack/dem_align_ASTER_WV_index_2000-2018_aea_trend_20000531_mos_retile.vrt'
     z1_date = 2000.412
     z1_sigma = 4.0
     z1_srtm_penetration_corr = False
@@ -751,14 +751,15 @@ elif site == 'hma':
     z2_srtm_penetration_corr = False
     """
     #WV trend interp 2018
-    z2_fn = '/nobackupp8/deshean/hma/combined_aster_wv/dem_align_ASTER_WV_index_2000-2018_aea_stack/dem_align_ASTER_WV_index_2000-2018_aea_20180531_mos_retile.vrt'
+    z2_fn = '/nobackupp8/deshean/hma/combined_aster_wv/dem_align_ASTER_WV_index_2000-2018_aea_stack/dem_align_ASTER_WV_index_2000-2018_aea_trend_20180531_mos_retile.vrt'
     z2_date = 2018.412
     z2_sigma = 4.0
     z2_srtm_penetration_corr = False
 
     #Output directory
     #outdir = os.path.join(topdir,'hma/dem_coreg/mos/%s/mb_last' % mosdir)
-    outdir = os.path.join(os.path.split(z2_fn)[0], 'mb_combined_20190213')
+    #outdir = os.path.join(os.path.split(z2_fn)[0], 'mb_combined_20190213_std_sys')
+    outdir = os.path.join(os.path.split(z2_fn)[0], 'mb_combined_20190908_nofltr')
     #outdir = '/nobackup/deshean/hma/aster/dsm/aster_align_index_2000-2018_aea_stack/mb'
     #outdir = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_2000-2009_aea_stack/mb'
     #outdir = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_aea_stack/mb'
@@ -1148,6 +1149,7 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
         gf.dhdt_static_med = gf.dhdt_static_stats['med']
         gf.dhdt_static_nmad = gf.dhdt_static_stats['nmad']
         gf.dhdt_static_std = gf.dhdt_static_stats['std']
+        gf.dhdt_static_se = gf.dhdt_static_stats['std']/np.sqrt(gf.dhdt_static_stats['count'])
 
         #Can estimate ELA values computed from hypsometry and typical AAR
         #For now, assume ELA is mean value
@@ -1186,8 +1188,12 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
         #This is uncertainty of dhdt over static pixels within buffer
         #dhdt_sigma = gf.dhdt_static_nmad
         dhdt_sigma = gf.dhdt_static_std
-        #Uncertainty of dh/dt
+
+        #Random uncertainty of dh/dt
         gf.dhdt_sigma = Acorf * dhdt_sigma
+
+        #Include systematic uncertainty (mean error over static surfaces)
+        gf.dhdt_sigma = np.sqrt(gf.dhdt_sigma**2 + gf.dhdt_static_mean**2)
 
         #This is percentage of valid pixels, 0-1
         #p = min(gf.valid_area_perc/100., 1.0)
@@ -1204,7 +1210,7 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
         #Do hypsometry here - bin dhdt by elevation, compute areas
 
         #Using sum of dhdt
-        gf.dv_sum = gf.dhdt_sum*gf.res[0]*gf.res[1]
+        #gf.dv_sum = gf.dhdt_sum*gf.res[0]*gf.res[1]
         #print(gf.dv, gf.dv_sum, (gf.dv - gf.dv_sum))
 
         #Volume change uncertainty (m3/a)
@@ -1504,7 +1510,7 @@ for i in out:
         #mb_list.append(i[0])
         #glacfeat_list_out.append(i[1])
 
-import ipdb; ipdb.set_trace()
+#import ipdb; ipdb.set_trace()
 out = np.array(mb_list, dtype=float)
 
 #Sort by area
