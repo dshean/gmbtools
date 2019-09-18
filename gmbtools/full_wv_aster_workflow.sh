@@ -14,8 +14,9 @@ wv=/nobackup/deshean/hma/dem_coreg/*track
 ~/src/tandemx/tandemx_proc.sh
 
 #Co-registration
-#refdem=/nobackup/deshean/data/tandemx/hma/mos/TDM1_DEM_90m_hma_DEM_masked.vrt
+#refdem=/nobackup/deshean/data/tandemx/hma/mos_warp_erode/TDM1_DEM_90m_hma_DEM_masked_aea.vrt
 #This runs dem_align.py on each DEM
+#Run separately for ASTER and WV/GE
 qsub ~/src/demcoreg/demcoreg/dem_align_parallel.pbs
 
 #Review results, filter outliers, generate figures, remove bad products, generate combined?
@@ -29,7 +30,7 @@ qsub ~/src/demcoreg/demcoreg/dem_align_parallel.pbs
 
 #Generate stacks, produces trend.tif products
 #Review/edit dem_post_parallel.pbs
-~/src/gmbtools/gmbtools/dem_post_parallel.pbs
+qsub ~/src/gmbtools/gmbtools/dem_post_parallel.pbs
 
 #Interpolate to end dates for each stack using stack_interp.py, generates vrt and retiles
 #stack_interp also filters outliers, cleans up trend maps 

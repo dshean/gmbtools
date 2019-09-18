@@ -18,7 +18,7 @@ from pygeotools.lib import malib, timelib, iolib, filtlib
 zlim = (-200,8388)
 zlim_pad = 150
 
-filter=False
+filter=True
 
 #Window size for median and gauss filters (px)
 size=3

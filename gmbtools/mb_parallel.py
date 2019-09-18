@@ -485,8 +485,10 @@ verbose = False
 #Number of parallel processes
 #Use all virtual cores
 #nproc = iolib.cpu_count(logical=True) - 1
+nproc = int(iolib.cpu_count(logical=True)/2) - 1
 #Use all physical cores
-nproc = iolib.cpu_count(logical=False) - 1
+#This is reporting 14 for broadwell nodes for some reason
+#nproc = iolib.cpu_count(logical=False) - 1
 #nproc = 12
 #Shortcut to use existing glacfeat_list.p if found
 use_existing_glacfeat = False 
@@ -695,8 +697,10 @@ elif site == 'hma':
     z1_srtm_penetration_corr = False
     """
 
-    #ASTER+WV trend interp 2008
+    #ASTER+WV trend interp 2000
     z1_fn = '/nobackupp8/deshean/hma/combined_aster_wv/dem_align_ASTER_WV_index_2000-2018_aea_stack/dem_align_ASTER_WV_index_2000-2018_aea_trend_20000531_mos_retile.vrt'
+    #ASTERonly trend interp 2000
+    #z1_fn = '/nobackup/deshean/hma/aster/dsm/dem_align_ASTERonly/dem_align_ASTERonly_index_2000-2018_aea_stack/dem_align_ASTERonly_index_2000-2018_aea_trend_3px_filt_20000531_mos_retile.vrt'
     z1_date = 2000.412
     z1_sigma = 4.0
     z1_srtm_penetration_corr = False
@@ -750,16 +754,19 @@ elif site == 'hma':
     z2_sigma = 4.0
     z2_srtm_penetration_corr = False
     """
-    #WV trend interp 2018
+    #ASTER+WV trend interp 2018
     z2_fn = '/nobackupp8/deshean/hma/combined_aster_wv/dem_align_ASTER_WV_index_2000-2018_aea_stack/dem_align_ASTER_WV_index_2000-2018_aea_trend_20180531_mos_retile.vrt'
+    #ASTERonly trend interp 2018
+    #z2_fn = '/nobackup/deshean/hma/aster/dsm/dem_align_ASTERonly/dem_align_ASTERonly_index_2000-2018_aea_stack/dem_align_ASTERonly_index_2000-2018_aea_trend_3px_filt_20180531_mos_retile.vrt'
     z2_date = 2018.412
     z2_sigma = 4.0
     z2_srtm_penetration_corr = False
 
     #Output directory
     #outdir = os.path.join(topdir,'hma/dem_coreg/mos/%s/mb_last' % mosdir)
-    #outdir = os.path.join(os.path.split(z2_fn)[0], 'mb_combined_20190213_std_sys')
-    outdir = os.path.join(os.path.split(z2_fn)[0], 'mb_combined_20190908_nofltr')
+    outdir = os.path.join(os.path.split(z2_fn)[0], 'mb_combined_20190213_std_sys')
+    #outdir = os.path.join(os.path.split(z2_fn)[0], 'mb_combined_20190908_nofltr')
+    #outdir = os.path.join(os.path.split(z2_fn)[0], 'mb_ASTERonly_20190910_fltr')
     #outdir = '/nobackup/deshean/hma/aster/dsm/aster_align_index_2000-2018_aea_stack/mb'
     #outdir = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_2000-2009_aea_stack/mb'
     #outdir = '/nobackupp8/deshean/hma/aster/dsm/aster_align_index_aea_stack/mb'
@@ -1186,14 +1193,14 @@ def mb_calc(gf, z1_date=z1_date, z2_date=z2_date, verbose=verbose):
             Acorf = 1.0
 
         #This is uncertainty of dhdt over static pixels within buffer
-        #dhdt_sigma = gf.dhdt_static_nmad
-        dhdt_sigma = gf.dhdt_static_std
+        dhdt_sigma = gf.dhdt_static_nmad
+        #dhdt_sigma = gf.dhdt_static_std
 
         #Random uncertainty of dh/dt
         gf.dhdt_sigma = Acorf * dhdt_sigma
 
         #Include systematic uncertainty (mean error over static surfaces)
-        gf.dhdt_sigma = np.sqrt(gf.dhdt_sigma**2 + gf.dhdt_static_mean**2)
+        #gf.dhdt_sigma = np.sqrt(gf.dhdt_sigma**2 + gf.dhdt_static_mean**2)
 
         #This is percentage of valid pixels, 0-1
         #p = min(gf.valid_area_perc/100., 1.0)

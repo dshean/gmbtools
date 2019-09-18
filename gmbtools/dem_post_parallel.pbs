@@ -4,11 +4,12 @@
 ### Note: parallel cannot efficiently spawn jobs to many nodes if they finish in <30 sec, scale accordingly
 ##PBS -lselect=64:model=ivy
 ##PBS -lselect=24:model=has
-#PBS -lselect=24:model=bro
+#PBS -lselect=48:model=bro
 ##PBS -lselect=4:model=bro
-#PBS -lwalltime=8:00:00
-##PBS -q devel 
-#PBS -q long 
+#PBS -lwalltime=2:00:00
+#PBS -q devel 
+##PBS -lwalltime=8:00:00
+##PBS -q long 
 
 #To submit:
 #qsub ~/src/gmbtools/gmbtools/dem_post_parallel.pbs
@@ -33,6 +34,7 @@ export GDAL_MAX_DATASET_POOL_SIZE=32768
 #topdir=/nobackup/deshean/hma/dem_coreg
 #ASTER
 #topdir=/nobackup/deshean/hma/aster/dsm
+#topdir=/nobackup/deshean/hma/aster/dsm/dem_align_ASTERonly
 #Combined
 topdir=/nobackup/deshean/hma/combined_aster_wv
 
@@ -53,12 +55,16 @@ dem_shp_list=""
 #dem_shp_list+='dem_align_ASTER_round2_index_2000-2018_aea.shp'
 #dem_shp_list+=' dem_align_ASTER_round2_index_2000-2009_aea.shp'
 #dem_shp_list+=' dem_align_ASTER_round2_index_2009-2018_aea.shp'
+#ASTERonly
+#dem_shp_list+=' dem_align_ASTERonly_index_2000-2018_aea.shp'
+#dem_shp_list+=' dem_align_ASTERonly_index_2000-2009_aea.shp'
+#dem_shp_list+=' dem_align_ASTERonly_index_2009-2018_aea.shp'
 #WV
 #dem_shp_list+='dem_align_WV_index_2007-2018_aea.shp'
 #Combined
 dem_shp_list+='dem_align_ASTER_WV_index_2000-2018_aea.shp'
-dem_shp_list+=' dem_align_ASTER_WV_index_2000-2009_aea.shp'
-dem_shp_list+=' dem_align_ASTER_WV_index_2009-2018_aea.shp'
+#dem_shp_list+=' dem_align_ASTER_WV_index_2000-2009_aea.shp'
+#dem_shp_list+=' dem_align_ASTER_WV_index_2009-2018_aea.shp'
 
 a1=0.0
 a2=2.0
@@ -66,8 +72,7 @@ a3=9999.0
 
 for shp in $dem_shp_list
 do
-    if [ ! -d ${shp%.*}_stack ] ; then
-        mkdir -pv ${shp%.*}_stack
+    if [ ! -d ${shp%.*}_stack/log ] ; then
         mkdir -pv ${shp%.*}_stack/log
     fi
 
@@ -89,10 +94,12 @@ do
     first=$(head -1 $cmd_fn | awk -F'stack_fn' '{print $2}' | awk '{print $1}')
     if [ -e $first ] ; then 
         missing=${cmd_fn%.*}_missing.sh
-        echo -n > $missing
-        #This will isolate npz filenames from cmd_fn
-        ##parallel "if ! ls -U {}/*npz >/dev/null 2>&1 ; then rm -v {}; grep {} $cmd_fn >> $missing ; fi" ::: ${shp%.*}_stack/1*
-        awk -F'stack_fn' '{print $2}' $cmd_fn | awk '{print $1}' | parallel "if ! ls -U {} > /dev/null 2>&1 ; then grep {} $cmd_fn >> $missing ; fi"
+        if [ ! -e $missing ] ; then
+            echo -n > $missing
+            #This will isolate npz filenames from cmd_fn
+            ##parallel "if ! ls -U {}/*npz >/dev/null 2>&1 ; then rm -v {}; grep {} $cmd_fn >> $missing ; fi" ::: ${shp%.*}_stack/1*
+            awk -F'stack_fn' '{print $2}' $cmd_fn | awk '{print $1}' | parallel "if ! ls -U {} > /dev/null 2>&1 ; then grep {} $cmd_fn >> $missing ; fi"
+        fi
     else
         missing=$cmd_fn
     fi
@@ -118,7 +125,7 @@ do
     fi
 
     if [ -s $missing ] ; then 
-        parallel --workdir $topdir -j 4 --sshloginfile $PBS_NODEFILE < $missing
+        parallel --workdir $topdir -j 6 --sshloginfile $PBS_NODEFILE < $missing
     fi
 
     #If interrupted

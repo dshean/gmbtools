@@ -7,7 +7,7 @@
 #Switch from shp to gpkg
 
 #topdir=/nobackup/deshean/hma/dem_coreg
-#topdir=/nobackup/deshean/hma/aster/dsm
+#topdir=/nobackup/deshean/hma/aster/dsm/dem_align_ASTERonly
 topdir=/nobackup/deshean/hma/combined_aster_wv
 
 if [ ! -d $topdir ] ; then 
@@ -19,6 +19,7 @@ cd $topdir
 #prefix=dem_align_ASTER_round2
 #prefix=dem_align_WV
 prefix=dem_align_ASTER_WV
+#prefix=dem_align_ASTERonly
 
 #Throw out outliers
 #mkdir dem_align_bad; for i in $(cat ${prefix}_bad_fn.txt); do mv -v $(echo $i | awk -F'/' '{print $1 "/" $2}') dem_align_bad/; done
@@ -50,11 +51,13 @@ do
     #WV
     for i in ../../../dem_coreg/*track/${y}*dem_align/*align.tif ; do ln -s $i . ; done
     #ASTER
-    for i in ../../../aster/dsm/${y}/*dem_align/*align.tif ; do ln -s $i . ; done
+    for i in ../../../aster/dsm/${y}/A*dem_align/*align.tif ; do ln -s $i . ; done
+    #ASTER-only
+    #for i in ../../../${y}/A*dem_align/*align.tif ; do ln -s $i . ; done
     cd ../../ 
 done
 
-parallel "gdaltindex -t_srs EPSG:4326 years/{}/${prefix}_index_{}.shp years/{}/*align.tif" ::: $valid_years
+parallel --progress "gdaltindex -t_srs EPSG:4326 years/{}/${prefix}_index_{}.shp years/{}/*align.tif" ::: $valid_years
 
 if false ; then
     yr1=2007
@@ -86,6 +89,6 @@ shp_list=$(echo $shp_list | sed 's/.shp/_aea.shp/g')
 a1=0.0
 a2=2.0
 a3=9999.0
-parallel --delay 3.0 "rgi_dem_trend.py {1} {2} {3}" ::: $shp_list ::: $a1 $a2 :::+ $a2 $a3
+parallel --delay 10.0 "rgi_dem_trend.py {1} {2} {3}" ::: $shp_list ::: $a1 $a2 :::+ $a2 $a3
 
 #Now run dem_post_parallel.pbs
