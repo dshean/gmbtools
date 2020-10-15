@@ -23,7 +23,7 @@ dem_fn_list = sys.argv[1:]
 
 #Compute global percentile stretch
 #Inefficient to load everything up front, but simplest solution
-dems = np.ma.array([iolib.fn_getma_sub(fn) for fn in dem_fn_list])
+dems = np.ma.hstack([iolib.fn_getma_sub(fn).compressed() for fn in dem_fn_list])
 dem_clim = malib.calcperc(dems, (2,98))
 
 w=10.0
